@@ -1,10 +1,15 @@
+using Microsoft.EntityFrameworkCore;
 using Netrom_Eco_Meal.Components;
+using Netrom_Eco_Meal.Database;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+var connectionString = builder.Configuration.GetConnectionString("EcoMealContext");
+builder.Services.AddDbContext<EcoMealDbContext>(options => options.UseNpgsql(connectionString));
 
 var app = builder.Build();
 
