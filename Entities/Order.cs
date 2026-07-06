@@ -12,7 +12,8 @@ public class Order
     [ForeignKey(nameof(UserId))]
     public required ApplicationUser User { get; set; }
     [ForeignKey(nameof(BusinessId))]
-    public Business Business { get; set; }
+    public Business Business { get; set; } = null!;
     [ForeignKey(nameof(StatusId))]
-    public Status Status { get; set; }
+    public Status Status { get; set; } = null!;
+    public ICollection<OrderPackage> OrderPackages { get; set; } = [];
 }

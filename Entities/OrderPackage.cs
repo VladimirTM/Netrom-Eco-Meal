@@ -9,7 +9,7 @@ public class OrderPackage
     public Guid PackageId { get; set; }
     public required int Quantity { get; set; }
     [ForeignKey(nameof(OrderId))]
-    public Order Order { get; set; }
+    public Order Order { get; set; } = null!;
     [ForeignKey(nameof(PackageId))]
-    public Package Package { get; set; }
+    public Package Package { get; set; } = null!;
 }

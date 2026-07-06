@@ -15,7 +15,8 @@ public class Package
     public required DateTime PickupEnd { get; set; }
     public string? ImageUrl { get; set; }
     [ForeignKey(nameof(BusinessId))]
-    public Business Business { get; set; }
+    public Business Business { get; set; } = null!;
     [ForeignKey(nameof(PackageTypeId))]
-    public PackageType PackageType { get; set; }
+    public PackageType PackageType { get; set; } = null!;
+    public ICollection<OrderPackage> OrderPackages { get; set; } = [];
 }

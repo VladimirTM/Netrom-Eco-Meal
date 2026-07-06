@@ -11,5 +11,7 @@ public class Business
     public string? ImageUrl { get; set; }
     public Guid BusinessTypeId { get; set; }
     [ForeignKey(nameof(BusinessTypeId))]
-    public BusinessType BusinessType { get; set; }
+    public BusinessType BusinessType { get; set; } = null!;
+    public ICollection<Package> Packages { get; set; } = [];
+    public ICollection<Order> Orders { get; set; } = [];
 }
