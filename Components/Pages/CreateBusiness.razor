@@ -1,0 +1,95 @@
+@page "/businesses/create"
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services.Interfaces
+@rendermode InteractiveServer
+@inject BusinessController BusinessController
+@inject IBusinessTypeService BusinessTypeService
+@inject NavigationManager NavigationManager
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="h3 fw-bold mb-1">Create Business</h1>
+        <p class="text-muted small mb-0">Add a new food business to the platform</p>
+    </div>
+    <a href="/businesses" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-7 col-xl-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <EditForm Model="@_model" OnValidSubmit="Submit" FormName="createBusinessForm">
+                    <div class="mb-3">
+                        <label for="name" class="form-label fw-semibold">Name</label>
+                        <InputText id="name" class="form-control" placeholder="e.g. Green Bites" @bind-Value="_model.Name"/>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label fw-semibold">Description</label>
+                        <InputText id="description" class="form-control" placeholder="Short description of the business" @bind-Value="_model.Description"/>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-7">
+                            <label for="address" class="form-label fw-semibold">Address</label>
+                            <InputText id="address" class="form-control" placeholder="Street, City" @bind-Value="_model.Address"/>
+                        </div>
+                        <div class="col-sm-5">
+                            <label for="businessType" class="form-label fw-semibold">Type</label>
+                            <InputSelect id="businessType" class="form-select" @bind-Value="_model.BusinessTypeId">
+                                @foreach (var type in _businessTypes)
+                                {
+                                    <option value="@type.Id">@type.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <label for="imageUrl" class="form-label fw-semibold">
+                            Image URL <span class="text-muted fw-normal">(optional)</span>
+                        </label>
+                        <InputText id="imageUrl" class="form-control" placeholder="https://..." @bind-Value="_model.ImageUrl"/>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 py-2">
+                        <i class="bi bi-check-lg me-1"></i> Create Business
+                    </button>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private BusinessFormModel _model = new();
+    private List<BusinessType> _businessTypes = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _businessTypes = await BusinessTypeService.GetAllAsync();
+    }
+
+    private async Task Submit()
+    {
+        var business = new Business
+        {
+            Name = _model.Name!,
+            Description = _model.Description!,
+            Address = _model.Address!,
+            ImageUrl = _model.ImageUrl,
+            BusinessTypeId = _model.BusinessTypeId
+        };
+        await BusinessController.AddAsync(business);
+
+        NavigationManager.NavigateTo("/businesses");
+    }
+
+    private class BusinessFormModel
+    {
+        public string? Name { get; set; }
+        public string? Description { get; set; }
+        public string? Address { get; set; }
+        public string? ImageUrl { get; set; }
+        public Guid BusinessTypeId { get; set; }
+    }
+}

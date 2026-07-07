@@ -1,0 +1,73 @@
+@page "/businesses"
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@rendermode InteractiveServer
+@inject BusinessController BusinessController
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="h3 fw-bold mb-1">Businesses</h1>
+        <p class="text-muted small mb-0">Manage all registered food businesses</p>
+    </div>
+    <a href="/businesses/create" class="btn btn-primary px-4">
+        <i class="bi bi-plus-lg me-1"></i> Add Business
+    </a>
+</div>
+
+<div class="card border-0 shadow-sm">
+    @if (businesses is null)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (businesses.Count == 0)
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-building fs-1 text-muted d-block mb-3"></i>
+            <p class="text-muted mb-3">No businesses registered yet.</p>
+            <a href="/businesses/create" class="btn btn-outline-primary">Create your first business</a>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead>
+                <tr class="border-bottom">
+                    <th class="px-4 py-3 text-uppercase text-muted small fw-semibold">Name</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Description</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Address</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Type</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var business in businesses)
+                {
+                    <tr>
+                        <td class="px-4 fw-semibold">@business.Name</td>
+                        <td class="text-muted">@business.Description</td>
+                        <td>@business.Address</td>
+                        <td>
+                            <span class="badge rounded-pill px-3 py-2 business-type-badge">
+                                @business.BusinessType.Name
+                            </span>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Business>? businesses;
+
+    protected override async Task OnInitializedAsync()
+    {
+        businesses = (await BusinessController.GetAllAsync()).Value;
+    }
+}
