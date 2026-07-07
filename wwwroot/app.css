@@ -2,6 +2,13 @@ html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
+.business-type-badge {
+    background-color: rgba(27, 110, 194, 0.12);
+    color: #1b6ec2;
+    font-weight: 500;
+    font-size: 0.8rem;
+}
+
 a, .btn-link {
     color: #006bb7;
 }

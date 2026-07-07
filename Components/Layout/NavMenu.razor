@@ -1,28 +1,25 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">Netrom-Eco-Meal</a>
-    </div>
+<div class="sidebar-brand px-4 py-4">
+    <a href="" class="text-decoration-none">
+        <span class="fw-bold text-white fs-5">Eco Meal</span>
+        <span class="d-block text-white-50 small mt-1">Admin Panel</span>
+    </a>
 </div>
+
+<hr class="sidebar-divider mx-3 mt-0" />
 
 <input type="checkbox" title="Navigation menu" class="navbar-toggler"/>
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+    <nav class="nav flex-column px-2">
+        <div class="nav-item">
+            <NavLink class="nav-link" href="businesses" Match="NavLinkMatch.All">
+                <i class="bi bi-building me-2"></i> Businesses
             </NavLink>
         </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
+        <div class="nav-item">
+            <NavLink class="nav-link" href="businesses/create">
+                <i class="bi bi-plus-circle me-2"></i> Create Business
             </NavLink>
         </div>
     </nav>
