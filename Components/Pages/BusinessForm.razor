@@ -1,4 +1,5 @@
 @page "/businesses/create"
+@page "/businesses/edit/{Id:guid}"
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
 @using Netrom_Eco_Meal.Services.Interfaces
@@ -9,8 +10,8 @@
 
 <div class="d-flex justify-content-between align-items-start mb-4">
     <div>
-        <h1 class="h3 fw-bold mb-1">Create Business</h1>
-        <p class="text-muted small mb-0">Add a new food business to the platform</p>
+        <h1 class="h3 fw-bold mb-1">@(IsEdit ? "Edit Business" : "Create Business")</h1>
+        <p class="text-muted small mb-0">@(IsEdit ? "Update the business details" : "Add a new food business to the platform")</p>
     </div>
     <a href="/businesses" class="btn btn-outline-secondary">
         <i class="bi bi-arrow-left me-1"></i> Back
@@ -21,7 +22,7 @@
     <div class="col-lg-7 col-xl-6">
         <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
-                <EditForm Model="@_model" OnValidSubmit="Submit" FormName="createBusinessForm">
+                <EditForm Model="@_model" OnValidSubmit="Submit" FormName="businessForm">
                     <div class="mb-3">
                         <label for="name" class="form-label fw-semibold">Name</label>
                         <InputText id="name" class="form-control" placeholder="e.g. Green Bites" @bind-Value="_model.Name"/>
@@ -52,7 +53,7 @@
                         <InputText id="imageUrl" class="form-control" placeholder="https://..." @bind-Value="_model.ImageUrl"/>
                     </div>
                     <button type="submit" class="btn btn-primary w-100 py-2">
-                        <i class="bi bi-check-lg me-1"></i> Create Business
+                        <i class="bi bi-check-lg me-1"></i> @(IsEdit ? "Save Changes" : "Create Business")
                     </button>
                 </EditForm>
             </div>
@@ -61,25 +62,58 @@
 </div>
 
 @code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool IsEdit => Id.HasValue;
+
     private BusinessFormModel _model = new();
     private List<BusinessType> _businessTypes = [];
 
     protected override async Task OnInitializedAsync()
     {
         _businessTypes = await BusinessTypeService.GetAllAsync();
+
+        if (IsEdit)
+        {
+            var existing = (await BusinessController.GetByIdAsync(Id!.Value)).Value;
+            if (existing is not null)
+            {
+                _model.Name = existing.Name;
+                _model.Description = existing.Description;
+                _model.Address = existing.Address;
+                _model.ImageUrl = existing.ImageUrl;
+                _model.BusinessTypeId = existing.BusinessTypeId;
+            }
+        }
     }
 
     private async Task Submit()
     {
-        var business = new Business
+        if (IsEdit)
         {
-            Name = _model.Name!,
-            Description = _model.Description!,
-            Address = _model.Address!,
-            ImageUrl = _model.ImageUrl,
-            BusinessTypeId = _model.BusinessTypeId
-        };
-        await BusinessController.AddAsync(business);
+            var business = new Business
+            {
+                Id = Id!.Value,
+                Name = _model.Name!,
+                Description = _model.Description!,
+                Address = _model.Address!,
+                ImageUrl = _model.ImageUrl,
+                BusinessTypeId = _model.BusinessTypeId
+            };
+            await BusinessController.UpdateAsync(business);
+        }
+        else
+        {
+            var business = new Business
+            {
+                Name = _model.Name!,
+                Description = _model.Description!,
+                Address = _model.Address!,
+                ImageUrl = _model.ImageUrl,
+                BusinessTypeId = _model.BusinessTypeId
+            };
+            await BusinessController.AddAsync(business);
+        }
 
         NavigationManager.NavigateTo("/businesses");
     }

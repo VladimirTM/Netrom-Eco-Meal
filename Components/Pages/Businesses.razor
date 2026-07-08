@@ -41,6 +41,7 @@
                     <th class="py-3 text-uppercase text-muted small fw-semibold">Description</th>
                     <th class="py-3 text-uppercase text-muted small fw-semibold">Address</th>
                     <th class="py-3 text-uppercase text-muted small fw-semibold">Type</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Actions</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -55,6 +56,16 @@
                                 @business.BusinessType.Name
                             </span>
                         </td>
+                        <td>
+                            <div class="d-flex gap-2">
+                                <a href="/businesses/edit/@business.Id" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(business)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
                     </tr>
                 }
                 </tbody>
@@ -68,6 +79,12 @@
 
     protected override async Task OnInitializedAsync()
     {
+        businesses = (await BusinessController.GetAllAsync()).Value;
+    }
+
+    private async Task DeleteAsync(Business business)
+    {
+        await BusinessController.DeleteAsync(business);
         businesses = (await BusinessController.GetAllAsync()).Value;
     }
 }

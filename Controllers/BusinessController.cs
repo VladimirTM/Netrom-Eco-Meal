@@ -11,10 +11,27 @@ public class BusinessController(IBusinessService businessService) : ControllerBa
     {
         return await businessService.GetAllAsync();
     }
-    
+
+    public async Task<ActionResult<Business?>> GetByIdAsync(Guid id)
+    {
+        return await businessService.GetByIdAsync(id);
+    }
+
     public async Task<ActionResult> AddAsync(Business business)
     {
         await businessService.AddAsync(business);
         return Created();
+    }
+
+    public async Task<ActionResult> UpdateAsync(Business business)
+    {
+        await businessService.UpdateAsync(business);
+        return NoContent();
+    }
+    
+    public async Task<ActionResult> DeleteAsync(Business business)
+    {
+        await businessService.DeleteAsync(business);
+        return NoContent();
     }
 }
