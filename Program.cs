@@ -20,8 +20,13 @@ builder.Services.AddScoped<IBusinessRepository, BusinessRepository>();
 builder.Services.AddScoped<IBusinessService, BusinessService>();
 builder.Services.AddScoped<IBusinessTypeRepository, BusinessTypeRepository>();
 builder.Services.AddScoped<IBusinessTypeService, BusinessTypeService>();
+builder.Services.AddScoped<IPackageRepository, PackageRepository>();
+builder.Services.AddScoped<IPackageTypeRepository, PackageTypeRepository>();
+builder.Services.AddScoped<IPackageService, PackageService>();
+builder.Services.AddScoped<IPackageTypeService, PackageTypeService>();
 builder.Services.AddControllers();
 builder.Services.AddScoped<BusinessController>();
+builder.Services.AddScoped<PackageController>();
 
 var app = builder.Build();
 
