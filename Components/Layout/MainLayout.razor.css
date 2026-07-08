@@ -16,6 +16,12 @@ main {
 @media (min-width: 641px) {
     .page {
         flex-direction: row;
+        height: 100vh;
+        overflow: hidden;
+    }
+
+    main {
+        overflow-y: auto;
     }
 
     .sidebar {

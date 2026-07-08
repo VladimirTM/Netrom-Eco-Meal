@@ -1,0 +1,183 @@
+@page "/packages/create"
+@page "/packages/edit/{Id:guid}"
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services.Interfaces
+@rendermode InteractiveServer
+@inject PackageController PackageController
+@inject IPackageTypeService PackageTypeService
+@inject IBusinessService BusinessService
+@inject NavigationManager NavigationManager
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="h3 fw-bold mb-1">@(IsEdit ? "Edit Package" : "Create Package")</h1>
+        <p class="text-muted small mb-0">@(IsEdit ? "Update the package details" : "Add a new food package to the platform")</p>
+    </div>
+    <a href="/packages" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-7 col-xl-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <EditForm Model="@_model" OnValidSubmit="Submit" FormName="packageForm">
+                    <div class="mb-3">
+                        <label for="name" class="form-label fw-semibold">Name</label>
+                        <InputText id="name" class="form-control" placeholder="e.g. Morning Pastry Box" @bind-Value="_model.Name"/>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label fw-semibold">Description</label>
+                        <InputText id="description" class="form-control" placeholder="Short description of the package" @bind-Value="_model.Description"/>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label for="business" class="form-label fw-semibold">Business</label>
+                            <InputSelect id="business" class="form-select" @bind-Value="_model.BusinessId">
+                                @foreach (var business in _businesses)
+                                {
+                                    <option value="@business.Id">@business.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="col-sm-6">
+                            <label for="packageType" class="form-label fw-semibold">Type</label>
+                            <InputSelect id="packageType" class="form-select" @bind-Value="_model.PackageTypeId">
+                                @foreach (var type in _packageTypes)
+                                {
+                                    <option value="@type.Id">@type.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label for="price" class="form-label fw-semibold">Price</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <InputNumber id="price" class="form-control" placeholder="0.00" @bind-Value="_model.Price"/>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <label for="quantity" class="form-label fw-semibold">Quantity</label>
+                            <InputNumber id="quantity" class="form-control" placeholder="1" @bind-Value="_model.Quantity"/>
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label for="pickupStart" class="form-label fw-semibold">Pickup Start</label>
+                            <InputDate id="pickupStart" class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_model.PickupStart"/>
+                        </div>
+                        <div class="col-sm-6">
+                            <label for="pickupEnd" class="form-label fw-semibold">Pickup End</label>
+                            <InputDate id="pickupEnd" class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_model.PickupEnd"/>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <label for="imageUrl" class="form-label fw-semibold">
+                            Image URL <span class="text-muted fw-normal">(optional)</span>
+                        </label>
+                        <InputText id="imageUrl" class="form-control" placeholder="https://..." @bind-Value="_model.ImageUrl"/>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 py-2">
+                        <i class="bi bi-check-lg me-1"></i> @(IsEdit ? "Save Changes" : "Create Package")
+                    </button>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool IsEdit => Id.HasValue;
+
+    private PackageFormModel _model = new();
+    private List<PackageType> _packageTypes = [];
+    private List<Business> _businesses = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _packageTypes = await PackageTypeService.GetAllAsync();
+        _businesses = await BusinessService.GetAllAsync();
+
+        if (IsEdit)
+        {
+            var existing = (await PackageController.GetByIdAsync(Id!.Value)).Value;
+            if (existing is not null)
+            {
+                _model.Name = existing.Name;
+                _model.Description = existing.Description;
+                _model.Price = existing.Price;
+                _model.Quantity = existing.Quantity;
+                _model.PickupStart = existing.PickupStart;
+                _model.PickupEnd = existing.PickupEnd;
+                _model.ImageUrl = existing.ImageUrl;
+                _model.BusinessId = existing.BusinessId;
+                _model.PackageTypeId = existing.PackageTypeId;
+            }
+        }
+        else
+        {
+            if (_packageTypes.Count > 0)
+                _model.PackageTypeId = _packageTypes[0].Id;
+            if (_businesses.Count > 0)
+                _model.BusinessId = _businesses[0].Id;
+        }
+    }
+
+    private async Task Submit()
+    {
+        if (IsEdit)
+        {
+            var package = new Package
+            {
+                Id = Id!.Value,
+                Name = _model.Name!,
+                Description = _model.Description!,
+                Price = _model.Price,
+                Quantity = _model.Quantity,
+                PickupStart = _model.PickupStart,
+                PickupEnd = _model.PickupEnd,
+                ImageUrl = _model.ImageUrl,
+                BusinessId = _model.BusinessId,
+                PackageTypeId = _model.PackageTypeId
+            };
+            await PackageController.UpdateAsync(package);
+        }
+        else
+        {
+            var package = new Package
+            {
+                Name = _model.Name!,
+                Description = _model.Description!,
+                Price = _model.Price,
+                Quantity = _model.Quantity,
+                PickupStart = _model.PickupStart,
+                PickupEnd = _model.PickupEnd,
+                ImageUrl = _model.ImageUrl,
+                BusinessId = _model.BusinessId,
+                PackageTypeId = _model.PackageTypeId
+            };
+            await PackageController.AddAsync(package);
+        }
+
+        NavigationManager.NavigateTo("/packages");
+    }
+
+    private class PackageFormModel
+    {
+        public string? Name { get; set; }
+        public string? Description { get; set; }
+        public decimal Price { get; set; }
+        public int Quantity { get; set; } = 1;
+        public DateTime PickupStart { get; set; } = DateTime.Now;
+        public DateTime PickupEnd { get; set; } = DateTime.Now.AddHours(2);
+        public string? ImageUrl { get; set; }
+        public Guid BusinessId { get; set; }
+        public Guid PackageTypeId { get; set; }
+    }
+}

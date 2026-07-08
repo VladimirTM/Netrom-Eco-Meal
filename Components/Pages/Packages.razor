@@ -1,0 +1,99 @@
+@page "/packages"
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@rendermode InteractiveServer
+@inject PackageController PackageController
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="h3 fw-bold mb-1">Packages</h1>
+        <p class="text-muted small mb-0">Manage all available food packages</p>
+    </div>
+    <a href="/packages/create" class="btn btn-primary px-4">
+        <i class="bi bi-plus-lg me-1"></i> Add Package
+    </a>
+</div>
+
+<div class="card border-0 shadow-sm">
+    @if (_packages is null)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (_packages.Count == 0)
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-box-seam fs-1 text-muted d-block mb-3"></i>
+            <p class="text-muted mb-3">No packages available yet.</p>
+            <a href="/packages/create" class="btn btn-outline-primary">Create your first package</a>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead>
+                <tr class="border-bottom">
+                    <th class="px-4 py-3 text-uppercase text-muted small fw-semibold">Name</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Business</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Type</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Price</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Qty</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Pickup</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var package in _packages)
+                {
+                    <tr>
+                        <td class="px-4">
+                            <div class="fw-semibold">@package.Name</div>
+                            <div class="text-muted small">@package.Description</div>
+                        </td>
+                        <td>@package.Business.Name</td>
+                        <td>
+                            <span class="badge rounded-pill px-3 py-2 package-type-badge">
+                                @package.PackageType.Name
+                            </span>
+                        </td>
+                        <td class="fw-semibold">@package.Price.ToString("C")</td>
+                        <td>@package.Quantity</td>
+                        <td class="text-muted small">
+                            @package.PickupStart.ToString("MMM d, HH:mm") – @package.PickupEnd.ToString("HH:mm")
+                        </td>
+                        <td>
+                            <div class="d-flex gap-2">
+                                <a href="/packages/edit/@package.Id" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(package)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Package>? _packages;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _packages = (await PackageController.GetAllAsync()).Value;
+    }
+
+    private async Task DeleteAsync(Package package)
+    {
+        await PackageController.DeleteAsync(package);
+        _packages = (await PackageController.GetAllAsync()).Value;
+    }
+}

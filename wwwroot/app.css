@@ -9,6 +9,13 @@ html, body {
     font-size: 0.8rem;
 }
 
+.package-type-badge {
+    background-color: rgba(25, 135, 84, 0.12);
+    color: #198754;
+    font-weight: 500;
+    font-size: 0.8rem;
+}
+
 a, .btn-link {
     color: #006bb7;
 }
