@@ -46,6 +46,14 @@ builder.Services.AddScoped<PackageController>();
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<EcoMealDbContext>();
+    await dbContext.Database.MigrateAsync();
+
+    await DbSeeder.SeedAsync(scope.ServiceProvider, app.Configuration);
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
