@@ -1,0 +1,52 @@
+@page "/account/register"
+@layout EmptyLayout
+
+<div class="login-page">
+    <div class="login-card">
+        <div class="login-brand">
+            <img src="logo.png" alt="Eco Meal" class="login-logo"/>
+            <div>
+                <div class="login-brand-name">Eco Meal</div>
+                <div class="login-brand-sub">Admin Panel</div>
+            </div>
+        </div>
+
+        <h1 class="login-heading">Create account</h1>
+
+        <form method="post" action="api/auth/register">
+            <input type="hidden" name="returnUrl" value="@ReturnUrl"/>
+            <div class="mb-3">
+                <label class="form-label fw-semibold" for="register-name">Full name</label>
+                <input id="register-name" class="form-control" type="text" name="name"
+                       placeholder="Jane Doe" autocomplete="name"/>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold" for="register-email">Email</label>
+                <input id="register-email" class="form-control" type="email" name="email"
+                       placeholder="you@example.com" autocomplete="email"/>
+            </div>
+            <div class="mb-4">
+                <label class="form-label fw-semibold" for="register-password">Password</label>
+                <input id="register-password" class="form-control" type="password" name="password"
+                       placeholder="••••••••" autocomplete="new-password"/>
+            </div>
+            @if (Error is not null)
+            {
+                <div class="alert alert-danger py-2 small mb-3" role="alert">@Error</div>
+            }
+            <button class="btn btn-primary w-100 py-2 fw-semibold" type="submit">Create account</button>
+        </form>
+
+        <p class="login-footer-link">
+            Already have an account? <a href="/account/login">Sign in</a>
+        </p>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? Error { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+}

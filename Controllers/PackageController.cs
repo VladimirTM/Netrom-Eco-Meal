@@ -5,6 +5,7 @@ using Netrom_Eco_Meal.Services.Interfaces;
 namespace Netrom_Eco_Meal.Controllers;
 
 [ApiController]
+[Route("/")]
 public class PackageController(IPackageService packageService) : ControllerBase
 {
     public async Task<ActionResult<List<Package>>> GetAllAsync()
