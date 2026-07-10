@@ -1,8 +1,10 @@
 @page "/businesses"
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services.Interfaces
 @rendermode InteractiveServer
 @inject BusinessController BusinessController
+@inject IBusinessTypeService BusinessTypeService
 
 <div class="d-flex justify-content-between align-items-start mb-4">
     <div>
@@ -14,6 +16,31 @@
     </a>
 </div>
 
+@if (businesses is not null && businessTypes is not null)
+{
+    <div class="d-flex gap-3 mb-3 flex-wrap">
+        <div class="input-group" style="max-width: 320px;">
+            <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+            <input type="text" class="form-control border-start-0 ps-0" placeholder="Search name, description, address…"
+                   @bind="_search" @bind:event="oninput" />
+        </div>
+        <select class="form-select" style="max-width: 200px;" @bind="_typeFilter">
+            <option value="">All types</option>
+            @foreach (var t in businessTypes)
+            {
+                <option value="@t.Id">@t.Name</option>
+            }
+        </select>
+        @if (!string.IsNullOrEmpty(_search) || _typeFilter != "")
+        {
+            <button class="btn btn-outline-secondary" @onclick="ClearFilters">
+                <i class="bi bi-x-lg me-1"></i> Clear
+            </button>
+        }
+        <span class="align-self-center text-muted small ms-auto">@Filtered.Count result@(Filtered.Count == 1 ? "" : "s")</span>
+    </div>
+}
+
 <div class="card border-0 shadow-sm">
     @if (businesses is null)
     {
@@ -23,12 +50,15 @@
             </div>
         </div>
     }
-    else if (businesses.Count == 0)
+    else if (Filtered.Count == 0)
     {
         <div class="text-center py-5">
             <i class="bi bi-building fs-1 text-muted d-block mb-3"></i>
-            <p class="text-muted mb-3">No businesses registered yet.</p>
-            <a href="/businesses/create" class="btn btn-outline-primary">Create your first business</a>
+            <p class="text-muted mb-3">@(businesses.Count == 0 ? "No businesses registered yet." : "No businesses match your filters.")</p>
+            @if (businesses.Count == 0)
+            {
+                <a href="/businesses/create" class="btn btn-outline-primary">Create your first business</a>
+            }
         </div>
     }
     else
@@ -45,7 +75,7 @@
                 </tr>
                 </thead>
                 <tbody>
-                @foreach (var business in businesses)
+                @foreach (var business in Filtered)
                 {
                     <tr>
                         <td class="px-4 fw-semibold">@business.Name</td>
@@ -76,10 +106,29 @@
 
 @code {
     private List<Business>? businesses;
+    private List<BusinessType>? businessTypes;
+    private string _search = "";
+    private string _typeFilter = "";
+
+    private List<Business> Filtered => businesses is null ? [] : businesses
+        .Where(b =>
+            (string.IsNullOrEmpty(_search) ||
+             b.Name.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+             b.Description.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+             b.Address.Contains(_search, StringComparison.OrdinalIgnoreCase)) &&
+            (_typeFilter == "" || b.BusinessTypeId.ToString() == _typeFilter))
+        .ToList();
 
     protected override async Task OnInitializedAsync()
     {
-        businesses = (await BusinessController.GetAllAsync()).Value;
+        businesses    = (await BusinessController.GetAllAsync()).Value;
+        businessTypes = await BusinessTypeService.GetAllAsync();
+    }
+
+    private void ClearFilters()
+    {
+        _search     = "";
+        _typeFilter = "";
     }
 
     private async Task DeleteAsync(Business business)
