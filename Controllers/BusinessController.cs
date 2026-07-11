@@ -35,4 +35,10 @@ public class BusinessController(IBusinessService businessService) : ControllerBa
         await businessService.DeleteAsync(business);
         return NoContent();
     }
+
+    public async Task<ActionResult> AssignManagerAsync(Guid businessId, string? managerId)
+    {
+        var success = await businessService.AssignManagerAsync(businessId, managerId);
+        return success ? NoContent() : Conflict();
+    }
 }

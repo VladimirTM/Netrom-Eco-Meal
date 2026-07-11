@@ -1,20 +1,36 @@
 @page "/businesses"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Mvc
+@using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
 @using Netrom_Eco_Meal.Services.Interfaces
 @rendermode InteractiveServer
 @inject BusinessController BusinessController
+@inject UserController UserController
 @inject IBusinessTypeService BusinessTypeService
+@inject AuthenticationStateProvider AuthStateProvider
+@attribute [Authorize]
 
 <div class="d-flex justify-content-between align-items-start mb-4">
     <div>
         <h1 class="h3 fw-bold mb-1">Businesses</h1>
         <p class="text-muted small mb-0">Manage all registered food businesses</p>
     </div>
-    <a href="/businesses/create" class="btn btn-primary px-4">
-        <i class="bi bi-plus-lg me-1"></i> Add Business
-    </a>
+    @if (_isAdmin)
+    {
+        <a href="/businesses/create" class="btn btn-primary px-4">
+            <i class="bi bi-plus-lg me-1"></i> Add Business
+        </a>
+    }
 </div>
+
+@if (_assignError is not null)
+{
+    <div class="alert alert-danger" role="alert">@_assignError</div>
+}
 
 @if (businesses is not null && businessTypes is not null)
 {
@@ -55,7 +71,7 @@
         <div class="text-center py-5">
             <i class="bi bi-building fs-1 text-muted d-block mb-3"></i>
             <p class="text-muted mb-3">@(businesses.Count == 0 ? "No businesses registered yet." : "No businesses match your filters.")</p>
-            @if (businesses.Count == 0)
+            @if (businesses.Count == 0 && _isAdmin)
             {
                 <a href="/businesses/create" class="btn btn-outline-primary">Create your first business</a>
             }
@@ -71,12 +87,20 @@
                     <th class="py-3 text-uppercase text-muted small fw-semibold">Description</th>
                     <th class="py-3 text-uppercase text-muted small fw-semibold">Address</th>
                     <th class="py-3 text-uppercase text-muted small fw-semibold">Type</th>
-                    <th class="py-3 text-uppercase text-muted small fw-semibold">Actions</th>
+                    @if (_isAdmin)
+                    {
+                        <th class="py-3 text-uppercase text-muted small fw-semibold">Manager</th>
+                    }
+                    @if (_isAdmin || _isBusinessManager)
+                    {
+                        <th class="py-3 text-uppercase text-muted small fw-semibold">Actions</th>
+                    }
                 </tr>
                 </thead>
                 <tbody>
                 @foreach (var business in Filtered)
                 {
+                    var canEdit = _isAdmin || (_isBusinessManager && business.Id == _myBusinessId);
                     <tr>
                         <td class="px-4 fw-semibold">@business.Name</td>
                         <td class="text-muted">@business.Description</td>
@@ -86,16 +110,68 @@
                                 @business.BusinessType.Name
                             </span>
                         </td>
-                        <td>
-                            <div class="d-flex gap-2">
-                                <a href="/businesses/edit/@business.Id" class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
-                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(business)">
-                                    <i class="bi bi-trash"></i>
+                        @if (_isAdmin)
+                        {
+                            <td class="position-relative">
+                                <button type="button" class="role-badge @(business.Manager is null ? "role-badge-unassigned" : "role-badge-businessmanager")"
+                                        @onclick="() => ToggleManagerDropdown(business.Id)">
+                                    @(business.Manager?.Name ?? "Unassigned")
+                                    <i class="bi bi-chevron-down" style="font-size:0.65rem;"></i>
                                 </button>
-                            </div>
-                        </td>
+
+                                @if (_openManagerDropdownBusinessId == business.Id)
+                                {
+                                    <div class="role-dropdown-backdrop" @onclick="CloseManagerDropdown"></div>
+                                    <div class="role-dropdown">
+                                        <button type="button" class="role-option" @onclick="() => AssignManagerAsync(business, null)">
+                                            <span class="role-option-dot" style="background-color:#6b7280"></span>
+                                            Unassigned
+                                            @if (business.ManagerId is null)
+                                            {
+                                                <i class="bi bi-check-lg ms-auto text-muted"></i>
+                                            }
+                                        </button>
+                                        @foreach (var manager in _businessManagers)
+                                        {
+                                            var elsewhere = businesses!.FirstOrDefault(b => b.ManagerId == manager.Id && b.Id != business.Id);
+                                            <button type="button" class="role-option" @onclick="() => AssignManagerAsync(business, manager.Id)">
+                                                <span class="role-option-dot" style="background-color:#2563eb"></span>
+                                                <span>
+                                                    @manager.Name
+                                                    @if (elsewhere is not null)
+                                                    {
+                                                        <span class="text-muted fw-normal d-block" style="font-size:0.7rem;">currently: @elsewhere.Name</span>
+                                                    }
+                                                </span>
+                                                @if (business.ManagerId == manager.Id)
+                                                {
+                                                    <i class="bi bi-check-lg ms-auto text-muted"></i>
+                                                }
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                            </td>
+                        }
+                        @if (_isAdmin || _isBusinessManager)
+                        {
+                            <td>
+                                <div class="d-flex gap-2">
+                                    @if (canEdit)
+                                    {
+                                        <a href="/businesses/edit/@business.Id" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                    }
+                                    @if (_isAdmin)
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(business)">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    }
+                                </div>
+                            </td>
+                        }
                     </tr>
                 }
                 </tbody>
@@ -107,22 +183,37 @@
 @code {
     private List<Business>? businesses;
     private List<BusinessType>? businessTypes;
+    private List<Services.Interfaces.UserWithRole> _businessManagers = [];
     private string _search = "";
     private string _typeFilter = "";
+    private string? _currentUserId;
+    private bool _isAdmin;
+    private bool _isBusinessManager;
+    private Guid? _myBusinessId;
+    private Guid? _openManagerDropdownBusinessId;
+    private string? _assignError;
 
     private List<Business> Filtered => businesses is null ? [] : businesses
         .Where(b =>
-            (string.IsNullOrEmpty(_search) ||
-             b.Name.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
-             b.Description.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
-             b.Address.Contains(_search, StringComparison.OrdinalIgnoreCase)) &&
+            TextHelpers.MatchesSearch(_search, b.Name, b.Description, b.Address) &&
             (_typeFilter == "" || b.BusinessTypeId.ToString() == _typeFilter))
         .ToList();
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _currentUserId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        _isAdmin = authState.User.IsInRole(AppRoles.Admin);
+        _isBusinessManager = authState.User.IsInRole(AppRoles.BusinessManager);
+
         businesses    = (await BusinessController.GetAllAsync()).Value;
         businessTypes = await BusinessTypeService.GetAllAsync();
+
+        if (_isBusinessManager && _currentUserId is not null)
+            _myBusinessId = businesses?.FirstOrDefault(b => b.ManagerId == _currentUserId)?.Id;
+
+        if (_isAdmin)
+            _businessManagers = (await UserController.GetByRoleAsync(AppRoles.BusinessManager)).Value ?? [];
     }
 
     private void ClearFilters()
@@ -133,7 +224,35 @@
 
     private async Task DeleteAsync(Business business)
     {
+        if (!_isAdmin)
+            return;
+
         await BusinessController.DeleteAsync(business);
+        businesses = (await BusinessController.GetAllAsync()).Value;
+    }
+
+    private void ToggleManagerDropdown(Guid businessId)
+    {
+        _openManagerDropdownBusinessId = _openManagerDropdownBusinessId == businessId ? null : businessId;
+    }
+
+    private void CloseManagerDropdown()
+    {
+        _openManagerDropdownBusinessId = null;
+    }
+
+    private async Task AssignManagerAsync(Business business, string? managerId)
+    {
+        _openManagerDropdownBusinessId = null;
+        _assignError = null;
+
+        if (!_isAdmin || managerId == business.ManagerId)
+            return;
+
+        var result = await BusinessController.AssignManagerAsync(business.Id, managerId);
+        if (result is ConflictResult)
+            _assignError = "That manager was just assigned to another business. Please try again.";
+
         businesses = (await BusinessController.GetAllAsync()).Value;
     }
 }

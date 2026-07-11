@@ -9,12 +9,17 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
 {
      public async Task<List<Business>> GetAllAsync()
     {
-        return await context.Businesses.Include(b => b.BusinessType).ToListAsync();
+        return await context.Businesses.Include(b => b.BusinessType).Include(b => b.Manager).ToListAsync();
     }
-    
+
     public async Task<Business?> GetByIdAsync(Guid id)
     {
-        return await context.Businesses.FirstOrDefaultAsync(o => o.Id == id);
+        return await context.Businesses.Include(b => b.Manager).FirstOrDefaultAsync(o => o.Id == id);
+    }
+
+    public async Task<Business?> GetByManagerIdAsync(string managerId)
+    {
+        return await context.Businesses.Include(b => b.BusinessType).FirstOrDefaultAsync(b => b.ManagerId == managerId);
     }
 
     public async Task AddAsync(Business business)

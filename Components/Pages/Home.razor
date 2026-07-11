@@ -1,8 +1,16 @@
 @page "/"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
 @rendermode InteractiveServer
 @inject BusinessController BusinessController
 @inject PackageController PackageController
+@inject UserManager<ApplicationUser> UserManager
+@attribute [Authorize]
 
 <PageTitle>Dashboard — Eco Meal</PageTitle>
 
@@ -80,7 +88,16 @@
                 </div>
                 <div>
                     <div class="text-muted small">Users</div>
-                    <div class="fw-bold fs-4 text-muted">—</div>
+                    @if (_userCount is null)
+                    {
+                        <div class="spinner-border spinner-border-sm text-purple mt-1" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="fw-bold fs-4">@_userCount</div>
+                    }
                 </div>
             </div>
         </div>
@@ -98,21 +115,29 @@
                     <i class="bi bi-building"></i> All Businesses
                 </a>
             </div>
-            <div class="col-sm-6 col-lg-3">
-                <a href="/businesses/create" class="btn btn-outline-primary w-100 d-flex align-items-center gap-2">
-                    <i class="bi bi-plus-circle"></i> New Business
-                </a>
-            </div>
+            <AuthorizeView Roles="@AppRoles.Admin" Context="adminContext">
+                <Authorized>
+                    <div class="col-sm-6 col-lg-3">
+                        <a href="/businesses/create" class="btn btn-outline-primary w-100 d-flex align-items-center gap-2">
+                            <i class="bi bi-plus-circle"></i> New Business
+                        </a>
+                    </div>
+                </Authorized>
+            </AuthorizeView>
             <div class="col-sm-6 col-lg-3">
                 <a href="/packages" class="btn btn-outline-secondary w-100 d-flex align-items-center gap-2">
                     <i class="bi bi-box-seam"></i> All Packages
                 </a>
             </div>
-            <div class="col-sm-6 col-lg-3">
-                <a href="/packages/create" class="btn btn-outline-primary w-100 d-flex align-items-center gap-2">
-                    <i class="bi bi-plus-circle"></i> New Package
-                </a>
-            </div>
+            <AuthorizeView Roles="@($"{AppRoles.Admin},{AppRoles.BusinessManager}")" Context="managerContext">
+                <Authorized>
+                    <div class="col-sm-6 col-lg-3">
+                        <a href="/packages/create" class="btn btn-outline-primary w-100 d-flex align-items-center gap-2">
+                            <i class="bi bi-plus-circle"></i> New Package
+                        </a>
+                    </div>
+                </Authorized>
+            </AuthorizeView>
         </div>
     </div>
 </div>
@@ -120,10 +145,12 @@
 @code {
     private int? _businessCount;
     private int? _packageCount;
+    private int? _userCount;
 
     protected override async Task OnInitializedAsync()
     {
         _businessCount = (await BusinessController.GetAllAsync()).Value?.Count;
         _packageCount = (await PackageController.GetAllAsync()).Value?.Count;
+        _userCount = await UserManager.Users.CountAsync();
     }
 }

@@ -1,17 +1,28 @@
 @page "/packages"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services.Interfaces
 @rendermode InteractiveServer
 @inject PackageController PackageController
+@inject IBusinessService BusinessService
+@inject AuthenticationStateProvider AuthStateProvider
+@attribute [Authorize]
 
 <div class="d-flex justify-content-between align-items-start mb-4">
     <div>
         <h1 class="h3 fw-bold mb-1">Packages</h1>
         <p class="text-muted small mb-0">Manage all available food packages</p>
     </div>
-    <a href="/packages/create" class="btn btn-primary px-4">
-        <i class="bi bi-plus-lg me-1"></i> Add Package
-    </a>
+    @if (_isAdmin || _myBusinessId is not null)
+    {
+        <a href="/packages/create" class="btn btn-primary px-4">
+            <i class="bi bi-plus-lg me-1"></i> Add Package
+        </a>
+    }
 </div>
 
 @if (_packages is not null)
@@ -60,7 +71,7 @@
         <div class="text-center py-5">
             <i class="bi bi-box-seam fs-1 text-muted d-block mb-3"></i>
             <p class="text-muted mb-3">@(_packages.Count == 0 ? "No packages available yet." : "No packages match your filters.")</p>
-            @if (_packages.Count == 0)
+            @if (_packages.Count == 0 && (_isAdmin || _myBusinessId is not null))
             {
                 <a href="/packages/create" class="btn btn-outline-primary">Create your first package</a>
             }
@@ -78,12 +89,16 @@
                     <th class="py-3 text-uppercase text-muted small fw-semibold">Price</th>
                     <th class="py-3 text-uppercase text-muted small fw-semibold">Qty</th>
                     <th class="py-3 text-uppercase text-muted small fw-semibold">Pickup</th>
-                    <th class="py-3 text-uppercase text-muted small fw-semibold">Actions</th>
+                    @if (_isAdmin || _isBusinessManager)
+                    {
+                        <th class="py-3 text-uppercase text-muted small fw-semibold">Actions</th>
+                    }
                 </tr>
                 </thead>
                 <tbody>
                 @foreach (var package in Filtered)
                 {
+                    var canManage = _isAdmin || (_isBusinessManager && package.BusinessId == _myBusinessId);
                     <tr>
                         <td class="px-4">
                             <div class="fw-semibold">@package.Name</div>
@@ -100,16 +115,22 @@
                         <td class="text-muted small">
                             @package.PickupStart.ToString("MMM d, HH:mm") – @package.PickupEnd.ToString("HH:mm")
                         </td>
-                        <td>
-                            <div class="d-flex gap-2">
-                                <a href="/packages/edit/@package.Id" class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
-                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(package)">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </div>
-                        </td>
+                        @if (_isAdmin || _isBusinessManager)
+                        {
+                            <td>
+                                @if (canManage)
+                                {
+                                    <div class="d-flex gap-2">
+                                        <a href="/packages/edit/@package.Id" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(package)">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                }
+                            </td>
+                        }
                     </tr>
                 }
                 </tbody>
@@ -123,6 +144,9 @@
     private string _search = "";
     private string _businessFilter = "";
     private string _typeFilter = "";
+    private bool _isAdmin;
+    private bool _isBusinessManager;
+    private Guid? _myBusinessId;
 
     private IEnumerable<Business> DistinctBusinesses => _packages is null ? [] :
         _packages.Select(p => p.Business).DistinctBy(b => b.Id).OrderBy(b => b.Name);
@@ -132,15 +156,21 @@
 
     private List<Package> Filtered => _packages is null ? [] : _packages
         .Where(p =>
-            (string.IsNullOrEmpty(_search) ||
-             p.Name.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
-             p.Description.Contains(_search, StringComparison.OrdinalIgnoreCase)) &&
+            TextHelpers.MatchesSearch(_search, p.Name, p.Description) &&
             (_businessFilter == "" || p.BusinessId.ToString() == _businessFilter) &&
             (_typeFilter == "" || p.PackageTypeId.ToString() == _typeFilter))
         .ToList();
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var currentUserId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        _isAdmin = authState.User.IsInRole(AppRoles.Admin);
+        _isBusinessManager = authState.User.IsInRole(AppRoles.BusinessManager);
+
+        if (_isBusinessManager && currentUserId is not null)
+            _myBusinessId = (await BusinessService.GetByManagerIdAsync(currentUserId))?.Id;
+
         _packages = (await PackageController.GetAllAsync()).Value;
     }
 
@@ -153,6 +183,9 @@
 
     private async Task DeleteAsync(Package package)
     {
+        if (!_isAdmin && package.BusinessId != _myBusinessId)
+            return;
+
         await PackageController.DeleteAsync(package);
         _packages = (await PackageController.GetAllAsync()).Value;
     }

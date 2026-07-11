@@ -1,5 +1,9 @@
 @page "/packages/create"
 @page "/packages/edit/{Id:guid}"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
 @using Netrom_Eco_Meal.Services.Interfaces
@@ -7,7 +11,19 @@
 @inject PackageController PackageController
 @inject IPackageTypeService PackageTypeService
 @inject IBusinessService BusinessService
+@inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
+@attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
+
+@if (_forbidden)
+{
+    <div class="p-4">
+        <h1 class="h4 fw-bold mb-2">Access denied</h1>
+        <p class="text-muted">@_forbiddenReason</p>
+        <a href="/packages" class="btn btn-outline-primary">Back to packages</a>
+    </div>
+    return;
+}
 
 <div class="d-flex justify-content-between align-items-start mb-4">
     <div>
@@ -35,7 +51,7 @@
                     <div class="row g-3 mb-3">
                         <div class="col-sm-6">
                             <label for="business" class="form-label fw-semibold">Business</label>
-                            <InputSelect id="business" class="form-select" @bind-Value="_model.BusinessId">
+                            <InputSelect id="business" class="form-select" @bind-Value="_model.BusinessId" disabled="@(!_isAdmin)">
                                 @foreach (var business in _businesses)
                                 {
                                     <option value="@business.Id">@business.Name</option>
@@ -98,27 +114,52 @@
     private PackageFormModel _model = new();
     private List<PackageType> _packageTypes = [];
     private List<Business> _businesses = [];
+    private bool _isAdmin;
+    private bool _forbidden;
+    private string _forbiddenReason = "";
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _isAdmin = authState.User.IsInRole(AppRoles.Admin);
+        var currentUserId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        Business? myBusiness = null;
+        if (!_isAdmin && currentUserId is not null)
+            myBusiness = await BusinessService.GetByManagerIdAsync(currentUserId);
+
+        if (!_isAdmin && myBusiness is null)
+        {
+            _forbidden = true;
+            _forbiddenReason = "You don't manage a business yet, so you can't add or edit packages.";
+            return;
+        }
+
         _packageTypes = await PackageTypeService.GetAllAsync();
-        _businesses = await BusinessService.GetAllAsync();
+        _businesses = _isAdmin ? await BusinessService.GetAllAsync() : [myBusiness!];
 
         if (IsEdit)
         {
             var existing = (await PackageController.GetByIdAsync(Id!.Value)).Value;
-            if (existing is not null)
+            if (existing is null)
+                return;
+
+            if (!_isAdmin && existing.BusinessId != myBusiness!.Id)
             {
-                _model.Name = existing.Name;
-                _model.Description = existing.Description;
-                _model.Price = existing.Price;
-                _model.Quantity = existing.Quantity;
-                _model.PickupStart = existing.PickupStart;
-                _model.PickupEnd = existing.PickupEnd;
-                _model.ImageUrl = existing.ImageUrl;
-                _model.BusinessId = existing.BusinessId;
-                _model.PackageTypeId = existing.PackageTypeId;
+                _forbidden = true;
+                _forbiddenReason = "You can only edit packages that belong to your business.";
+                return;
             }
+
+            _model.Name = existing.Name;
+            _model.Description = existing.Description;
+            _model.Price = existing.Price;
+            _model.Quantity = existing.Quantity;
+            _model.PickupStart = existing.PickupStart;
+            _model.PickupEnd = existing.PickupEnd;
+            _model.ImageUrl = existing.ImageUrl;
+            _model.BusinessId = existing.BusinessId;
+            _model.PackageTypeId = existing.PackageTypeId;
         }
         else
         {

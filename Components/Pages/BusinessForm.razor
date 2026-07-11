@@ -1,12 +1,28 @@
 @page "/businesses/create"
 @page "/businesses/edit/{Id:guid}"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
 @using Netrom_Eco_Meal.Services.Interfaces
 @rendermode InteractiveServer
 @inject BusinessController BusinessController
 @inject IBusinessTypeService BusinessTypeService
+@inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
+@attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
+
+@if (_forbidden)
+{
+    <div class="p-4">
+        <h1 class="h4 fw-bold mb-2">Access denied</h1>
+        <p class="text-muted">@(IsEdit ? "You can only edit your own business." : "Only an admin can create new businesses.")</p>
+        <a href="/businesses" class="btn btn-outline-primary">Back to businesses</a>
+    </div>
+    return;
+}
 
 <div class="d-flex justify-content-between align-items-start mb-4">
     <div>
@@ -68,22 +84,42 @@
 
     private BusinessFormModel _model = new();
     private List<BusinessType> _businessTypes = [];
+    private bool _forbidden;
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var isAdmin = authState.User.IsInRole(AppRoles.Admin);
+        var currentUserId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (!IsEdit)
+        {
+            if (!isAdmin)
+            {
+                _forbidden = true;
+                return;
+            }
+        }
+
         _businessTypes = await BusinessTypeService.GetAllAsync();
 
         if (IsEdit)
         {
             var existing = (await BusinessController.GetByIdAsync(Id!.Value)).Value;
-            if (existing is not null)
+            if (existing is null)
+                return;
+
+            if (!isAdmin && existing.ManagerId != currentUserId)
             {
-                _model.Name = existing.Name;
-                _model.Description = existing.Description;
-                _model.Address = existing.Address;
-                _model.ImageUrl = existing.ImageUrl;
-                _model.BusinessTypeId = existing.BusinessTypeId;
+                _forbidden = true;
+                return;
             }
+
+            _model.Name = existing.Name;
+            _model.Description = existing.Description;
+            _model.Address = existing.Address;
+            _model.ImageUrl = existing.ImageUrl;
+            _model.BusinessTypeId = existing.BusinessTypeId;
         }
     }
 

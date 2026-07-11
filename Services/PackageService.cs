@@ -4,7 +4,10 @@ using Netrom_Eco_Meal.Services.Interfaces;
 
 namespace Netrom_Eco_Meal.Services;
 
-public class PackageService(IPackageRepository packageRepository) : IPackageService
+public class PackageService(
+    IPackageRepository packageRepository,
+    IBusinessService businessService,
+    CurrentUserAccessor currentUser) : IPackageService
 {
     public async Task<List<Package>> GetAllAsync()
     {
@@ -18,6 +21,8 @@ public class PackageService(IPackageRepository packageRepository) : IPackageServ
 
     public async Task AddAsync(Package package)
     {
+        await EnsureCanManageBusinessAsync(package.BusinessId);
+
         await packageRepository.AddAsync(package);
         await packageRepository.SaveChangesAsync();
     }
@@ -27,14 +32,34 @@ public class PackageService(IPackageRepository packageRepository) : IPackageServ
         var packageFromDb = await packageRepository.GetByIdAsync(package.Id);
         if (packageFromDb is null)
             return;
+
+        await EnsureCanManageBusinessAsync(packageFromDb.BusinessId);
+
         UpdatePackage(package, packageFromDb);
         await packageRepository.SaveChangesAsync();
     }
-    
+
     public async Task DeleteAsync(Package package)
     {
+        var packageFromDb = await packageRepository.GetByIdAsync(package.Id);
+        if (packageFromDb is null)
+            return;
+
+        await EnsureCanManageBusinessAsync(packageFromDb.BusinessId);
+
         await packageRepository.DeleteAsync(package.Id);
         await packageRepository.SaveChangesAsync();
+    }
+
+    private async Task EnsureCanManageBusinessAsync(Guid businessId)
+    {
+        var (isAdmin, userId) = await currentUser.GetCurrentUserAsync();
+        if (isAdmin)
+            return;
+
+        var business = await businessService.GetByIdAsync(businessId);
+        if (business is null || business.ManagerId != userId)
+            throw new UnauthorizedAccessException("You can only manage packages that belong to your business.");
     }
 
     private static void UpdatePackage(Package package, Package packageToUpdate)

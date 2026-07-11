@@ -12,6 +12,9 @@ public class Business
     public Guid BusinessTypeId { get; set; }
     [ForeignKey(nameof(BusinessTypeId))]
     public BusinessType BusinessType { get; set; } = null!;
+    public string? ManagerId { get; set; }
+    [ForeignKey(nameof(ManagerId))]
+    public ApplicationUser? Manager { get; set; }
     public ICollection<Package> Packages { get; set; } = [];
     public ICollection<Order> Orders { get; set; } = [];
 }
