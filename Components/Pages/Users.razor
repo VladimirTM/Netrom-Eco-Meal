@@ -1,0 +1,309 @@
+@page "/users"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Mvc
+@using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services.Interfaces
+@rendermode InteractiveServer
+@inject UserController UserController
+@inject BusinessController BusinessController
+@inject AuthenticationStateProvider AuthStateProvider
+@attribute [Authorize(Roles = AppRoles.Admin)]
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="h3 fw-bold mb-1">User Roles</h1>
+        <p class="text-muted small mb-0">Control what each person can do across Eco Meal</p>
+    </div>
+</div>
+
+@if (_roleError is not null)
+{
+    <div class="alert alert-danger" role="alert">@_roleError</div>
+}
+
+@if (_users is not null)
+{
+    <div class="d-flex gap-3 mb-3 flex-wrap">
+        <div class="input-group" style="max-width: 320px;">
+            <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+            <input type="text" class="form-control border-start-0 ps-0" placeholder="Search name, email…"
+                   @bind="_search" @bind:event="oninput"/>
+        </div>
+        <select class="form-select" style="max-width: 200px;" @bind="_roleFilter">
+            <option value="">All roles</option>
+            @foreach (var role in AppRoles.AllRoles)
+            {
+                <option value="@role">@DisplayRole(role)</option>
+            }
+        </select>
+        @if (!string.IsNullOrEmpty(_search) || _roleFilter != "")
+        {
+            <button class="btn btn-outline-secondary" @onclick="ClearFilters">
+                <i class="bi bi-x-lg me-1"></i> Clear
+            </button>
+        }
+        <span class="align-self-center text-muted small ms-auto">@Filtered.Count result@(Filtered.Count == 1 ? "" : "s")</span>
+    </div>
+}
+
+<div class="card border-0 shadow-sm">
+    @if (_users is null)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (Filtered.Count == 0)
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-people fs-1 text-muted d-block mb-3"></i>
+            <p class="text-muted mb-0">@(_users.Count == 0 ? "No users registered yet." : "No users match your filters.")</p>
+        </div>
+    }
+    else
+    {
+        <table class="table table-hover mb-0 align-middle">
+            <thead>
+            <tr class="border-bottom">
+                <th class="px-4 py-3 text-uppercase text-muted small fw-semibold">User</th>
+                <th class="py-3 text-uppercase text-muted small fw-semibold">Role</th>
+                <th class="py-3 text-uppercase text-muted small fw-semibold">Business</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var user in Filtered)
+            {
+                var isSelf = user.Id == _currentUserId;
+                <tr>
+                    <td class="px-4">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="sidebar-user-avatar" style="color:#16a34a; background:rgba(22,163,74,0.12);">@TextHelpers.GetInitial(user.Name)</div>
+                            <div>
+                                <div class="fw-semibold d-flex align-items-center gap-2">
+                                    @user.Name
+                                    @if (isSelf)
+                                    {
+                                        <span class="badge rounded-pill bg-light text-muted border small fw-normal">You</span>
+                                    }
+                                </div>
+                                <div class="text-muted small">@user.Email</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="position-relative">
+                        <button type="button" class="role-badge @RoleBadgeClass(user.Role)" disabled="@isSelf"
+                                title="@(isSelf ? "You can't change your own role" : "Change role")"
+                                @onclick="() => ToggleDropdown(user.Id)">
+                            <span class="role-option-dot" style="background-color:@RoleDotColor(user.Role)"></span>
+                            @DisplayRole(user.Role)
+                            @if (!isSelf)
+                            {
+                                <i class="bi bi-chevron-down" style="font-size:0.65rem;"></i>
+                            }
+                        </button>
+
+                        @if (_openDropdownUserId == user.Id)
+                        {
+                            <div class="role-dropdown-backdrop" @onclick="CloseDropdown"></div>
+                            <div class="role-dropdown">
+                                @foreach (var role in AppRoles.AllRoles)
+                                {
+                                    <button type="button" class="role-option" @onclick="() => SetRoleAsync(user, role)">
+                                        <span class="role-option-dot" style="background-color:@RoleDotColor(role)"></span>
+                                        @DisplayRole(role)
+                                        @if (role == user.Role)
+                                        {
+                                            <i class="bi bi-check-lg ms-auto text-muted"></i>
+                                        }
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </td>
+                    <td class="position-relative">
+                        @if (user.Role != AppRoles.BusinessManager)
+                        {
+                            <span class="text-muted small">—</span>
+                        }
+                        else
+                        {
+                            var assigned = AssignedBusiness(user.Id);
+                            <button type="button" class="role-badge @(assigned is null ? "role-badge-unassigned" : "role-badge-businessmanager")"
+                                    @onclick="() => ToggleBusinessDropdown(user.Id)">
+                                @(assigned?.Name ?? "Unassigned")
+                                <i class="bi bi-chevron-down" style="font-size:0.65rem;"></i>
+                            </button>
+
+                            @if (_openBusinessDropdownUserId == user.Id)
+                            {
+                                <div class="role-dropdown-backdrop" @onclick="CloseBusinessDropdown"></div>
+                                <div class="role-dropdown">
+                                    <button type="button" class="role-option" @onclick="() => AssignBusinessAsync(user, null)">
+                                        <span class="role-option-dot" style="background-color:#6b7280"></span>
+                                        Unassigned
+                                        @if (assigned is null)
+                                        {
+                                            <i class="bi bi-check-lg ms-auto text-muted"></i>
+                                        }
+                                    </button>
+                                    @foreach (var business in _businesses)
+                                    {
+                                        var managedByOther = business.ManagerId is not null && business.ManagerId != user.Id
+                                            ? _users?.FirstOrDefault(u => u.Id == business.ManagerId)
+                                            : null;
+                                        <button type="button" class="role-option" @onclick="() => AssignBusinessAsync(user, business.Id)">
+                                            <span class="role-option-dot" style="background-color:#16a34a"></span>
+                                            <span>
+                                                @business.Name
+                                                @if (managedByOther is not null)
+                                                {
+                                                    <span class="text-muted fw-normal d-block" style="font-size:0.7rem;">currently: @managedByOther.Name</span>
+                                                }
+                                            </span>
+                                            @if (business.Id == assigned?.Id)
+                                            {
+                                                <i class="bi bi-check-lg ms-auto text-muted"></i>
+                                            }
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private List<UserWithRole>? _users;
+    private List<Business> _businesses = [];
+    private string? _currentUserId;
+    private string _search = "";
+    private string _roleFilter = "";
+    private string? _openDropdownUserId;
+    private string? _openBusinessDropdownUserId;
+    private string? _roleError;
+
+    private List<UserWithRole> Filtered => _users is null ? [] : _users
+        .Where(u =>
+            TextHelpers.MatchesSearch(_search, u.Name, u.Email) &&
+            (_roleFilter == "" || u.Role == _roleFilter))
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _currentUserId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        _users = (await UserController.GetAllAsync()).Value;
+        _businesses = (await BusinessController.GetAllAsync()).Value ?? [];
+    }
+
+    private Business? AssignedBusiness(string userId) =>
+        _businesses.FirstOrDefault(b => b.ManagerId == userId);
+
+    private void ClearFilters()
+    {
+        _search = "";
+        _roleFilter = "";
+    }
+
+    private void ToggleDropdown(string userId)
+    {
+        _openBusinessDropdownUserId = null;
+        _openDropdownUserId = _openDropdownUserId == userId ? null : userId;
+    }
+
+    private void CloseDropdown()
+    {
+        _openDropdownUserId = null;
+    }
+
+    private void ToggleBusinessDropdown(string userId)
+    {
+        _openDropdownUserId = null;
+        _openBusinessDropdownUserId = _openBusinessDropdownUserId == userId ? null : userId;
+    }
+
+    private void CloseBusinessDropdown()
+    {
+        _openBusinessDropdownUserId = null;
+    }
+
+    private async Task SetRoleAsync(UserWithRole user, string role)
+    {
+        _openDropdownUserId = null;
+        _roleError = null;
+
+        if (role == user.Role || _users is null)
+            return;
+
+        var result = await UserController.UpdateRoleAsync(user.Id, role);
+        if (result is ConflictObjectResult conflict)
+        {
+            _roleError = conflict.Value?.ToString() ?? "That role change could not be applied.";
+            return;
+        }
+
+        var index = _users.FindIndex(u => u.Id == user.Id);
+        if (index >= 0)
+            _users[index] = user with { Role = role };
+
+        _businesses = (await BusinessController.GetAllAsync()).Value ?? [];
+    }
+
+    private async Task AssignBusinessAsync(UserWithRole user, Guid? businessId)
+    {
+        _openBusinessDropdownUserId = null;
+        _roleError = null;
+
+        var current = AssignedBusiness(user.Id);
+        if (businessId == current?.Id)
+            return;
+
+        ActionResult? result = null;
+        if (businessId is null)
+        {
+            if (current is not null)
+                result = await BusinessController.AssignManagerAsync(current.Id, null);
+        }
+        else
+        {
+            result = await BusinessController.AssignManagerAsync(businessId.Value, user.Id);
+        }
+
+        if (result is ConflictResult)
+            _roleError = "That manager was just assigned to another business. Please try again.";
+
+        _businesses = (await BusinessController.GetAllAsync()).Value ?? [];
+    }
+
+    private static string DisplayRole(string role) => role switch
+    {
+        AppRoles.BusinessManager => "Business Manager",
+        _ => role
+    };
+
+    private static string RoleBadgeClass(string role) => role switch
+    {
+        AppRoles.Admin => "role-badge-admin",
+        AppRoles.BusinessManager => "role-badge-businessmanager",
+        _ => "role-badge-customer"
+    };
+
+    private static string RoleDotColor(string role) => role switch
+    {
+        AppRoles.Admin => "#8b5cf6",
+        AppRoles.BusinessManager => "#2563eb",
+        _ => "#16a34a"
+    };
+}

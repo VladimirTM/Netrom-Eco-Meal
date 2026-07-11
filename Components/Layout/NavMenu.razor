@@ -34,6 +34,18 @@
                 <i class="bi bi-box-seam me-2"></i>Packages
             </NavLink>
         </div>
+
+        <AuthorizeView Roles="@AppRoles.Admin">
+            <Authorized>
+                <div class="nav-section-label">Admin</div>
+
+                <div class="nav-item">
+                    <NavLink class="nav-link" href="users">
+                        <i class="bi bi-shield-lock me-2"></i>User Roles
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
     </nav>
 </div>
 
