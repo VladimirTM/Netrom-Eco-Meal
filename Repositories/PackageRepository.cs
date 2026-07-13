@@ -17,6 +17,16 @@ public class PackageRepository(EcoMealDbContext context) : IPackageRepository
         return await context.Packages.FirstOrDefaultAsync(p => p.Id == id);
     }
 
+    public async Task<List<Package>> GetByIdsAsync(IEnumerable<Guid> ids)
+    {
+        var idList = ids.ToList();
+        return await context.Packages
+            .Include(p => p.PackageType)
+            .Include(p => p.Business)
+            .Where(p => idList.Contains(p.Id))
+            .ToListAsync();
+    }
+
     public async Task AddAsync(Package package)
     {
         await context.Packages.AddAsync(package);

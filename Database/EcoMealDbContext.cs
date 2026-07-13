@@ -31,5 +31,24 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
         modelBuilder.Entity<Business>()
             .HasIndex(b => b.ManagerId)
             .IsUnique();
+
+        // Order numbers are assigned by a DB sequence (instead of app-side MAX+1) so concurrent
+        // checkouts can't race each other into producing the same number.
+        modelBuilder.HasSequence<int>("order_numbers").StartsAt(1);
+
+        modelBuilder.Entity<Order>()
+            .Property(o => o.OrderNumber)
+            .HasDefaultValueSql("nextval('order_numbers')")
+            .ValueGeneratedOnAdd();
+
+        modelBuilder.Entity<Order>()
+            .HasIndex(o => o.OrderNumber)
+            .IsUnique();
+
+        // Optimistic concurrency on Package.Quantity so two managers confirming orders against
+        // the same package at the same time can't both succeed and oversell stock.
+        modelBuilder.Entity<Package>()
+            .Property<uint>("xmin")
+            .IsRowVersion();
     }
 }

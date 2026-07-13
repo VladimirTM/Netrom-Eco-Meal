@@ -19,6 +19,11 @@ public class PackageService(
         return await packageRepository.GetByIdAsync(id);
     }
 
+    public async Task<List<Package>> GetByIdsAsync(IEnumerable<Guid> ids)
+    {
+        return await packageRepository.GetByIdsAsync(ids);
+    }
+
     public async Task AddAsync(Package package)
     {
         await EnsureCanManageBusinessAsync(package.BusinessId);

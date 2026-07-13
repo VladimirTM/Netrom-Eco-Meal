@@ -13,4 +13,10 @@ public class CurrentUserAccessor(AuthenticationStateProvider authenticationState
         var userId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         return (isAdmin, userId);
     }
+
+    public async Task<bool> IsInRoleAsync(string role)
+    {
+        var authState = await authenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User.IsInRole(role);
+    }
 }

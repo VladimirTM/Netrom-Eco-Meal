@@ -8,7 +8,7 @@ public class Order
     public required string UserId { get; set; }
     public required Guid BusinessId { get; set; }
     public required Guid StatusId { get; set; }
-    public required int OrderNumber { get; set; }
+    public int OrderNumber { get; set; }
     [ForeignKey(nameof(UserId))]
     public required ApplicationUser User { get; set; }
     [ForeignKey(nameof(BusinessId))]
