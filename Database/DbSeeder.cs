@@ -128,8 +128,6 @@ public static class DbSeeder
 
     private static async Task SeedPackagesAsync(EcoMealDbContext db)
     {
-        if (await db.Packages.AnyAsync()) return;
-
         var b1 = new Guid("44444444-0000-0000-0000-000000000001");
         var b2 = new Guid("44444444-0000-0000-0000-000000000002");
         var b3 = new Guid("44444444-0000-0000-0000-000000000003");
@@ -145,12 +143,12 @@ public static class DbSeeder
         var veggieBox   = new Guid("22222222-0000-0000-0000-000000000004");
         var pastryBox   = new Guid("22222222-0000-0000-0000-000000000005");
 
-        // Pickup windows are anchored to "today" at seed time so the storefront always opens
-        // with live, orderable packages instead of a fixed calendar date going stale.
+        // Anchored to "today" so the storefront always opens with live, orderable packages.
         var today = DateTime.UtcNow.Date;
         DateTime At(int hour, int minute) => today.AddHours(hour).AddMinutes(minute);
 
-        db.Packages.AddRange(
+        var seedPackages = new List<Package>
+        {
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000001"), BusinessId = b1, PackageTypeId = surpriseBag, Name = "Green Fork Surprise Bag",   Description = "A surprise selection of today's leftover dishes — always delicious.",   Price = 12.99m, Quantity = 5,  PickupStart = At(17,  0), PickupEnd = At(20,  0), ImageUrl = "https://picsum.photos/seed/green-fork-surprise-bag/640/360" },
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000002"), BusinessId = b1, PackageTypeId = mealBox,     Name = "Green Fork Meal Box",       Description = "A full meal box with a main course and side dish.",                    Price =  9.99m, Quantity = 3,  PickupStart = At(17,  0), PickupEnd = At(20,  0), ImageUrl = "https://picsum.photos/seed/green-fork-meal-box/640/360" },
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000003"), BusinessId = b2, PackageTypeId = breadBag,    Name = "Sunrise Bread Bag",         Description = "Assorted fresh breads and pastries from the day.",                    Price =  6.50m, Quantity = 10, PickupStart = At(16,  0), PickupEnd = At(19,  0), ImageUrl = "https://picsum.photos/seed/sunrise-bread-bag/640/360" },
@@ -163,7 +161,28 @@ public static class DbSeeder
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000010"), BusinessId = b7, PackageTypeId = veggieBox,   Name = "FreshMart Veggie Box",      Description = "Seasonal vegetables and fruit nearing best-before — still fresh.",    Price =  5.50m, Quantity = 15, PickupStart = At(16,  0), PickupEnd = At(20,  0), ImageUrl = "https://picsum.photos/seed/freshmart-veggie-box/640/360" },
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000011"), BusinessId = b8, PackageTypeId = mealBox,     Name = "Street Spoon Meal Box",     Description = "A full street-food meal — tacos, gyros, or noodles (surprise pick).",Price = 10.00m, Quantity = 7,  PickupStart = At(18, 30), PickupEnd = At(21,  0), ImageUrl = "https://picsum.photos/seed/street-spoon-meal-box/640/360" },
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000012"), BusinessId = b8, PackageTypeId = surpriseBag, Name = "Street Spoon Surprise Bag", Description = "Mixed snacks, sides, and small bites leftover from the day.",         Price =  5.99m, Quantity = 6,  PickupStart = At(20,  0), PickupEnd = At(22,  0), ImageUrl = "https://picsum.photos/seed/street-spoon-surprise-bag/640/360" }
-        );
+        };
+
+        // Refresh only the pickup window (not quantity, which reflects real orders) for known
+        // seed packages once it's expired, instead of re-inserting or touching admin-added ones.
+        var seedIds = seedPackages.Select(p => p.Id).ToList();
+        var existingById = await db.Packages
+            .Where(p => seedIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id);
+
+        foreach (var seed in seedPackages)
+        {
+            if (!existingById.TryGetValue(seed.Id, out var existing))
+            {
+                db.Packages.Add(seed);
+            }
+            else if (existing.PickupEnd < DateTime.UtcNow)
+            {
+                existing.PickupStart = seed.PickupStart;
+                existing.PickupEnd = seed.PickupEnd;
+            }
+        }
+
         await db.SaveChangesAsync();
     }
 }

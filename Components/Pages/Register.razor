@@ -1,18 +1,21 @@
 @page "/account/register"
 @layout EmptyLayout
 
+<PageTitle>Create account — Eco Meal</PageTitle>
+
 <div class="login-page">
     <div class="login-card">
         <div class="login-brand">
             <img src="logo.png" alt="Eco Meal" class="login-logo"/>
             <div>
                 <div class="login-brand-name">Eco Meal</div>
-                <div class="login-brand-sub">Admin Panel</div>
+                <div class="login-brand-sub">Surplus food, rescued</div>
             </div>
         </div>
 
         <h1 class="login-heading">Create account</h1>
 
+        @* Plain HTML post (not EditForm) so returnUrl round-trips as a form field to AuthController. *@
         <form method="post" action="api/auth/register">
             <input type="hidden" name="returnUrl" value="@ReturnUrl"/>
             <div class="mb-3">

@@ -4,12 +4,13 @@ using Netrom_Eco_Meal.Services.Interfaces;
 
 namespace Netrom_Eco_Meal.Controllers;
 
+// Hit via plain HTML form posts from Login/Register/logout, not injected into pages like the others.
 [ApiController]
 [Route("api/[controller]")]
 public class AuthController(IAuthService authService) : ControllerBase
 {
     [HttpPost("login")]
-    public async Task<IActionResult> LoginAsync([FromForm] LoginRequest request, [FromQuery] string? returnUrl)
+    public async Task<IActionResult> LoginAsync([FromForm] LoginRequest request, [FromForm] string? returnUrl)
     {
         var result = await authService.LoginAsync(request);
 
@@ -22,7 +23,7 @@ public class AuthController(IAuthService authService) : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<IActionResult> RegisterAsync([FromForm] RegisterRequest request, [FromForm] string name, [FromQuery] string? returnUrl)
+    public async Task<IActionResult> RegisterAsync([FromForm] RegisterRequest request, [FromForm] string name, [FromForm] string? returnUrl)
     {
         var result = await authService.RegisterAsync(request, name);
 

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Netrom_Eco_Meal.Entities;
 
 namespace Netrom_Eco_Meal.Database;
@@ -32,8 +33,7 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
             .HasIndex(b => b.ManagerId)
             .IsUnique();
 
-        // Order numbers are assigned by a DB sequence (instead of app-side MAX+1) so concurrent
-        // checkouts can't race each other into producing the same number.
+        // DB sequence instead of app-side MAX+1 so concurrent checkouts can't collide on a number.
         modelBuilder.HasSequence<int>("order_numbers").StartsAt(1);
 
         modelBuilder.Entity<Order>()
@@ -45,10 +45,22 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
             .HasIndex(o => o.OrderNumber)
             .IsUnique();
 
-        // Optimistic concurrency on Package.Quantity so two managers confirming orders against
-        // the same package at the same time can't both succeed and oversell stock.
+        // Optimistic concurrency so two managers confirming the same package can't oversell stock.
         modelBuilder.Entity<Package>()
             .Property<uint>("xmin")
             .IsRowVersion();
+
+        // Npgsql rejects Kind=Unspecified for timestamptz columns; tag as UTC rather than convert,
+        // since the app has no timezone handling of its own.
+        var utcDateTimeConverter = new ValueConverter<DateTime, DateTime>(
+            v => v.Kind == DateTimeKind.Utc ? v : DateTime.SpecifyKind(v, DateTimeKind.Utc),
+            v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+        foreach (var property in modelBuilder.Model.GetEntityTypes()
+                     .SelectMany(t => t.GetProperties())
+                     .Where(p => p.ClrType == typeof(DateTime)))
+        {
+            property.SetValueConverter(utcDateTimeConverter);
+        }
     }
 }
