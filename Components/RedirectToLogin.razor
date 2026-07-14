@@ -3,7 +3,9 @@
 @code {
     protected override void OnInitialized()
     {
+        // ToBaseRelativePath strips the leading slash, so it's added back before the query string.
         var returnUrl = Uri.EscapeDataString(NavigationManager.ToBaseRelativePath(NavigationManager.Uri));
+        // forceLoad: this fires from Routes.razor's NotAuthorized branch, before any circuit exists.
         NavigationManager.NavigateTo($"/account/login?returnUrl=/{returnUrl}", forceLoad: true);
     }
 }

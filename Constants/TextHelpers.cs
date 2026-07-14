@@ -1,5 +1,6 @@
 namespace Netrom_Eco_Meal.Constants;
 
+// Small formatting/filtering helpers shared by list and avatar UI.
 public static class TextHelpers
 {
     public static string GetInitial(string? name) =>

@@ -39,8 +39,7 @@ public class OrderService(
             User = user,
             BusinessId = businessId,
             StatusId = pendingStatus.Id,
-            // OrderNumber is assigned by the DB's order_numbers sequence on insert (see EcoMealDbContext),
-            // so concurrent checkouts can't race each other into the same number.
+            // OrderNumber comes from the order_numbers DB sequence on insert (see EcoMealDbContext).
         };
 
         var packageIds = lines.Select(l => l.PackageId).Distinct().ToList();
@@ -57,7 +56,7 @@ public class OrderService(
             if (line.Quantity > package.Quantity)
                 throw new InvalidOperationException($"Only {package.Quantity} left of \"{package.Name}\" — please adjust your cart.");
 
-            // Stock isn't reserved until the business confirms the order — see UpdateStatusAsync.
+            // Stock is reserved on confirm, not here — see UpdateStatusAsync.
             order.OrderPackages.Add(new OrderPackage
             {
                 Id = Guid.NewGuid(),
@@ -141,8 +140,7 @@ public class OrderService(
         }
         catch (DbUpdateConcurrencyException)
         {
-            // Another confirmation/cancellation changed one of these packages' stock in the
-            // meantime (Package uses xmin as a concurrency token) — don't silently oversell.
+            // Another confirm/cancel changed a package's stock (xmin token) — don't oversell.
             throw new InvalidOperationException("Stock for this order just changed — please refresh and try again.");
         }
 

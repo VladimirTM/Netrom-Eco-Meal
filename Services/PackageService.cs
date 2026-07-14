@@ -4,6 +4,7 @@ using Netrom_Eco_Meal.Services.Interfaces;
 
 namespace Netrom_Eco_Meal.Services;
 
+// Write methods are restricted to admins and the package's own business manager.
 public class PackageService(
     IPackageRepository packageRepository,
     IBusinessService businessService,

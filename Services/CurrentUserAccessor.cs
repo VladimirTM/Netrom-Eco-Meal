@@ -4,6 +4,8 @@ using Netrom_Eco_Meal.Constants;
 
 namespace Netrom_Eco_Meal.Services;
 
+// Lets services read the caller's identity/role without depending on HttpContext, which
+// isn't reliably available in Blazor Server's persistent-connection model.
 public class CurrentUserAccessor(AuthenticationStateProvider authenticationStateProvider)
 {
     public async Task<(bool IsAdmin, string? UserId)> GetCurrentUserAsync()

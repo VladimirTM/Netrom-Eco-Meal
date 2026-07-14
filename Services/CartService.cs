@@ -146,8 +146,7 @@ public class CartService(IJSRuntime jsRuntime, IPackageService packageService)
         }
         catch
         {
-            // Best-effort persistence — the in-memory cart for this circuit stays authoritative
-            // even if the browser-side write failed (e.g. mid-reconnect).
+            // Best-effort: the in-memory cart stays authoritative even if this write fails.
         }
     }
 

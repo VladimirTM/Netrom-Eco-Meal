@@ -2,6 +2,7 @@ using Netrom_Eco_Meal.Entities;
 
 namespace Netrom_Eco_Meal.Repositories.Interfaces;
 
+// AddAsync/DeleteAsync only stage changes — call SaveChangesAsync to persist.
 public interface IOrderRepository
 {
     public Task<List<Order>> GetAllAsync();

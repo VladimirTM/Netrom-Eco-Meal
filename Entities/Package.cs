@@ -10,6 +10,7 @@ public class Package
     public required string Name { get; set; }
     public required string Description { get; set; }
     public required decimal Price { get; set; }
+    // Live stock: decremented when an order is confirmed, restored if it's then cancelled.
     public required int Quantity { get; set; }
     public required DateTime PickupStart { get; set; }
     public required DateTime PickupEnd { get; set; }

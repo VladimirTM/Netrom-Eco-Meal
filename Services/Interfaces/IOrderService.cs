@@ -4,6 +4,7 @@ namespace Netrom_Eco_Meal.Services.Interfaces;
 
 public record OrderLineRequest(Guid PackageId, int Quantity);
 
+// Order placement is customer-only; management is admin or the order's own business manager.
 public interface IOrderService
 {
     public Task<Order> PlaceOrderAsync(Guid businessId, List<OrderLineRequest> lines);

@@ -1,5 +1,6 @@
 namespace Netrom_Eco_Meal.Constants;
 
+// Values must match the Status.Name rows DbSeeder creates.
 public static class OrderStatuses
 {
     public const string Pending = "Pending";

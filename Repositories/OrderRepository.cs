@@ -5,6 +5,7 @@ using Netrom_Eco_Meal.Repositories.Interfaces;
 
 namespace Netrom_Eco_Meal.Repositories;
 
+// AddAsync/DeleteAsync only stage changes — call SaveChangesAsync to persist.
 public class OrderRepository(EcoMealDbContext context) : IOrderRepository
 {
     public async Task<List<Order>> GetAllAsync()

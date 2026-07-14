@@ -2,6 +2,7 @@ using Netrom_Eco_Meal.Entities;
 
 namespace Netrom_Eco_Meal.Services.Interfaces;
 
+// Write methods are restricted to admins and the package's own business manager.
 public interface IPackageService
 {
     public Task<List<Package>> GetAllAsync();

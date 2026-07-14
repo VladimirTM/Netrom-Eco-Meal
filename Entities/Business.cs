@@ -12,6 +12,7 @@ public class Business
     public Guid BusinessTypeId { get; set; }
     [ForeignKey(nameof(BusinessTypeId))]
     public BusinessType BusinessType { get; set; } = null!;
+    // Nullable/unique: a manager oversees at most one business (enforced by a unique index).
     public string? ManagerId { get; set; }
     [ForeignKey(nameof(ManagerId))]
     public ApplicationUser? Manager { get; set; }

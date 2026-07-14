@@ -5,6 +5,7 @@ using Netrom_Eco_Meal.Repositories.Interfaces;
 
 namespace Netrom_Eco_Meal.Repositories;
 
+// Read-only lookup over the seeded PackageType list.
 public class PackageTypeRepository(EcoMealDbContext context) : IPackageTypeRepository
 {
     public async Task<List<PackageType>> GetAllAsync()

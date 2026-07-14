@@ -6,6 +6,7 @@ using Netrom_Eco_Meal.Services.Interfaces;
 
 namespace Netrom_Eco_Meal.Services;
 
+// Thin wrapper over ASP.NET Identity so AuthController doesn't depend on it directly.
 public class AuthService(SignInManager<ApplicationUser> signInManager, UserManager<ApplicationUser> userManager) : IAuthService
 {
     public async Task<SignInResult> LoginAsync(LoginRequest request)
@@ -34,6 +35,7 @@ public class AuthService(SignInManager<ApplicationUser> signInManager, UserManag
             return SignInResult.Failed;
         }
 
+        // Self-registration always starts as Customer; only an admin can promote from here.
         await userManager.AddToRoleAsync(user, AppRoles.Customer);
 
         return await signInManager.PasswordSignInAsync(request.Email, request.Password, true, false);

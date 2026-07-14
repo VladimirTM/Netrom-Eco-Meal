@@ -2,6 +2,7 @@ using Netrom_Eco_Meal.Entities;
 
 namespace Netrom_Eco_Meal.Services.Interfaces;
 
+// Create/delete are admin-only; update is admin or the business's own manager.
 public interface IBusinessService
 {
     public Task<List<Business>> GetAllAsync();

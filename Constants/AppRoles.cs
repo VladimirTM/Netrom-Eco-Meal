@@ -1,5 +1,6 @@
 namespace Netrom_Eco_Meal.Constants;
 
+// Values must match the ASP.NET Identity role names DbSeeder creates.
 public static class AppRoles
 {
     public const string Admin = "Admin";

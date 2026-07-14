@@ -8,6 +8,7 @@ public class Order
     public required string UserId { get; set; }
     public required Guid BusinessId { get; set; }
     public required Guid StatusId { get; set; }
+    // Assigned by the order_numbers DB sequence on insert — never set this manually.
     public int OrderNumber { get; set; }
     [ForeignKey(nameof(UserId))]
     public required ApplicationUser User { get; set; }

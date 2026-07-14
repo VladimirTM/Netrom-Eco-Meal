@@ -7,6 +7,8 @@ using Netrom_Eco_Meal.Services.Interfaces;
 
 namespace Netrom_Eco_Meal.Services;
 
+// Admin-only; enforced here via CurrentUserAccessor since callers invoke this in-process
+// (through an injected controller), not through an [Authorize]-guarded HTTP endpoint.
 public class UserService(
     UserManager<ApplicationUser> userManager,
     EcoMealDbContext dbContext,
@@ -57,6 +59,7 @@ public class UserService(
 
         var currentRoles = await userManager.GetRolesAsync(user);
 
+        // Never leave the platform with zero admins.
         if (currentRoles.Contains(AppRoles.Admin) && role != AppRoles.Admin)
         {
             var adminCount = (await userManager.GetUsersInRoleAsync(AppRoles.Admin)).Count;
@@ -67,6 +70,7 @@ public class UserService(
         await userManager.RemoveFromRolesAsync(user, currentRoles);
         await userManager.AddToRoleAsync(user, role);
 
+        // Moving away from BusinessManager releases whatever business they managed.
         if (role != AppRoles.BusinessManager)
         {
             var managedBusiness = await businessService.GetByManagerIdAsync(userId);
