@@ -1,0 +1,102 @@
+@inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Authorization
+@using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Services
+@implements IDisposable
+@inject CartService CartService
+
+<div class="public-shell">
+    <header class="public-header">
+        <div class="public-header-inner">
+            <a href="/" class="public-brand text-decoration-none">
+                <img src="logo.png" alt="" class="public-brand-logo"/>
+                <span class="public-brand-name">Eco Meal</span>
+            </a>
+
+            <AuthorizeView>
+                <Authorized>
+                    <div class="d-flex align-items-center gap-2">
+                        @if (context.User.IsInRole(AppRoles.Customer))
+                        {
+                            <a href="/orders" class="public-cart-btn" aria-label="Your orders">
+                                <i class="bi bi-receipt"></i>
+                            </a>
+                            <button type="button" class="public-cart-btn" @onclick="ToggleCart" aria-label="Open your basket">
+                                <i class="bi bi-basket2"></i>
+                                @if (CartService.TotalCount > 0)
+                                {
+                                    <span class="public-cart-badge">@CartService.TotalCount</span>
+                                }
+                            </button>
+                        }
+                        @if (context.User.IsInRole(AppRoles.Admin) || context.User.IsInRole(AppRoles.BusinessManager))
+                        {
+                            <a href="/dashboard" class="btn btn-outline-light btn-sm px-3">Dashboard</a>
+                        }
+                        @* Clears the localStorage cart so it doesn't leak into the next session. *@
+                        <form method="post" action="api/auth/logout">
+                            <button type="submit" class="public-header-logout" title="Sign out"
+                                    onclick="EcoMeal.cart.clear('@CartService.StorageKey')">
+                                <i class="bi bi-box-arrow-right"></i>
+                            </button>
+                        </form>
+                    </div>
+                </Authorized>
+                <NotAuthorized>
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="/account/login" class="btn btn-outline-light btn-sm px-3">Sign in</a>
+                        <a href="/account/register" class="btn btn-primary btn-sm px-3">Create account</a>
+                    </div>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+    </header>
+
+    <main class="public-main">
+        @Body
+    </main>
+
+    <footer class="public-footer">
+        <div class="public-footer-inner">
+            <div class="d-flex align-items-center justify-content-center gap-2">
+                <img src="logo.png" alt="" class="public-footer-logo"/>
+                <span class="public-footer-brand">Eco Meal</span>
+            </div>
+            <p class="public-footer-tagline">Surplus food from local kitchens, rescued before it's binned.</p>
+            <p class="public-footer-copy">&copy; @DateTime.Now.Year Eco Meal</p>
+        </div>
+    </footer>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+<CartPanel @bind-IsOpen="_cartOpen"/>
+
+@code {
+    private bool _cartOpen;
+
+    protected override void OnInitialized()
+    {
+        CartService.OnChange += HandleCartChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // RestoreAsync needs JS interop (localStorage), only available after the first render.
+        if (firstRender)
+            await CartService.RestoreAsync();
+    }
+
+    private void HandleCartChanged() => InvokeAsync(StateHasChanged);
+
+    private void ToggleCart() => _cartOpen = !_cartOpen;
+
+    public void Dispose()
+    {
+        CartService.OnChange -= HandleCartChanged;
+    }
+}

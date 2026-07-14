@@ -1,156 +1,265 @@
 @page "/"
-@using Microsoft.AspNetCore.Authorization
+@layout PublicLayout
 @using Microsoft.AspNetCore.Components.Authorization
-@using Microsoft.AspNetCore.Identity
-@using Microsoft.EntityFrameworkCore
 @using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services
+@using Netrom_Eco_Meal.Services.Interfaces
 @rendermode InteractiveServer
-@inject BusinessController BusinessController
+@implements IDisposable
 @inject PackageController PackageController
-@inject UserManager<ApplicationUser> UserManager
-@attribute [Authorize]
+@inject IBusinessTypeService BusinessTypeService
+@inject CartService CartService
 
-<PageTitle>Dashboard — Eco Meal</PageTitle>
+<PageTitle>Eco Meal — rescue surplus food near you</PageTitle>
 
-<div class="mb-4">
-    <h1 class="h3 fw-bold mb-1">Dashboard</h1>
-    <p class="text-muted small mb-0">Welcome to the Eco Meal Admin Panel</p>
-</div>
+<section class="home-hero">
+    <div class="home-hero-inner">
+        <span class="home-hero-eyebrow"><i class="bi bi-geo-alt-fill"></i> Near you, live now</span>
+        <h1 class="home-hero-title">
+            Today's surplus,<br/>
+            <span class="home-hero-highlight">rescued</span> before it's binned.
+        </h1>
+        <p class="home-hero-sub">
+            Local restaurants, bakeries and cafés list the food they'd otherwise throw out at closing time —
+            at a fraction of the price. Browse what's left and pick it up straight from the kitchen.
+        </p>
 
-<div class="row g-3 mb-4">
-    <div class="col-sm-6 col-xl-3">
-        <div class="card border-0 shadow-sm h-100 card-accent-green">
-            <div class="card-body d-flex align-items-center gap-3">
-                <div class="rounded-3 p-3 bg-primary bg-opacity-10 text-primary">
-                    <i class="bi bi-building fs-4"></i>
-                </div>
-                <div>
-                    <div class="text-muted small">Businesses</div>
-                    @if (_businessCount is null)
+        <div class="home-stats">
+            <div class="home-stat">
+                <span class="home-stat-value">@(_packages is null ? "—" : _packages.Count.ToString())</span>
+                <span class="home-stat-label">packages live</span>
+            </div>
+            <div class="home-stat">
+                <span class="home-stat-value">@(_packages is null ? "—" : _packages.Sum(p => CartService.AvailableQuantity(p)).ToString())</span>
+                <span class="home-stat-label">portions to save</span>
+            </div>
+            <div class="home-stat">
+                <span class="home-stat-value">@(_packages is null ? "—" : _packages.Select(p => p.BusinessId).Distinct().Count().ToString())</span>
+                <span class="home-stat-label">kitchens on board</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="home-browse">
+    @if (_packages is not null)
+    {
+        <div class="home-filter-bar">
+            <div class="input-group home-search">
+                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search packages or kitchens…"
+                       @bind="_search" @bind:event="oninput"/>
+            </div>
+
+            <select class="form-select home-business-filter" @bind="_businessTypeFilter">
+                <option value="">All kitchen types</option>
+                @foreach (var bt in _businessTypes ?? [])
+                {
+                    <option value="@bt.Id">@bt.Name</option>
+                }
+            </select>
+
+            @if (HasActiveFilters)
+            {
+                <button class="btn btn-outline-secondary btn-sm" @onclick="ClearFilters">
+                    <i class="bi bi-x-lg me-1"></i>Clear
+                </button>
+            }
+        </div>
+
+        <div class="home-chip-row">
+            <button type="button" class="home-chip @(_typeFilter == "" ? "home-chip-active" : "")" @onclick='() => _typeFilter = ""'>
+                All types
+            </button>
+            @foreach (var t in DistinctPackageTypes)
+            {
+                <button type="button" class="home-chip @(_typeFilter == t.Id.ToString() ? "home-chip-active" : "")"
+                        @onclick="() => _typeFilter = t.Id.ToString()">
+                    @t.Name
+                </button>
+            }
+        </div>
+
+        <div class="home-results-row">
+            <span class="text-muted small">@Filtered.Count package@(Filtered.Count == 1 ? "" : "s") found</span>
+            @if (Filtered.Count > 1)
+            {
+                <span class="text-muted small home-sort-hint"><i class="bi bi-hourglass-split"></i>Closing soonest first</span>
+            }
+        </div>
+    }
+
+    @if (_packages is null)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (Filtered.Count == 0)
+    {
+        <div class="home-empty">
+            <i class="bi bi-basket2 fs-1 text-muted d-block mb-3"></i>
+            <p class="text-muted mb-0">@(_packages.Count == 0 ? "No packages are live right now — check back soon." : "Nothing matches your filters yet.")</p>
+        </div>
+    }
+    else
+    {
+        <div class="home-grid">
+            @foreach (var package in Filtered)
+            {
+                <article class="package-card">
+                    @if (!string.IsNullOrWhiteSpace(package.ImageUrl))
                     {
-                        <div class="spinner-border spinner-border-sm text-primary mt-1" role="status">
-                            <span class="visually-hidden">Loading...</span>
+                        <div class="package-card-media">
+                            <img src="@package.ImageUrl" alt="@package.Name" class="package-card-image" loading="lazy"/>
                         </div>
                     }
-                    else
-                    {
-                        <div class="fw-bold fs-4">@_businessCount</div>
-                    }
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-sm-6 col-xl-3">
-        <div class="card border-0 shadow-sm h-100 card-accent-blue">
-            <div class="card-body d-flex align-items-center gap-3">
-                <div class="rounded-3 p-3 bg-sky-subtle text-sky">
-                    <i class="bi bi-box-seam fs-4"></i>
-                </div>
-                <div>
-                    <div class="text-muted small">Packages</div>
-                    @if (_packageCount is null)
-                    {
-                        <div class="spinner-border spinner-border-sm text-sky mt-1" role="status">
-                            <span class="visually-hidden">Loading...</span>
+                    <div class="package-card-body">
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                            <span class="package-card-type">@package.PackageType.Name</span>
+                            <span class="package-card-qty">@CartService.AvailableQuantity(package) left</span>
                         </div>
-                    }
-                    else
-                    {
-                        <div class="fw-bold fs-4">@_packageCount</div>
-                    }
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-sm-6 col-xl-3">
-        <div class="card border-0 shadow-sm h-100 card-accent-amber">
-            <div class="card-body d-flex align-items-center gap-3">
-                <div class="rounded-3 p-3 bg-warning bg-opacity-10 text-warning">
-                    <i class="bi bi-cart3 fs-4"></i>
-                </div>
-                <div>
-                    <div class="text-muted small">Orders</div>
-                    <div class="fw-bold fs-4 text-muted">—</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-sm-6 col-xl-3">
-        <div class="card border-0 shadow-sm h-100 card-accent-purple">
-            <div class="card-body d-flex align-items-center gap-3">
-                <div class="rounded-3 p-3 bg-purple-subtle text-purple">
-                    <i class="bi bi-people fs-4"></i>
-                </div>
-                <div>
-                    <div class="text-muted small">Users</div>
-                    @if (_userCount is null)
-                    {
-                        <div class="spinner-border spinner-border-sm text-purple mt-1" role="status">
-                            <span class="visually-hidden">Loading...</span>
+                        <h2 class="package-card-name">@package.Name</h2>
+                        <div class="package-card-business">
+                            <i class="bi bi-shop"></i>@package.Business.Name
+                            @if (_businessTypeNames.TryGetValue(package.Business.BusinessTypeId, out var typeName))
+                            {
+                                <span class="package-card-business-type">&middot; @typeName</span>
+                            }
                         </div>
-                    }
-                    else
-                    {
-                        <div class="fw-bold fs-4">@_userCount</div>
-                    }
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="card border-0 shadow-sm">
-    <div class="card-header bg-transparent border-0 pt-4 px-4 pb-0">
-        <h6 class="fw-semibold mb-0">Quick Actions</h6>
-    </div>
-    <div class="card-body px-4 pb-4">
-        <div class="row g-2">
-            <div class="col-sm-6 col-lg-3">
-                <a href="/businesses" class="btn btn-outline-secondary w-100 d-flex align-items-center gap-2">
-                    <i class="bi bi-building"></i> All Businesses
-                </a>
-            </div>
-            <AuthorizeView Roles="@AppRoles.Admin" Context="adminContext">
-                <Authorized>
-                    <div class="col-sm-6 col-lg-3">
-                        <a href="/businesses/create" class="btn btn-outline-primary w-100 d-flex align-items-center gap-2">
-                            <i class="bi bi-plus-circle"></i> New Business
-                        </a>
+                        <p class="package-card-desc">@package.Description</p>
+                        <div class="package-card-footer">
+                            <div class="package-card-pickup">
+                                <i class="bi bi-clock"></i>
+                                @package.PickupStart.ToString("MMM d")&nbsp;&middot;&nbsp;@package.PickupStart.ToString("HH:mm")–@package.PickupEnd.ToString("HH:mm")
+                            </div>
+                            <div class="package-card-price">@package.Price.ToString("C")</div>
+                        </div>
+                        <AuthorizeView Roles="@AppRoles.Customer" Context="cartAuth">
+                            <Authorized>
+                                @if (CartService.AvailableQuantity(package) <= 0)
+                                {
+                                    <button type="button" class="package-card-add-btn" disabled>Sold out</button>
+                                }
+                                else
+                                {
+                                    <button type="button" class="package-card-add-btn" @onclick="() => AddToCart(package)">
+                                        <i class="bi bi-bag-plus"></i> Add to basket
+                                    </button>
+                                }
+                            </Authorized>
+                        </AuthorizeView>
                     </div>
-                </Authorized>
-            </AuthorizeView>
-            <div class="col-sm-6 col-lg-3">
-                <a href="/packages" class="btn btn-outline-secondary w-100 d-flex align-items-center gap-2">
-                    <i class="bi bi-box-seam"></i> All Packages
-                </a>
-            </div>
-            <AuthorizeView Roles="@($"{AppRoles.Admin},{AppRoles.BusinessManager}")" Context="managerContext">
-                <Authorized>
-                    <div class="col-sm-6 col-lg-3">
-                        <a href="/packages/create" class="btn btn-outline-primary w-100 d-flex align-items-center gap-2">
-                            <i class="bi bi-plus-circle"></i> New Package
-                        </a>
-                    </div>
-                </Authorized>
-            </AuthorizeView>
+                </article>
+            }
         </div>
+    }
+</section>
+
+@* @key regenerates on every add so the toast re-animates even if the message text repeats. *@
+@if (_toastMessage is not null)
+{
+    <div class="toast-pill" @key="_toastToken">
+        <i class="bi bi-check-circle-fill"></i> @_toastMessage
     </div>
-</div>
+}
+
+<ConfirmDialog IsOpen="@(_pendingSwitch is not null)"
+               Title="Start a new basket?"
+               Message="@SwitchMessage"
+               ConfirmLabel="Start new basket"
+               CancelLabel="Keep current basket"
+               ConfirmClass="btn-primary"
+               Busy="@_switchingBasket"
+               OnConfirm="ConfirmSwitchBasketAsync"
+               OnCancel="CancelSwitchBasket"/>
 
 @code {
-    private int? _businessCount;
-    private int? _packageCount;
-    private int? _userCount;
+    private List<Package>? _packages;
+    private List<BusinessType>? _businessTypes;
+    private Dictionary<Guid, string> _businessTypeNames = new();
+
+    private string _search = "";
+    private string _typeFilter = "";
+    private string _businessTypeFilter = "";
+    private string? _toastMessage;
+    private Guid _toastToken;
+    private Package? _pendingSwitch;
+    private bool _switchingBasket;
+
+    private bool HasActiveFilters => _search != "" || _typeFilter != "" || _businessTypeFilter != "";
+
+    private string SwitchMessage => _pendingSwitch is null ? "" :
+        $"Your basket has items from {CartService.BusinessName}. Adding \"{_pendingSwitch.Name}\" from {_pendingSwitch.Business.Name} will clear it and start a new one.";
+
+    private IEnumerable<PackageType> DistinctPackageTypes => _packages is null ? [] :
+        _packages.Select(p => p.PackageType).DistinctBy(t => t.Id).OrderBy(t => t.Name);
+
+    private List<Package> Filtered => _packages is null ? [] : _packages
+        .Where(p =>
+            TextHelpers.MatchesSearch(_search, p.Name, p.Description, p.Business.Name) &&
+            (_typeFilter == "" || p.PackageTypeId.ToString() == _typeFilter) &&
+            (_businessTypeFilter == "" || p.Business.BusinessTypeId.ToString() == _businessTypeFilter))
+        .OrderBy(p => p.PickupEnd)
+        .ToList();
 
     protected override async Task OnInitializedAsync()
     {
-        _businessCount = (await BusinessController.GetAllAsync()).Value?.Count;
-        _packageCount = (await PackageController.GetAllAsync()).Value?.Count;
-        _userCount = await UserManager.Users.CountAsync();
+        var packages = (await PackageController.GetAllAsync()).Value;
+        // Only show packages still orderable today — DbSeeder keeps seed data's window fresh.
+        _packages = packages?.Where(p => p.PickupEnd > DateTime.UtcNow).ToList();
+        _businessTypes = await BusinessTypeService.GetAllAsync();
+        _businessTypeNames = _businessTypes.ToDictionary(t => t.Id, t => t.Name);
+
+        CartService.OnChange += HandleCartChanged;
+    }
+
+    private void HandleCartChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        CartService.OnChange -= HandleCartChanged;
+    }
+
+    private async Task AddToCart(Package package)
+    {
+        // A basket can only hold one business's packages — confirm before clearing it for a new one.
+        if (CartService.WouldReplaceCart(package))
+        {
+            _pendingSwitch = package;
+            return;
+        }
+
+        await CartService.AddAsync(package);
+        _toastMessage = $"Added \"{package.Name}\" to your basket.";
+        _toastToken = Guid.NewGuid();
+    }
+
+    private async Task ConfirmSwitchBasketAsync()
+    {
+        if (_pendingSwitch is null)
+            return;
+
+        var package = _pendingSwitch;
+        _switchingBasket = true;
+        await CartService.AddAsync(package);
+        _switchingBasket = false;
+        _pendingSwitch = null;
+
+        _toastMessage = $"Started a new basket from {package.Business.Name} — your previous items were cleared.";
+        _toastToken = Guid.NewGuid();
+    }
+
+    private void CancelSwitchBasket() => _pendingSwitch = null;
+
+    private void ClearFilters()
+    {
+        _search = "";
+        _typeFilter = "";
+        _businessTypeFilter = "";
     }
 }

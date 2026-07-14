@@ -1,0 +1,159 @@
+@page "/orders"
+@layout PublicLayout
+@using Microsoft.AspNetCore.Authorization
+@using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@rendermode InteractiveServer
+@inject OrderController OrderController
+@attribute [Authorize(Roles = AppRoles.Customer)]
+
+<PageTitle>Your orders — Eco Meal</PageTitle>
+
+<section class="orders-hero">
+    <div class="orders-hero-inner">
+        <span class="orders-hero-eyebrow"><i class="bi bi-receipt"></i> Pickup history</span>
+        <h1 class="orders-hero-title">Your orders</h1>
+        <p class="orders-hero-sub">Every rescue you've claimed. Show the ticket number to the kitchen at pickup.</p>
+
+        <div class="orders-stats">
+            <div class="orders-stat">
+                <span class="orders-stat-value">@(_orders is null ? "—" : _orders.Count.ToString())</span>
+                <span class="orders-stat-label">orders placed</span>
+            </div>
+            <div class="orders-stat">
+                <span class="orders-stat-value">@(_orders is null ? "—" : _orders.Sum(o => o.OrderPackages.Sum(op => op.Quantity)).ToString())</span>
+                <span class="orders-stat-label">portions rescued</span>
+            </div>
+            <div class="orders-stat">
+                <span class="orders-stat-value">@(_orders is null ? "—" : _orders.Select(o => o.BusinessId).Distinct().Count().ToString())</span>
+                <span class="orders-stat-label">kitchens visited</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="orders-list-section">
+    @if (_orders is not null && _orders.Count > 0)
+    {
+        <div class="orders-chip-row">
+            <button type="button" class="orders-chip @(_statusFilter == "" ? "orders-chip-active" : "")" @onclick='() => _statusFilter = ""'>
+                All
+            </button>
+            @foreach (var status in DistinctStatuses)
+            {
+                <button type="button" class="orders-chip @(_statusFilter == status ? "orders-chip-active" : "")"
+                        @onclick="() => _statusFilter = status">
+                    @status
+                </button>
+            }
+        </div>
+    }
+
+    @if (_orders is null)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (_orders.Count == 0)
+    {
+        <div class="orders-empty">
+            <i class="bi bi-basket2"></i>
+            <p class="mb-1">No orders yet.</p>
+            <span class="text-muted small d-block mb-3">Rescued food from a kitchen near you shows up here.</span>
+            <a href="/" class="btn btn-primary px-4">Browse packages</a>
+        </div>
+    }
+    else if (Filtered.Count == 0)
+    {
+        <div class="orders-empty">
+            <i class="bi bi-filter-circle"></i>
+            <p class="mb-0">No orders match this status.</p>
+        </div>
+    }
+    else
+    {
+        <div class="orders-stack">
+            @foreach (var order in Filtered)
+            {
+                <article class="order-ticket">
+                    <div class="order-ticket-main">
+                        <div class="order-ticket-top">
+                            <div class="order-ticket-kitchen">
+                                <div class="order-ticket-business"><i class="bi bi-shop"></i>@order.Business.Name</div>
+                                <div class="order-ticket-address"><i class="bi bi-geo-alt"></i>@order.Business.Address</div>
+                            </div>
+                            <span class="order-status-badge order-status-@order.Status.Name.ToLowerInvariant()">@order.Status.Name</span>
+                        </div>
+
+                        <div class="order-ticket-items">
+                            @foreach (var line in order.OrderPackages)
+                            {
+                                <div class="order-ticket-line">
+                                    <span class="order-ticket-line-qty">@(line.Quantity)&times;</span>
+                                    <span class="order-ticket-line-name">@line.Package.Name</span>
+                                    <span class="order-ticket-line-price">@((line.Quantity * line.Package.Price).ToString("C"))</span>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="order-ticket-footer">
+                            <div class="order-ticket-pickup">
+                                <i class="bi bi-clock"></i>Pickup @PickupWindow(order)
+                            </div>
+                            <div class="order-ticket-total">
+                                <span>Total</span>
+                                <span class="order-ticket-total-value">@order.OrderPackages.Sum(op => op.Quantity * op.Package.Price).ToString("C")</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="order-ticket-seam"></div>
+
+                    <div class="order-ticket-stub">
+                        <span class="order-ticket-stub-label">Order</span>
+                        <span class="order-ticket-stub-number">#@order.OrderNumber.ToString("000")</span>
+                        <span class="order-ticket-stub-hint">Show at pickup</span>
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    // Lifecycle order for the filter chips, not alphabetical or appearance order.
+    private static readonly string[] StatusOrder = [OrderStatuses.Pending, OrderStatuses.Confirmed, OrderStatuses.Completed, OrderStatuses.Cancelled];
+
+    private List<Order>? _orders;
+    private string _statusFilter = "";
+
+    private IEnumerable<string> DistinctStatuses => _orders is null ? [] :
+        StatusOrder.Where(s => _orders.Any(o => o.Status.Name == s));
+
+    private List<Order> Filtered => _orders is null ? [] : _orders
+        .Where(o => _statusFilter == "" || o.Status.Name == _statusFilter)
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _orders = (await OrderController.GetMyOrdersAsync()).Value ?? [];
+    }
+
+    private static string PickupWindow(Order order)
+    {
+        if (order.OrderPackages.Count == 0)
+            return "time to be confirmed";
+
+        // An order can span packages with different windows — show the widest span that covers them all.
+        var start = order.OrderPackages.Min(op => op.Package.PickupStart);
+        var end = order.OrderPackages.Max(op => op.Package.PickupEnd);
+
+        return start.Date == end.Date
+            ? $"{start:MMM d} · {start:HH:mm}–{end:HH:mm}"
+            : $"{start:MMM d, HH:mm} – {end:MMM d, HH:mm}";
+    }
+}

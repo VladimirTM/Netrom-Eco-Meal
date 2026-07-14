@@ -4,13 +4,10 @@
     <Found Context="routeData">
         <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
             <NotAuthorized>
+                @* Signed in but wrong role vs. not signed in at all get different treatment. *@
                 @if (context.User.Identity?.IsAuthenticated == true)
                 {
-                    <div class="p-4">
-                        <h1 class="h4 fw-bold mb-2">Access denied</h1>
-                        <p class="text-muted">Your account doesn't have permission to view this page.</p>
-                        <a href="/" class="btn btn-outline-primary">Back to dashboard</a>
-                    </div>
+                    <ForbiddenPanel Message="Your account doesn't have permission to view this page." BackHref="/" BackLabel="Back to home"/>
                 }
                 else
                 {

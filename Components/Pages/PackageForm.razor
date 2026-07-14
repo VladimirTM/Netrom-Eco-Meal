@@ -1,5 +1,6 @@
 @page "/packages/create"
 @page "/packages/edit/{Id:guid}"
+@using System.ComponentModel.DataAnnotations
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
@@ -15,13 +16,18 @@
 @inject NavigationManager NavigationManager
 @attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
 
+<PageTitle>@(IsEdit ? "Edit Package" : "Create Package") — Eco Meal</PageTitle>
+
 @if (_forbidden)
 {
-    <div class="p-4">
-        <h1 class="h4 fw-bold mb-2">Access denied</h1>
-        <p class="text-muted">@_forbiddenReason</p>
-        <a href="/packages" class="btn btn-outline-primary">Back to packages</a>
-    </div>
+    <ForbiddenPanel Message="@_forbiddenReason" BackHref="/packages" BackLabel="Back to packages"/>
+    return;
+}
+
+@if (_notFound)
+{
+    <NotFoundPanel Title="Package not found" Message="This package no longer exists — it may have already been deleted."
+                   BackHref="/packages" BackLabel="Back to packages"/>
     return;
 }
 
@@ -40,13 +46,16 @@
         <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
                 <EditForm Model="@_model" OnValidSubmit="Submit" FormName="packageForm">
+                    <DataAnnotationsValidator/>
                     <div class="mb-3">
                         <label for="name" class="form-label fw-semibold">Name</label>
                         <InputText id="name" class="form-control" placeholder="e.g. Morning Pastry Box" @bind-Value="_model.Name"/>
+                        <ValidationMessage For="@(() => _model.Name)" class="validation-message small d-block mt-1"/>
                     </div>
                     <div class="mb-3">
                         <label for="description" class="form-label fw-semibold">Description</label>
                         <InputText id="description" class="form-control" placeholder="Short description of the package" @bind-Value="_model.Description"/>
+                        <ValidationMessage For="@(() => _model.Description)" class="validation-message small d-block mt-1"/>
                     </div>
                     <div class="row g-3 mb-3">
                         <div class="col-sm-6">
@@ -75,10 +84,12 @@
                                 <span class="input-group-text">$</span>
                                 <InputNumber id="price" class="form-control" placeholder="0.00" @bind-Value="_model.Price"/>
                             </div>
+                            <ValidationMessage For="@(() => _model.Price)" class="validation-message small d-block mt-1"/>
                         </div>
                         <div class="col-sm-6">
                             <label for="quantity" class="form-label fw-semibold">Quantity</label>
                             <InputNumber id="quantity" class="form-control" placeholder="1" @bind-Value="_model.Quantity"/>
+                            <ValidationMessage For="@(() => _model.Quantity)" class="validation-message small d-block mt-1"/>
                         </div>
                     </div>
                     <div class="row g-3 mb-3">
@@ -90,6 +101,7 @@
                             <label for="pickupEnd" class="form-label fw-semibold">Pickup End</label>
                             <InputDate id="pickupEnd" class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_model.PickupEnd"/>
                         </div>
+                        <ValidationMessage For="@(() => _model.PickupEnd)" class="validation-message small d-block mt-1"/>
                     </div>
                     <div class="mb-4">
                         <label for="imageUrl" class="form-label fw-semibold">
@@ -117,6 +129,7 @@
     private bool _isAdmin;
     private bool _forbidden;
     private string _forbiddenReason = "";
+    private bool _notFound;
 
     protected override async Task OnInitializedAsync()
     {
@@ -142,7 +155,10 @@
         {
             var existing = (await PackageController.GetByIdAsync(Id!.Value)).Value;
             if (existing is null)
+            {
+                _notFound = true;
                 return;
+            }
 
             if (!_isAdmin && existing.BusinessId != myBusiness!.Id)
             {
@@ -163,6 +179,8 @@
         }
         else
         {
+            // InputSelect only syncs its bound value once the user changes the selection, so without
+            // these defaults the IDs stay Guid.Empty and the insert fails its FK constraints.
             if (_packageTypes.Count > 0)
                 _model.PackageTypeId = _packageTypes[0].Id;
             if (_businesses.Count > 0)
@@ -209,16 +227,31 @@
         NavigationManager.NavigateTo("/packages");
     }
 
-    private class PackageFormModel
+    private class PackageFormModel : IValidatableObject
     {
+        [Required(ErrorMessage = "Enter a package name.")]
         public string? Name { get; set; }
+
+        [Required(ErrorMessage = "Enter a short description.")]
         public string? Description { get; set; }
+
+        [Range(0.01, 10000, ErrorMessage = "Price must be greater than 0.")]
         public decimal Price { get; set; }
+
+        [Range(1, 1000, ErrorMessage = "Quantity must be at least 1.")]
         public int Quantity { get; set; } = 1;
+
         public DateTime PickupStart { get; set; } = DateTime.Now;
         public DateTime PickupEnd { get; set; } = DateTime.Now.AddHours(2);
         public string? ImageUrl { get; set; }
         public Guid BusinessId { get; set; }
         public Guid PackageTypeId { get; set; }
+
+        // Cross-field rule — can't be expressed with a single [Range]/[Required] attribute.
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (PickupEnd <= PickupStart)
+                yield return new ValidationResult("Pickup end must be after pickup start.", [nameof(PickupEnd)]);
+        }
     }
 }

@@ -1,8 +1,9 @@
+@* Target of ConfigureApplicationCookie's AccessDeniedPath in Program.cs. *@
 @page "/account/access-denied"
-@layout MainLayout
+@layout PublicLayout
 
-<div class="p-4">
-    <h1 class="h4 fw-bold mb-2">Access denied</h1>
-    <p class="text-muted">Your account doesn't have permission to view this page.</p>
-    <a href="/" class="btn btn-outline-primary">Back to dashboard</a>
+<PageTitle>Access denied — Eco Meal</PageTitle>
+
+<div class="mx-auto" style="max-width: 420px; margin-top: 4rem;">
+    <ForbiddenPanel Message="Your account doesn't have permission to view this page." BackHref="/" BackLabel="Back to home"/>
 </div>

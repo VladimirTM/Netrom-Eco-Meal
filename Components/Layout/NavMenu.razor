@@ -1,5 +1,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Services
+@inject CartService CartService
 
 <div class="sidebar-brand py-4">
     <a href="" class="text-decoration-none d-flex align-items-center justify-content-center gap-2">
@@ -13,12 +15,13 @@
 
 <input type="checkbox" title="Navigation menu" class="navbar-toggler" />
 
+@* Closes the mobile nav toggle after any link click inside. *@
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="nav flex-column px-2 pb-3">
         <div class="nav-section-label">Main</div>
 
         <div class="nav-item">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+            <NavLink class="nav-link" href="dashboard">
                 <i class="bi bi-house-door me-2"></i>Dashboard
             </NavLink>
         </div>
@@ -32,6 +35,12 @@
         <div class="nav-item">
             <NavLink class="nav-link" href="packages">
                 <i class="bi bi-box-seam me-2"></i>Packages
+            </NavLink>
+        </div>
+
+        <div class="nav-item">
+            <NavLink class="nav-link" href="orders/manage">
+                <i class="bi bi-cart3 me-2"></i>Orders
             </NavLink>
         </div>
 
@@ -55,10 +64,11 @@
             <div class="sidebar-user-avatar">@TextHelpers.GetInitial(context.User.Identity?.Name)</div>
             <div class="sidebar-user-info">
                 <div class="sidebar-user-email">@context.User.Identity?.Name</div>
-                <div class="sidebar-user-role">Signed in</div>
+                <div class="sidebar-user-role">@DisplayRole(context.User)</div>
             </div>
             <form method="post" action="api/auth/logout">
-                <button type="submit" class="sidebar-logout-btn" title="Sign out">
+                <button type="submit" class="sidebar-logout-btn" title="Sign out"
+                        onclick="EcoMeal.cart.clear('@CartService.StorageKey')">
                     <i class="bi bi-box-arrow-right"></i>
                 </button>
             </form>
@@ -74,4 +84,12 @@
 </AuthorizeView>
 
 @code {
+    // Falls back to "Signed in" for any authenticated role not named above.
+    private static string DisplayRole(System.Security.Claims.ClaimsPrincipal user) => user switch
+    {
+        _ when user.IsInRole(AppRoles.Admin) => "Admin",
+        _ when user.IsInRole(AppRoles.BusinessManager) => "Business Manager",
+        _ when user.IsInRole(AppRoles.Customer) => "Customer",
+        _ => "Signed in"
+    };
 }

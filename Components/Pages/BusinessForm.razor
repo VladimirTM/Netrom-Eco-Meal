@@ -1,5 +1,6 @@
 @page "/businesses/create"
 @page "/businesses/edit/{Id:guid}"
+@using System.ComponentModel.DataAnnotations
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
@@ -14,13 +15,19 @@
 @inject NavigationManager NavigationManager
 @attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
 
+<PageTitle>@(IsEdit ? "Edit Business" : "Create Business") — Eco Meal</PageTitle>
+
 @if (_forbidden)
 {
-    <div class="p-4">
-        <h1 class="h4 fw-bold mb-2">Access denied</h1>
-        <p class="text-muted">@(IsEdit ? "You can only edit your own business." : "Only an admin can create new businesses.")</p>
-        <a href="/businesses" class="btn btn-outline-primary">Back to businesses</a>
-    </div>
+    <ForbiddenPanel Message="@(IsEdit ? "You can only edit your own business." : "Only an admin can create new businesses.")"
+                    BackHref="/businesses" BackLabel="Back to businesses"/>
+    return;
+}
+
+@if (_notFound)
+{
+    <NotFoundPanel Title="Business not found" Message="This business no longer exists — it may have already been deleted."
+                   BackHref="/businesses" BackLabel="Back to businesses"/>
     return;
 }
 
@@ -39,18 +46,22 @@
         <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
                 <EditForm Model="@_model" OnValidSubmit="Submit" FormName="businessForm">
+                    <DataAnnotationsValidator/>
                     <div class="mb-3">
                         <label for="name" class="form-label fw-semibold">Name</label>
                         <InputText id="name" class="form-control" placeholder="e.g. Green Bites" @bind-Value="_model.Name"/>
+                        <ValidationMessage For="@(() => _model.Name)" class="validation-message small d-block mt-1"/>
                     </div>
                     <div class="mb-3">
                         <label for="description" class="form-label fw-semibold">Description</label>
                         <InputText id="description" class="form-control" placeholder="Short description of the business" @bind-Value="_model.Description"/>
+                        <ValidationMessage For="@(() => _model.Description)" class="validation-message small d-block mt-1"/>
                     </div>
                     <div class="row g-3 mb-3">
                         <div class="col-sm-7">
                             <label for="address" class="form-label fw-semibold">Address</label>
                             <InputText id="address" class="form-control" placeholder="Street, City" @bind-Value="_model.Address"/>
+                            <ValidationMessage For="@(() => _model.Address)" class="validation-message small d-block mt-1"/>
                         </div>
                         <div class="col-sm-5">
                             <label for="businessType" class="form-label fw-semibold">Type</label>
@@ -85,6 +96,7 @@
     private BusinessFormModel _model = new();
     private List<BusinessType> _businessTypes = [];
     private bool _forbidden;
+    private bool _notFound;
 
     protected override async Task OnInitializedAsync()
     {
@@ -107,7 +119,10 @@
         {
             var existing = (await BusinessController.GetByIdAsync(Id!.Value)).Value;
             if (existing is null)
+            {
+                _notFound = true;
                 return;
+            }
 
             if (!isAdmin && existing.ManagerId != currentUserId)
             {
@@ -120,6 +135,12 @@
             _model.Address = existing.Address;
             _model.ImageUrl = existing.ImageUrl;
             _model.BusinessTypeId = existing.BusinessTypeId;
+        }
+        else if (_businessTypes.Count > 0)
+        {
+            // InputSelect only syncs its bound value once the user changes the selection, so without
+            // this default BusinessTypeId stays Guid.Empty and the insert fails its FK constraint.
+            _model.BusinessTypeId = _businessTypes[0].Id;
         }
     }
 
@@ -156,9 +177,15 @@
 
     private class BusinessFormModel
     {
+        [Required(ErrorMessage = "Enter a business name.")]
         public string? Name { get; set; }
+
+        [Required(ErrorMessage = "Enter a short description.")]
         public string? Description { get; set; }
+
+        [Required(ErrorMessage = "Enter an address.")]
         public string? Address { get; set; }
+
         public string? ImageUrl { get; set; }
         public Guid BusinessTypeId { get; set; }
     }

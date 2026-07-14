@@ -10,7 +10,9 @@
 @inject PackageController PackageController
 @inject IBusinessService BusinessService
 @inject AuthenticationStateProvider AuthStateProvider
-@attribute [Authorize]
+@attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
+
+<PageTitle>Packages — Eco Meal</PageTitle>
 
 <div class="d-flex justify-content-between align-items-start mb-4">
     <div>
@@ -96,6 +98,7 @@
                 </tr>
                 </thead>
                 <tbody>
+                @* Managers can browse every business's packages here but only edit/delete their own. *@
                 @foreach (var package in Filtered)
                 {
                     var canManage = _isAdmin || (_isBusinessManager && package.BusinessId == _myBusinessId);
@@ -124,7 +127,7 @@
                                         <a href="/packages/edit/@package.Id" class="btn btn-sm btn-outline-primary">
                                             <i class="bi bi-pencil"></i>
                                         </a>
-                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(package)">
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RequestDelete(package)">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </div>
@@ -139,6 +142,14 @@
     }
 </div>
 
+<ConfirmDialog IsOpen="@(_pendingDelete is not null)"
+               Title="Delete package?"
+               Message="@(_pendingDelete is null ? "" : $"\"{_pendingDelete.Name}\" will be permanently removed and can no longer be ordered. This can't be undone.")"
+               ConfirmLabel="Delete package"
+               Busy="@_deleting"
+               OnConfirm="ConfirmDeleteAsync"
+               OnCancel="() => _pendingDelete = null"/>
+
 @code {
     private List<Package>? _packages;
     private string _search = "";
@@ -147,6 +158,8 @@
     private bool _isAdmin;
     private bool _isBusinessManager;
     private Guid? _myBusinessId;
+    private Package? _pendingDelete;
+    private bool _deleting;
 
     private IEnumerable<Business> DistinctBusinesses => _packages is null ? [] :
         _packages.Select(p => p.Business).DistinctBy(b => b.Id).OrderBy(b => b.Name);
@@ -181,12 +194,23 @@
         _typeFilter     = "";
     }
 
-    private async Task DeleteAsync(Package package)
+    private void RequestDelete(Package package)
     {
         if (!_isAdmin && package.BusinessId != _myBusinessId)
             return;
 
-        await PackageController.DeleteAsync(package);
+        _pendingDelete = package;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_pendingDelete is null)
+            return;
+
+        _deleting = true;
+        await PackageController.DeleteAsync(_pendingDelete);
         _packages = (await PackageController.GetAllAsync()).Value;
+        _deleting = false;
+        _pendingDelete = null;
     }
 }

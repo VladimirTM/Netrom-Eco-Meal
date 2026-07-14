@@ -1,0 +1,256 @@
+@page "/orders/manage"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Mvc
+@using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@rendermode InteractiveServer
+@inject OrderController OrderController
+@inject AuthenticationStateProvider AuthStateProvider
+@attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
+
+<PageTitle>Manage Orders — Eco Meal</PageTitle>
+
+@if (_forbidden)
+{
+    <ForbiddenPanel Message="@_forbiddenReason" BackHref="/dashboard" BackLabel="Back to dashboard"/>
+    return;
+}
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="h3 fw-bold mb-1">Manage Orders</h1>
+        <p class="text-muted small mb-0">@(_isAdmin ? "Review orders across every business" : "Confirm, complete, or cancel orders placed at your business")</p>
+    </div>
+</div>
+
+@if (_actionError is not null)
+{
+    <div class="alert alert-danger" role="alert">@_actionError</div>
+}
+
+@if (_orders is not null)
+{
+    <div class="d-flex gap-3 mb-3 flex-wrap">
+        <div class="input-group" style="max-width: 320px;">
+            <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+            <input type="text" class="form-control border-start-0 ps-0" placeholder="Search order # or customer…"
+                   @bind="_search" @bind:event="oninput" />
+        </div>
+        @if (_isAdmin)
+        {
+            <select class="form-select" style="max-width: 220px;" @bind="_businessFilter">
+                <option value="">All businesses</option>
+                @foreach (var b in DistinctBusinesses)
+                {
+                    <option value="@b.Id">@b.Name</option>
+                }
+            </select>
+        }
+        <select class="form-select" style="max-width: 180px;" @bind="_statusFilter">
+            <option value="">All statuses</option>
+            @foreach (var s in DistinctStatuses)
+            {
+                <option value="@s">@s</option>
+            }
+        </select>
+        @if (!string.IsNullOrEmpty(_search) || _businessFilter != "" || _statusFilter != "")
+        {
+            <button class="btn btn-outline-secondary" @onclick="ClearFilters">
+                <i class="bi bi-x-lg me-1"></i> Clear
+            </button>
+        }
+        <span class="align-self-center text-muted small ms-auto">@Filtered.Count result@(Filtered.Count == 1 ? "" : "s")</span>
+    </div>
+}
+
+<div class="card border-0 shadow-sm">
+    @if (_orders is null)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (Filtered.Count == 0)
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-receipt fs-1 text-muted d-block mb-3"></i>
+            <p class="text-muted mb-0">@(_orders.Count == 0 ? "No orders have been placed yet." : "No orders match your filters.")</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead>
+                <tr class="border-bottom">
+                    <th class="px-4 py-3 text-uppercase text-muted small fw-semibold">Order</th>
+                    @if (_isAdmin)
+                    {
+                        <th class="py-3 text-uppercase text-muted small fw-semibold">Business</th>
+                    }
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Customer</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Items</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Total</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Pickup</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Status</th>
+                    @* Admins get cross-business visibility but act through the owning manager, not from here. *@
+                    @if (!_isAdmin)
+                    {
+                        <th class="py-3 text-uppercase text-muted small fw-semibold">Actions</th>
+                    }
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var order in Filtered)
+                {
+                    <tr>
+                        <td class="px-4 fw-semibold">#@order.OrderNumber.ToString("000")</td>
+                        @if (_isAdmin)
+                        {
+                            <td>@order.Business.Name</td>
+                        }
+                        <td>@order.User.Name</td>
+                        <td>
+                            @foreach (var line in order.OrderPackages)
+                            {
+                                <div class="small text-nowrap">@(line.Quantity)&times; @line.Package.Name</div>
+                            }
+                        </td>
+                        <td class="fw-semibold">@order.OrderPackages.Sum(op => op.Quantity * op.Package.Price).ToString("C")</td>
+                        <td class="text-muted small">@PickupWindow(order)</td>
+                        <td>
+                            <span class="order-status-badge order-status-@order.Status.Name.ToLowerInvariant()">@order.Status.Name</span>
+                        </td>
+                        @if (!_isAdmin)
+                        {
+                            <td>
+                                @if (_busyOrderId == order.Id)
+                                {
+                                    <div class="spinner-border spinner-border-sm text-muted" role="status">
+                                        <span class="visually-hidden">Updating...</span>
+                                    </div>
+                                }
+                                @* Allowed transitions mirror OrderService.UpdateStatusAsync — keep them in sync. *@
+                                else if (order.Status.Name == OrderStatuses.Pending)
+                                {
+                                    <div class="order-action-group">
+                                        <button type="button" class="order-action-btn order-action-confirm" @onclick="() => ChangeStatusAsync(order, OrderStatuses.Confirmed)">
+                                            <i class="bi bi-check-lg"></i> Confirm
+                                        </button>
+                                        <button type="button" class="order-action-btn order-action-cancel" @onclick="() => ChangeStatusAsync(order, OrderStatuses.Cancelled)">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                }
+                                else if (order.Status.Name == OrderStatuses.Confirmed)
+                                {
+                                    <div class="order-action-group">
+                                        <button type="button" class="order-action-btn order-action-complete" @onclick="() => ChangeStatusAsync(order, OrderStatuses.Completed)">
+                                            <i class="bi bi-check2-all"></i> Complete
+                                        </button>
+                                        <button type="button" class="order-action-btn order-action-cancel" @onclick="() => ChangeStatusAsync(order, OrderStatuses.Cancelled)">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="order-action-empty">—</span>
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly string[] StatusOrder = [OrderStatuses.Pending, OrderStatuses.Confirmed, OrderStatuses.Completed, OrderStatuses.Cancelled];
+
+    private List<Order>? _orders;
+    private string _search = "";
+    private string _businessFilter = "";
+    private string _statusFilter = "";
+    private bool _isAdmin;
+    private bool _forbidden;
+    private string _forbiddenReason = "";
+    private string? _actionError;
+    private Guid? _busyOrderId;
+
+    private IEnumerable<Business> DistinctBusinesses => _orders is null ? [] :
+        _orders.Select(o => o.Business).DistinctBy(b => b.Id).OrderBy(b => b.Name);
+
+    private IEnumerable<string> DistinctStatuses => _orders is null ? [] :
+        StatusOrder.Where(s => _orders.Any(o => o.Status.Name == s));
+
+    private List<Order> Filtered => _orders is null ? [] : _orders
+        .Where(o =>
+            TextHelpers.MatchesSearch(_search, o.OrderNumber.ToString("000"), o.User.Name) &&
+            (_businessFilter == "" || o.BusinessId.ToString() == _businessFilter) &&
+            (_statusFilter == "" || o.Status.Name == _statusFilter))
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _isAdmin = authState.User.IsInRole(AppRoles.Admin);
+
+        var result = await OrderController.GetOrdersForManagementAsync();
+        if (result.Result is UnauthorizedResult)
+        {
+            _forbidden = true;
+            _forbiddenReason = "You don't manage a business yet, so there are no orders to show.";
+            return;
+        }
+
+        _orders = result.Value ?? [];
+    }
+
+    private void ClearFilters()
+    {
+        _search = "";
+        _businessFilter = "";
+        _statusFilter = "";
+    }
+
+    private async Task ChangeStatusAsync(Order order, string statusName)
+    {
+        _actionError = null;
+        _busyOrderId = order.Id;
+
+        var result = await OrderController.UpdateOrderStatusAsync(order.Id, statusName);
+        if (result.Result is ConflictObjectResult conflict)
+        {
+            _actionError = conflict.Value as string ?? "That status change couldn't be completed.";
+        }
+        else if (result.Value is not null && _orders is not null)
+        {
+            var index = _orders.FindIndex(o => o.Id == result.Value.Id);
+            if (index >= 0)
+                _orders[index] = result.Value;
+        }
+
+        _busyOrderId = null;
+    }
+
+    private static string PickupWindow(Order order)
+    {
+        if (order.OrderPackages.Count == 0)
+            return "—";
+
+        // An order can span packages with different windows — show the widest span that covers them all.
+        var start = order.OrderPackages.Min(op => op.Package.PickupStart);
+        var end = order.OrderPackages.Max(op => op.Package.PickupEnd);
+
+        return start.Date == end.Date
+            ? $"{start:MMM d} · {start:HH:mm}–{end:HH:mm}"
+            : $"{start:MMM d, HH:mm} – {end:MMM d, HH:mm}";
+    }
+}

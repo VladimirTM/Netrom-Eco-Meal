@@ -1,0 +1,42 @@
+@inject IJSRuntime JS
+
+<button type="button" @ref="_anchorRef" class="@TriggerClass" disabled="@Disabled" title="@Title" @onclick="() => OnToggle.InvokeAsync()">
+    @Trigger
+</button>
+
+@if (IsOpen)
+{
+    <div class="role-dropdown-backdrop" @onclick="() => OnClose.InvokeAsync()"></div>
+    <div class="role-dropdown" @ref="_panelRef" style="visibility:hidden;">
+        @Content
+    </div>
+}
+
+@code {
+    [Parameter] public RenderFragment? Trigger { get; set; }
+    [Parameter] public RenderFragment? Content { get; set; }
+    [Parameter] public string TriggerClass { get; set; } = "role-badge";
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnToggle { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private ElementReference _anchorRef;
+    private ElementReference _panelRef;
+    private bool _positionedForCurrentOpen;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Position once per open, not on every re-render, so it doesn't jump while scrolling.
+        if (IsOpen && !_positionedForCurrentOpen)
+        {
+            _positionedForCurrentOpen = true;
+            await JS.InvokeVoidAsync("EcoMeal.positionDropdown", _anchorRef, _panelRef);
+        }
+        else if (!IsOpen)
+        {
+            _positionedForCurrentOpen = false;
+        }
+    }
+}

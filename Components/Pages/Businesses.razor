@@ -12,7 +12,9 @@
 @inject UserController UserController
 @inject IBusinessTypeService BusinessTypeService
 @inject AuthenticationStateProvider AuthStateProvider
-@attribute [Authorize]
+@attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
+
+<PageTitle>Businesses — Eco Meal</PageTitle>
 
 <div class="d-flex justify-content-between align-items-start mb-4">
     <div>
@@ -113,16 +115,15 @@
                         @if (_isAdmin)
                         {
                             <td class="position-relative">
-                                <button type="button" class="role-badge @(business.Manager is null ? "role-badge-unassigned" : "role-badge-businessmanager")"
-                                        @onclick="() => ToggleManagerDropdown(business.Id)">
-                                    @(business.Manager?.Name ?? "Unassigned")
-                                    <i class="bi bi-chevron-down" style="font-size:0.65rem;"></i>
-                                </button>
-
-                                @if (_openManagerDropdownBusinessId == business.Id)
-                                {
-                                    <div class="role-dropdown-backdrop" @onclick="CloseManagerDropdown"></div>
-                                    <div class="role-dropdown">
+                                <AnchoredDropdown TriggerClass="@($"role-badge {(business.Manager is null ? "role-badge-unassigned" : "role-badge-businessmanager")}")"
+                                                  IsOpen="@(_openManagerDropdownBusinessId == business.Id)"
+                                                  OnToggle="@(() => ToggleManagerDropdown(business.Id))"
+                                                  OnClose="CloseManagerDropdown">
+                                    <Trigger>
+                                        @(business.Manager?.Name ?? "Unassigned")
+                                        <i class="bi bi-chevron-down" style="font-size:0.65rem;"></i>
+                                    </Trigger>
+                                    <Content>
                                         <button type="button" class="role-option" @onclick="() => AssignManagerAsync(business, null)">
                                             <span class="role-option-dot" style="background-color:#6b7280"></span>
                                             Unassigned
@@ -131,6 +132,7 @@
                                                 <i class="bi bi-check-lg ms-auto text-muted"></i>
                                             }
                                         </button>
+                                        @* A manager can only run one business — flag if picking them would displace another. *@
                                         @foreach (var manager in _businessManagers)
                                         {
                                             var elsewhere = businesses!.FirstOrDefault(b => b.ManagerId == manager.Id && b.Id != business.Id);
@@ -149,8 +151,8 @@
                                                 }
                                             </button>
                                         }
-                                    </div>
-                                }
+                                    </Content>
+                                </AnchoredDropdown>
                             </td>
                         }
                         @if (_isAdmin || _isBusinessManager)
@@ -165,7 +167,7 @@
                                     }
                                     @if (_isAdmin)
                                     {
-                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(business)">
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RequestDelete(business)">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     }
@@ -180,6 +182,14 @@
     }
 </div>
 
+<ConfirmDialog IsOpen="@(_pendingDelete is not null)"
+               Title="Delete business?"
+               Message="@(_pendingDelete is null ? "" : $"\"{_pendingDelete.Name}\", every package it lists, and its full order history will be permanently removed. This can't be undone.")"
+               ConfirmLabel="Delete business"
+               Busy="@_deleting"
+               OnConfirm="ConfirmDeleteAsync"
+               OnCancel="() => _pendingDelete = null"/>
+
 @code {
     private List<Business>? businesses;
     private List<BusinessType>? businessTypes;
@@ -192,6 +202,8 @@
     private Guid? _myBusinessId;
     private Guid? _openManagerDropdownBusinessId;
     private string? _assignError;
+    private Business? _pendingDelete;
+    private bool _deleting;
 
     private List<Business> Filtered => businesses is null ? [] : businesses
         .Where(b =>
@@ -222,13 +234,24 @@
         _typeFilter = "";
     }
 
-    private async Task DeleteAsync(Business business)
+    private void RequestDelete(Business business)
     {
         if (!_isAdmin)
             return;
 
-        await BusinessController.DeleteAsync(business);
+        _pendingDelete = business;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_pendingDelete is null)
+            return;
+
+        _deleting = true;
+        await BusinessController.DeleteAsync(_pendingDelete);
         businesses = (await BusinessController.GetAllAsync()).Value;
+        _deleting = false;
+        _pendingDelete = null;
     }
 
     private void ToggleManagerDropdown(Guid businessId)
@@ -249,6 +272,7 @@
         if (!_isAdmin || managerId == business.ManagerId)
             return;
 
+        // A concurrent assignment can beat us to it — refetch and surface the conflict.
         var result = await BusinessController.AssignManagerAsync(business.Id, managerId);
         if (result is ConflictResult)
             _assignError = "That manager was just assigned to another business. Please try again.";

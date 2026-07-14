@@ -81,7 +81,7 @@ public class BusinessService(IBusinessRepository businessRepository, CurrentUser
         }
         catch (DbUpdateException)
         {
-            // Another concurrent assignment already gave this manager a different business.
+            // A concurrent assignment already gave this manager a different business.
             return false;
         }
 
@@ -92,6 +92,7 @@ public class BusinessService(IBusinessRepository businessRepository, CurrentUser
     {
         businessToUpdate.Name = business.Name;
         businessToUpdate.Description = business.Description;
+        businessToUpdate.Address = business.Address;
         businessToUpdate.ImageUrl = business.ImageUrl;
         businessToUpdate.BusinessTypeId = business.BusinessTypeId;
     }

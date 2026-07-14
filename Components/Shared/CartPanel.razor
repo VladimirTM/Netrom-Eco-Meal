@@ -1,0 +1,146 @@
+@using Microsoft.AspNetCore.Mvc
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Services
+@using Netrom_Eco_Meal.Services.Interfaces
+@implements IDisposable
+@inject CartService CartService
+@inject OrderController OrderController
+
+@if (IsOpen)
+{
+    <div class="cart-backdrop" @onclick="Close"></div>
+    <aside class="cart-panel">
+        <div class="cart-panel-header">
+            <div>
+                <h2 class="cart-panel-title">Your basket</h2>
+                @if (CartService.BusinessName is not null)
+                {
+                    <p class="cart-panel-subtitle"><i class="bi bi-shop"></i> @CartService.BusinessName</p>
+                }
+            </div>
+            <button type="button" class="cart-panel-close" @onclick="Close" aria-label="Close basket">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+
+        @if (_placedOrderNumber is not null)
+        {
+            <div class="cart-panel-body cart-confirmation">
+                <i class="bi bi-check-circle-fill"></i>
+                <h3>Order #@_placedOrderNumber placed</h3>
+                <p>@_placedBusinessName has your order — head over at pickup time to collect it.</p>
+                <button type="button" class="btn btn-primary w-100" @onclick="CloseAndReset">Done</button>
+            </div>
+        }
+        else if (CartService.Items.Count == 0)
+        {
+            <div class="cart-panel-body cart-empty">
+                <i class="bi bi-basket2"></i>
+                <p class="mb-1">Your basket is empty.</p>
+                <span class="text-muted small">Add a package from a kitchen to get started.</span>
+            </div>
+        }
+        else
+        {
+            <div class="cart-panel-body">
+                @if (_error is not null)
+                {
+                    <div class="alert alert-danger py-2 small mb-3">@_error</div>
+                }
+                @foreach (var item in CartService.Items)
+                {
+                    <div class="cart-line">
+                        <div class="cart-line-info">
+                            <div class="cart-line-name">@item.Package.Name</div>
+                            <div class="cart-line-price">@item.Package.Price.ToString("C") each</div>
+                        </div>
+                        <div class="cart-line-controls">
+                            <button type="button" class="cart-step-btn" @onclick="() => CartService.SetQuantityAsync(item.Package.Id, item.Quantity - 1)">
+                                <i class="bi bi-dash"></i>
+                            </button>
+                            <span class="cart-line-qty">@item.Quantity</span>
+                            <button type="button" class="cart-step-btn" disabled="@(item.Quantity >= item.Package.Quantity)"
+                                    @onclick="() => CartService.SetQuantityAsync(item.Package.Id, item.Quantity + 1)">
+                                <i class="bi bi-plus"></i>
+                            </button>
+                        </div>
+                        <button type="button" class="cart-line-remove" title="Remove" @onclick="() => CartService.RemoveAsync(item.Package.Id)">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                }
+            </div>
+
+            <div class="cart-panel-footer">
+                <div class="cart-panel-total">
+                    <span>Total</span>
+                    <span class="cart-panel-total-value">@CartService.TotalPrice.ToString("C")</span>
+                </div>
+                <button type="button" class="btn btn-primary w-100 py-2" disabled="@_placing" @onclick="PlaceOrderAsync">
+                    @if (_placing)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    }
+                    Place order
+                </button>
+            </div>
+        }
+    </aside>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private bool _placing;
+    private string? _error;
+    private int? _placedOrderNumber;
+    private string? _placedBusinessName;
+
+    protected override void OnInitialized()
+    {
+        CartService.OnChange += HandleCartChanged;
+    }
+
+    private void HandleCartChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task Close() => await IsOpenChanged.InvokeAsync(false);
+
+    private async Task CloseAndReset()
+    {
+        _placedOrderNumber = null;
+        await Close();
+    }
+
+    private async Task PlaceOrderAsync()
+    {
+        if (CartService.BusinessId is null || _placing)
+            return;
+
+        _placing = true;
+        _error = null;
+
+        var businessId = CartService.BusinessId.Value;
+        var businessName = CartService.BusinessName;
+        var lines = CartService.Items.Select(i => new OrderLineRequest(i.Package.Id, i.Quantity)).ToList();
+        var result = await OrderController.PlaceOrderAsync(businessId, lines);
+
+        _placing = false;
+
+        // OrderController returns Conflict() for auth/stock failures instead of throwing.
+        if (result.Result is ConflictObjectResult conflict)
+        {
+            _error = conflict.Value?.ToString() ?? "We couldn't place your order. Please try again.";
+            return;
+        }
+
+        _placedOrderNumber = result.Value?.OrderNumber;
+        _placedBusinessName = businessName;
+        await CartService.ClearAsync();
+    }
+
+    public void Dispose()
+    {
+        CartService.OnChange -= HandleCartChanged;
+    }
+}

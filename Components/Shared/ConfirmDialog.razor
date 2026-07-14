@@ -1,0 +1,34 @@
+@* Generic confirm/cancel modal reused by the admin pages' delete flows. *@
+@if (IsOpen)
+{
+    <div class="confirm-backdrop" @onclick="Cancel"></div>
+    <div class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-dialog-title">
+        <h2 class="confirm-dialog-title" id="confirm-dialog-title">@Title</h2>
+        <p class="confirm-dialog-message">@Message</p>
+        <div class="confirm-dialog-actions">
+            <button type="button" class="btn btn-outline-secondary" disabled="@Busy" @onclick="Cancel">@CancelLabel</button>
+            <button type="button" class="btn @ConfirmClass" disabled="@Busy" @onclick="Confirm">
+                @if (Busy)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                }
+                @ConfirmLabel
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public string Title { get; set; } = "Are you sure?";
+    [Parameter] public string Message { get; set; } = "";
+    [Parameter] public string ConfirmLabel { get; set; } = "Delete";
+    [Parameter] public string CancelLabel { get; set; } = "Cancel";
+    [Parameter] public string ConfirmClass { get; set; } = "btn-danger";
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private Task Confirm() => OnConfirm.InvokeAsync();
+    private Task Cancel() => OnCancel.InvokeAsync();
+}

@@ -13,6 +13,8 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @attribute [Authorize(Roles = AppRoles.Admin)]
 
+<PageTitle>User Roles — Eco Meal</PageTitle>
+
 <div class="d-flex justify-content-between align-items-start mb-4">
     <div>
         <h1 class="h3 fw-bold mb-1">User Roles</h1>
@@ -68,6 +70,7 @@
     }
     else
     {
+        <div class="table-responsive">
         <table class="table table-hover mb-0 align-middle">
             <thead>
             <tr class="border-bottom">
@@ -97,21 +100,21 @@
                         </div>
                     </td>
                     <td class="position-relative">
-                        <button type="button" class="role-badge @RoleBadgeClass(user.Role)" disabled="@isSelf"
-                                title="@(isSelf ? "You can't change your own role" : "Change role")"
-                                @onclick="() => ToggleDropdown(user.Id)">
-                            <span class="role-option-dot" style="background-color:@RoleDotColor(user.Role)"></span>
-                            @DisplayRole(user.Role)
-                            @if (!isSelf)
-                            {
-                                <i class="bi bi-chevron-down" style="font-size:0.65rem;"></i>
-                            }
-                        </button>
-
-                        @if (_openDropdownUserId == user.Id)
-                        {
-                            <div class="role-dropdown-backdrop" @onclick="CloseDropdown"></div>
-                            <div class="role-dropdown">
+                        <AnchoredDropdown TriggerClass="@($"role-badge {RoleBadgeClass(user.Role)}")"
+                                          Disabled="@isSelf"
+                                          Title="@(isSelf ? "You can't change your own role" : "Change role")"
+                                          IsOpen="@(_openDropdownUserId == user.Id)"
+                                          OnToggle="@(() => ToggleDropdown(user.Id))"
+                                          OnClose="CloseDropdown">
+                            <Trigger>
+                                <span class="role-option-dot" style="background-color:@RoleDotColor(user.Role)"></span>
+                                @DisplayRole(user.Role)
+                                @if (!isSelf)
+                                {
+                                    <i class="bi bi-chevron-down" style="font-size:0.65rem;"></i>
+                                }
+                            </Trigger>
+                            <Content>
                                 @foreach (var role in AppRoles.AllRoles)
                                 {
                                     <button type="button" class="role-option" @onclick="() => SetRoleAsync(user, role)">
@@ -123,8 +126,8 @@
                                         }
                                     </button>
                                 }
-                            </div>
-                        }
+                            </Content>
+                        </AnchoredDropdown>
                     </td>
                     <td class="position-relative">
                         @if (user.Role != AppRoles.BusinessManager)
@@ -134,16 +137,15 @@
                         else
                         {
                             var assigned = AssignedBusiness(user.Id);
-                            <button type="button" class="role-badge @(assigned is null ? "role-badge-unassigned" : "role-badge-businessmanager")"
-                                    @onclick="() => ToggleBusinessDropdown(user.Id)">
-                                @(assigned?.Name ?? "Unassigned")
-                                <i class="bi bi-chevron-down" style="font-size:0.65rem;"></i>
-                            </button>
-
-                            @if (_openBusinessDropdownUserId == user.Id)
-                            {
-                                <div class="role-dropdown-backdrop" @onclick="CloseBusinessDropdown"></div>
-                                <div class="role-dropdown">
+                            <AnchoredDropdown TriggerClass="@($"role-badge {(assigned is null ? "role-badge-unassigned" : "role-badge-businessmanager")}")"
+                                              IsOpen="@(_openBusinessDropdownUserId == user.Id)"
+                                              OnToggle="@(() => ToggleBusinessDropdown(user.Id))"
+                                              OnClose="CloseBusinessDropdown">
+                                <Trigger>
+                                    @(assigned?.Name ?? "Unassigned")
+                                    <i class="bi bi-chevron-down" style="font-size:0.65rem;"></i>
+                                </Trigger>
+                                <Content>
                                     <button type="button" class="role-option" @onclick="() => AssignBusinessAsync(user, null)">
                                         <span class="role-option-dot" style="background-color:#6b7280"></span>
                                         Unassigned
@@ -158,7 +160,7 @@
                                             ? _users?.FirstOrDefault(u => u.Id == business.ManagerId)
                                             : null;
                                         <button type="button" class="role-option" @onclick="() => AssignBusinessAsync(user, business.Id)">
-                                            <span class="role-option-dot" style="background-color:#16a34a"></span>
+                                            <span class="role-option-dot" style="background-color:#2563eb"></span>
                                             <span>
                                                 @business.Name
                                                 @if (managedByOther is not null)
@@ -172,14 +174,15 @@
                                             }
                                         </button>
                                     }
-                                </div>
-                            }
+                                </Content>
+                            </AnchoredDropdown>
                         }
                     </td>
                 </tr>
             }
             </tbody>
         </table>
+        </div>
     }
 </div>
 
@@ -217,6 +220,7 @@
         _roleFilter = "";
     }
 
+    // Role and business dropdowns are mutually exclusive — opening one closes the other.
     private void ToggleDropdown(string userId)
     {
         _openBusinessDropdownUserId = null;
@@ -258,6 +262,7 @@
         if (index >= 0)
             _users[index] = user with { Role = role };
 
+        // Moving away from BusinessManager may have auto-released a business server-side.
         _businesses = (await BusinessController.GetAllAsync()).Value ?? [];
     }
 
@@ -281,6 +286,7 @@
             result = await BusinessController.AssignManagerAsync(businessId.Value, user.Id);
         }
 
+        // A concurrent assignment can beat us to it — refetch and surface the conflict.
         if (result is ConflictResult)
             _roleError = "That manager was just assigned to another business. Please try again.";
 
@@ -302,7 +308,7 @@
 
     private static string RoleDotColor(string role) => role switch
     {
-        AppRoles.Admin => "#8b5cf6",
+        AppRoles.Admin => "#7c3aed",
         AppRoles.BusinessManager => "#2563eb",
         _ => "#16a34a"
     };
