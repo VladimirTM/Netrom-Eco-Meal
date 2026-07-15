@@ -1,0 +1,25 @@
+@if (TotalPages > 1)
+{
+    <nav class="d-flex justify-content-between align-items-center px-4 py-3 border-top">
+        <span class="text-muted small">Page @CurrentPage of @TotalPages</span>
+        <div class="btn-group">
+            <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(!HasPreviousPage)"
+                    @onclick="() => OnPageChange.InvokeAsync(CurrentPage - 1)">
+                <i class="bi bi-chevron-left"></i> Prev
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(!HasNextPage)"
+                    @onclick="() => OnPageChange.InvokeAsync(CurrentPage + 1)">
+                Next <i class="bi bi-chevron-right"></i>
+            </button>
+        </div>
+    </nav>
+}
+
+@code {
+    [Parameter] public int CurrentPage { get; set; }
+    [Parameter] public int TotalPages { get; set; }
+    [Parameter] public EventCallback<int> OnPageChange { get; set; }
+
+    private bool HasPreviousPage => CurrentPage > 1;
+    private bool HasNextPage => CurrentPage < TotalPages;
+}

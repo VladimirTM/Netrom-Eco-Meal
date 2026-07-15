@@ -24,6 +24,15 @@ window.EcoMeal = {
         dropdownEl.style.visibility = "visible";
     },
 
+    // Lets the server convert stored UTC pickup windows to the viewer's own local time.
+    timeZone: function () {
+        try {
+            return Intl.DateTimeFormat().resolvedOptions().timeZone;
+        } catch {
+            return null;
+        }
+    },
+
     // Survives reloads — CartService is per-circuit and would otherwise reset.
     cart: {
         save: function (key, json) {

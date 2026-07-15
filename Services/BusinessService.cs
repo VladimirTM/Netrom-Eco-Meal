@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Netrom_Eco_Meal.Entities;
+using Netrom_Eco_Meal.Models;
 using Netrom_Eco_Meal.Repositories.Interfaces;
 using Netrom_Eco_Meal.Services.Interfaces;
 
@@ -10,6 +11,11 @@ public class BusinessService(IBusinessRepository businessRepository, CurrentUser
     public async Task<List<Business>> GetAllAsync()
     {
         return await businessRepository.GetAllAsync();
+    }
+
+    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId)
+    {
+        return await businessRepository.GetPagedAsync(pageIndex, pageSize, search, businessTypeId);
     }
 
     public async Task<Business?> GetByIdAsync(Guid id)

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Netrom_Eco_Meal.Database;
 using Netrom_Eco_Meal.Entities;
+using Netrom_Eco_Meal.Models;
 using Netrom_Eco_Meal.Repositories.Interfaces;
 
 namespace Netrom_Eco_Meal.Repositories;
@@ -11,6 +12,24 @@ public class PackageRepository(EcoMealDbContext context) : IPackageRepository
     public async Task<List<Package>> GetAllAsync()
     {
         return await context.Packages.Include(p => p.PackageType).Include(p => p.Business).ToListAsync();
+    }
+
+    public async Task<PaginatedList<Package>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessId, Guid? packageTypeId)
+    {
+        var query = context.Packages.Include(p => p.PackageType).Include(p => p.Business).AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(search))
+            query = query.Where(p =>
+                EF.Functions.ILike(p.Name, $"%{search}%") ||
+                EF.Functions.ILike(p.Description, $"%{search}%"));
+
+        if (businessId.HasValue)
+            query = query.Where(p => p.BusinessId == businessId);
+
+        if (packageTypeId.HasValue)
+            query = query.Where(p => p.PackageTypeId == packageTypeId);
+
+        return await PaginatedList<Package>.CreateAsync(query.OrderBy(p => p.Name), pageIndex, pageSize);
     }
 
     public async Task<Package?> GetByIdAsync(Guid id)

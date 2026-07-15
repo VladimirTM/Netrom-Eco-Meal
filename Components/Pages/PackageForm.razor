@@ -7,13 +7,16 @@
 @using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services
 @using Netrom_Eco_Meal.Services.Interfaces
 @rendermode InteractiveServer
+@implements IDisposable
 @inject PackageController PackageController
 @inject IPackageTypeService PackageTypeService
 @inject IBusinessService BusinessService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
+@inject ClientTimeZoneService ClientTimeZoneService
 @attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
 
 <PageTitle>@(IsEdit ? "Edit Package" : "Create Package") — Eco Meal</PageTitle>
@@ -131,6 +134,10 @@
     private string _forbiddenReason = "";
     private bool _notFound;
 
+    // Raw UTC, so the pickup fields can be re-derived if the timezone resolves late.
+    private DateTime? _existingPickupStartUtc;
+    private DateTime? _existingPickupEndUtc;
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -167,15 +174,19 @@
                 return;
             }
 
+            _existingPickupStartUtc = existing.PickupStart;
+            _existingPickupEndUtc = existing.PickupEnd;
+
             _model.Name = existing.Name;
             _model.Description = existing.Description;
             _model.Price = existing.Price;
             _model.Quantity = existing.Quantity;
-            _model.PickupStart = existing.PickupStart;
-            _model.PickupEnd = existing.PickupEnd;
+            _model.PickupStart = ClientTimeZoneService.ToLocal(existing.PickupStart);
+            _model.PickupEnd = ClientTimeZoneService.ToLocal(existing.PickupEnd);
             _model.ImageUrl = existing.ImageUrl;
             _model.BusinessId = existing.BusinessId;
             _model.PackageTypeId = existing.PackageTypeId;
+            _model.NowLocal = ClientTimeZoneService.ToLocal(DateTime.UtcNow);
         }
         else
         {
@@ -185,11 +196,49 @@
                 _model.PackageTypeId = _packageTypes[0].Id;
             if (_businesses.Count > 0)
                 _model.BusinessId = _businesses[0].Id;
+
+            var localNow = ClientTimeZoneService.ToLocal(DateTime.UtcNow);
+            _model.PickupStart = localNow;
+            _model.PickupEnd = localNow.AddHours(2);
+            _model.NowLocal = localNow;
         }
+
+        // Re-derives the fields above if the timezone resolves after they were first set.
+        ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
+    }
+
+    private void HandleTimeZoneChanged()
+    {
+        if (IsEdit)
+        {
+            if (_existingPickupStartUtc.HasValue)
+                _model.PickupStart = ClientTimeZoneService.ToLocal(_existingPickupStartUtc.Value);
+            if (_existingPickupEndUtc.HasValue)
+                _model.PickupEnd = ClientTimeZoneService.ToLocal(_existingPickupEndUtc.Value);
+            _model.NowLocal = ClientTimeZoneService.ToLocal(DateTime.UtcNow);
+        }
+        else
+        {
+            var localNow = ClientTimeZoneService.ToLocal(DateTime.UtcNow);
+            _model.PickupStart = localNow;
+            _model.PickupEnd = localNow.AddHours(2);
+            _model.NowLocal = localNow;
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        ClientTimeZoneService.OnChange -= HandleTimeZoneChanged;
     }
 
     private async Task Submit()
     {
+        // The form works entirely in the viewer's local time — convert back to UTC for storage.
+        var pickupStart = ClientTimeZoneService.ToUtc(_model.PickupStart);
+        var pickupEnd = ClientTimeZoneService.ToUtc(_model.PickupEnd);
+
         if (IsEdit)
         {
             var package = new Package
@@ -199,8 +248,8 @@
                 Description = _model.Description!,
                 Price = _model.Price,
                 Quantity = _model.Quantity,
-                PickupStart = _model.PickupStart,
-                PickupEnd = _model.PickupEnd,
+                PickupStart = pickupStart,
+                PickupEnd = pickupEnd,
                 ImageUrl = _model.ImageUrl,
                 BusinessId = _model.BusinessId,
                 PackageTypeId = _model.PackageTypeId
@@ -215,8 +264,8 @@
                 Description = _model.Description!,
                 Price = _model.Price,
                 Quantity = _model.Quantity,
-                PickupStart = _model.PickupStart,
-                PickupEnd = _model.PickupEnd,
+                PickupStart = pickupStart,
+                PickupEnd = pickupEnd,
                 ImageUrl = _model.ImageUrl,
                 BusinessId = _model.BusinessId,
                 PackageTypeId = _model.PackageTypeId
@@ -247,11 +296,20 @@
         public Guid BusinessId { get; set; }
         public Guid PackageTypeId { get; set; }
 
-        // Cross-field rule — can't be expressed with a single [Range]/[Required] attribute.
+        // Kept in sync with the viewer's local time by the parent component — comparing PickupEnd
+        // against DateTime.Now here would use the server's timezone instead of the viewer's.
+        public DateTime NowLocal { get; set; } = DateTime.Now;
+
+        // Cross-field rules — can't be expressed with a single [Range]/[Required] attribute.
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
         {
             if (PickupEnd <= PickupStart)
                 yield return new ValidationResult("Pickup end must be after pickup start.", [nameof(PickupEnd)]);
+
+            // Only PickupEnd is checked so editing a package that's already mid-window (PickupStart
+            // in the past, PickupEnd still ahead) doesn't get blocked.
+            if (PickupEnd <= NowLocal)
+                yield return new ValidationResult("Pickup end must be in the future.", [nameof(PickupEnd)]);
         }
     }
 }

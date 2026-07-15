@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Database;
 using Netrom_Eco_Meal.Entities;
+using Netrom_Eco_Meal.Models;
 using Netrom_Eco_Meal.Repositories.Interfaces;
 using Netrom_Eco_Meal.Services.Interfaces;
 
@@ -90,6 +91,26 @@ public class OrderService(
         return isAdmin ? await orderRepository.GetAllAsync() : await orderRepository.GetByBusinessIdAsync(business!.Id);
     }
 
+    public async Task<PaginatedList<Order>> GetMyOrdersPagedAsync(int pageIndex, int pageSize, string? status)
+    {
+        if (!await currentUser.IsInRoleAsync(AppRoles.Customer))
+            throw new UnauthorizedAccessException("Only customers can view their orders.");
+
+        var (_, userId) = await currentUser.GetCurrentUserAsync();
+        if (userId is null)
+            throw new UnauthorizedAccessException("You must be signed in to view your orders.");
+
+        return await orderRepository.GetPagedByUserIdAsync(userId, pageIndex, pageSize, status);
+    }
+
+    public async Task<PaginatedList<Order>> GetOrdersForManagementPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessId, string? status)
+    {
+        var (isAdmin, business) = await ResolveManagedBusinessAsync();
+        var effectiveBusinessId = isAdmin ? businessId : business!.Id;
+
+        return await orderRepository.GetPagedForManagementAsync(pageIndex, pageSize, search, effectiveBusinessId, status);
+    }
+
     public async Task<Order> UpdateStatusAsync(Guid orderId, string statusName)
     {
         var (isAdmin, business) = await ResolveManagedBusinessAsync();
@@ -100,6 +121,31 @@ public class OrderService(
         if (!isAdmin && order.BusinessId != business!.Id)
             throw new UnauthorizedAccessException("You can only manage orders that belong to your business.");
 
+        return await ApplyStatusChangeAsync(order, statusName);
+    }
+
+    public async Task<Order> CancelMyOrderAsync(Guid orderId)
+    {
+        if (!await currentUser.IsInRoleAsync(AppRoles.Customer))
+            throw new UnauthorizedAccessException("Only customers can cancel their own orders.");
+
+        var (_, userId) = await currentUser.GetCurrentUserAsync();
+        if (userId is null)
+            throw new UnauthorizedAccessException("You must be signed in to cancel an order.");
+
+        var order = await orderRepository.GetByIdAsync(orderId)
+            ?? throw new InvalidOperationException("This order no longer exists.");
+
+        if (order.UserId != userId)
+            throw new UnauthorizedAccessException("You can only cancel your own orders.");
+
+        return await ApplyStatusChangeAsync(order, OrderStatuses.Cancelled);
+    }
+
+    // Shared by manager/admin status changes and customer self-cancellation — keeps the
+    // transition rules and stock adjustments in exactly one place.
+    private async Task<Order> ApplyStatusChangeAsync(Order order, string statusName)
+    {
         var targetStatus = await dbContext.Statuses.FirstOrDefaultAsync(s => s.Name == statusName)
             ?? throw new InvalidOperationException("Order status configuration is missing.");
 

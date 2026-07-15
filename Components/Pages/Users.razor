@@ -27,15 +27,15 @@
     <div class="alert alert-danger" role="alert">@_roleError</div>
 }
 
-@if (_users is not null)
+@if (_paged is not null)
 {
     <div class="d-flex gap-3 mb-3 flex-wrap">
         <div class="input-group" style="max-width: 320px;">
             <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
             <input type="text" class="form-control border-start-0 ps-0" placeholder="Search name, email…"
-                   @bind="_search" @bind:event="oninput"/>
+                   @bind="_search" @bind:event="oninput" @bind:after="OnSearchInputAsync"/>
         </div>
-        <select class="form-select" style="max-width: 200px;" @bind="_roleFilter">
+        <select class="form-select" style="max-width: 200px;" @bind="_roleFilter" @bind:after="FilterChangedAsync">
             <option value="">All roles</option>
             @foreach (var role in AppRoles.AllRoles)
             {
@@ -44,16 +44,16 @@
         </select>
         @if (!string.IsNullOrEmpty(_search) || _roleFilter != "")
         {
-            <button class="btn btn-outline-secondary" @onclick="ClearFilters">
+            <button class="btn btn-outline-secondary" @onclick="ClearFiltersAsync">
                 <i class="bi bi-x-lg me-1"></i> Clear
             </button>
         }
-        <span class="align-self-center text-muted small ms-auto">@Filtered.Count result@(Filtered.Count == 1 ? "" : "s")</span>
+        <span class="align-self-center text-muted small ms-auto">@_paged.TotalCount result@(_paged.TotalCount == 1 ? "" : "s")</span>
     </div>
 }
 
 <div class="card border-0 shadow-sm">
-    @if (_users is null)
+    @if (_paged is null)
     {
         <div class="d-flex justify-content-center py-5">
             <div class="spinner-border text-primary" role="status">
@@ -61,11 +61,11 @@
             </div>
         </div>
     }
-    else if (Filtered.Count == 0)
+    else if (_paged.Items.Count == 0)
     {
         <div class="text-center py-5">
             <i class="bi bi-people fs-1 text-muted d-block mb-3"></i>
-            <p class="text-muted mb-0">@(_users.Count == 0 ? "No users registered yet." : "No users match your filters.")</p>
+            <p class="text-muted mb-0">@(_paged.TotalCount == 0 && string.IsNullOrEmpty(_search) && _roleFilter == "" ? "No users registered yet." : "No users match your filters.")</p>
         </div>
     }
     else
@@ -80,7 +80,7 @@
             </tr>
             </thead>
             <tbody>
-            @foreach (var user in Filtered)
+            @foreach (var user in _paged.Items)
             {
                 var isSelf = user.Id == _currentUserId;
                 <tr>
@@ -157,7 +157,7 @@
                                     @foreach (var business in _businesses)
                                     {
                                         var managedByOther = business.ManagerId is not null && business.ManagerId != user.Id
-                                            ? _users?.FirstOrDefault(u => u.Id == business.ManagerId)
+                                            ? _businessManagers.FirstOrDefault(u => u.Id == business.ManagerId)
                                             : null;
                                         <button type="button" class="role-option" @onclick="() => AssignBusinessAsync(user, business.Id)">
                                             <span class="role-option-dot" style="background-color:#2563eb"></span>
@@ -183,42 +183,73 @@
             </tbody>
         </table>
         </div>
+        <Pagination CurrentPage="_paged.PageIndex" TotalPages="_paged.TotalPages" OnPageChange="PageChangedAsync" />
     }
 </div>
 
 @code {
-    private List<UserWithRole>? _users;
+    private PaginatedList<UserWithRole>? _paged;
     private List<Business> _businesses = [];
+    // Full list of business-manager users — needed to resolve "currently: X" in the business
+    // assignment dropdown even when that manager's row isn't on the current users page.
+    private List<UserWithRole> _businessManagers = [];
     private string? _currentUserId;
     private string _search = "";
     private string _roleFilter = "";
     private string? _openDropdownUserId;
     private string? _openBusinessDropdownUserId;
     private string? _roleError;
-
-    private List<UserWithRole> Filtered => _users is null ? [] : _users
-        .Where(u =>
-            TextHelpers.MatchesSearch(_search, u.Name, u.Email) &&
-            (_roleFilter == "" || u.Role == _roleFilter))
-        .ToList();
+    private int _pageIndex = 1;
+    private const int PageSize = 10;
+    // Guards every reload trigger (search, filters, paging, post-mutation refresh) so
+    // overlapping ones cancel each other instead of using the shared DbContext concurrently.
+    private readonly Debouncer _reloadGate = new();
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         _currentUserId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-        _users = (await UserController.GetAllAsync()).Value;
         _businesses = (await BusinessController.GetAllAsync()).Value ?? [];
+        _businessManagers = (await UserController.GetByRoleAsync(AppRoles.BusinessManager)).Value ?? [];
+
+        await LoadPageAsync();
+    }
+
+    private async Task LoadPageAsync()
+    {
+        _paged = (await UserController.GetPagedAsync(_pageIndex, PageSize, _search, _roleFilter == "" ? null : _roleFilter)).Value;
+    }
+
+    private Task ReloadAsync(int delayMs = 0) => _reloadGate.DebounceAsync(LoadPageAsync, delayMs);
+
+    private Task OnSearchInputAsync()
+    {
+        _pageIndex = 1;
+        return ReloadAsync(300);
+    }
+
+    private Task FilterChangedAsync()
+    {
+        _pageIndex = 1;
+        return ReloadAsync();
+    }
+
+    private Task PageChangedAsync(int page)
+    {
+        _pageIndex = page;
+        return ReloadAsync();
+    }
+
+    private Task ClearFiltersAsync()
+    {
+        _search = "";
+        _roleFilter = "";
+        return FilterChangedAsync();
     }
 
     private Business? AssignedBusiness(string userId) =>
         _businesses.FirstOrDefault(b => b.ManagerId == userId);
-
-    private void ClearFilters()
-    {
-        _search = "";
-        _roleFilter = "";
-    }
 
     // Role and business dropdowns are mutually exclusive — opening one closes the other.
     private void ToggleDropdown(string userId)
@@ -248,7 +279,7 @@
         _openDropdownUserId = null;
         _roleError = null;
 
-        if (role == user.Role || _users is null)
+        if (role == user.Role || _paged is null)
             return;
 
         var result = await UserController.UpdateRoleAsync(user.Id, role);
@@ -258,12 +289,13 @@
             return;
         }
 
-        var index = _users.FindIndex(u => u.Id == user.Id);
-        if (index >= 0)
-            _users[index] = user with { Role = role };
+        // Reload rather than patch the row in place — the user's new role may no longer match
+        // the active _roleFilter, and patching would leave it visible until the next reload.
+        await ReloadAsync();
 
         // Moving away from BusinessManager may have auto-released a business server-side.
         _businesses = (await BusinessController.GetAllAsync()).Value ?? [];
+        _businessManagers = (await UserController.GetByRoleAsync(AppRoles.BusinessManager)).Value ?? [];
     }
 
     private async Task AssignBusinessAsync(UserWithRole user, Guid? businessId)

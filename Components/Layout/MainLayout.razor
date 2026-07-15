@@ -1,4 +1,6 @@
 ﻿@inherits LayoutComponentBase
+@using Netrom_Eco_Meal.Services
+@inject ClientTimeZoneService ClientTimeZoneService
 
 <div class="page">
     <div class="sidebar">
@@ -18,3 +20,15 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Needs JS interop (Intl API), only available after the first render.
+        if (firstRender)
+        {
+            await ClientTimeZoneService.InitializeAsync();
+            StateHasChanged();
+        }
+    }
+}

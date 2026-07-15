@@ -5,11 +5,15 @@
 @using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services
 @using Netrom_Eco_Meal.Services.Interfaces
 @rendermode InteractiveServer
+@implements IDisposable
 @inject PackageController PackageController
 @inject IBusinessService BusinessService
+@inject IPackageTypeService PackageTypeService
 @inject AuthenticationStateProvider AuthStateProvider
+@inject ClientTimeZoneService ClientTimeZoneService
 @attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
 
 <PageTitle>Packages — Eco Meal</PageTitle>
@@ -27,40 +31,40 @@
     }
 </div>
 
-@if (_packages is not null)
+@if (_paged is not null)
 {
     <div class="d-flex gap-3 mb-3 flex-wrap">
         <div class="input-group" style="max-width: 320px;">
             <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
             <input type="text" class="form-control border-start-0 ps-0" placeholder="Search name or description…"
-                   @bind="_search" @bind:event="oninput" />
+                   @bind="_search" @bind:event="oninput" @bind:after="OnSearchInputAsync" />
         </div>
-        <select class="form-select" style="max-width: 200px;" @bind="_businessFilter">
+        <select class="form-select" style="max-width: 200px;" @bind="_businessFilter" @bind:after="FilterChangedAsync">
             <option value="">All businesses</option>
-            @foreach (var b in DistinctBusinesses)
+            @foreach (var b in _allBusinesses)
             {
                 <option value="@b.Id">@b.Name</option>
             }
         </select>
-        <select class="form-select" style="max-width: 180px;" @bind="_typeFilter">
+        <select class="form-select" style="max-width: 180px;" @bind="_typeFilter" @bind:after="FilterChangedAsync">
             <option value="">All types</option>
-            @foreach (var t in DistinctPackageTypes)
+            @foreach (var t in _packageTypes)
             {
                 <option value="@t.Id">@t.Name</option>
             }
         </select>
         @if (!string.IsNullOrEmpty(_search) || _businessFilter != "" || _typeFilter != "")
         {
-            <button class="btn btn-outline-secondary" @onclick="ClearFilters">
+            <button class="btn btn-outline-secondary" @onclick="ClearFiltersAsync">
                 <i class="bi bi-x-lg me-1"></i> Clear
             </button>
         }
-        <span class="align-self-center text-muted small ms-auto">@Filtered.Count result@(Filtered.Count == 1 ? "" : "s")</span>
+        <span class="align-self-center text-muted small ms-auto">@_paged.TotalCount result@(_paged.TotalCount == 1 ? "" : "s")</span>
     </div>
 }
 
 <div class="card border-0 shadow-sm">
-    @if (_packages is null)
+    @if (_paged is null)
     {
         <div class="d-flex justify-content-center py-5">
             <div class="spinner-border text-primary" role="status">
@@ -68,12 +72,12 @@
             </div>
         </div>
     }
-    else if (Filtered.Count == 0)
+    else if (_paged.Items.Count == 0)
     {
         <div class="text-center py-5">
             <i class="bi bi-box-seam fs-1 text-muted d-block mb-3"></i>
-            <p class="text-muted mb-3">@(_packages.Count == 0 ? "No packages available yet." : "No packages match your filters.")</p>
-            @if (_packages.Count == 0 && (_isAdmin || _myBusinessId is not null))
+            <p class="text-muted mb-3">@(_paged.TotalCount == 0 && string.IsNullOrEmpty(_search) && _businessFilter == "" && _typeFilter == "" ? "No packages available yet." : "No packages match your filters.")</p>
+            @if (_paged.TotalCount == 0 && (_isAdmin || _myBusinessId is not null))
             {
                 <a href="/packages/create" class="btn btn-outline-primary">Create your first package</a>
             }
@@ -99,7 +103,7 @@
                 </thead>
                 <tbody>
                 @* Managers can browse every business's packages here but only edit/delete their own. *@
-                @foreach (var package in Filtered)
+                @foreach (var package in _paged.Items)
                 {
                     var canManage = _isAdmin || (_isBusinessManager && package.BusinessId == _myBusinessId);
                     <tr>
@@ -116,7 +120,7 @@
                         <td class="fw-semibold">@package.Price.ToString("C")</td>
                         <td>@package.Quantity</td>
                         <td class="text-muted small">
-                            @package.PickupStart.ToString("MMM d, HH:mm") – @package.PickupEnd.ToString("HH:mm")
+                            @PickupLabel(package)
                         </td>
                         @if (_isAdmin || _isBusinessManager)
                         {
@@ -139,6 +143,7 @@
                 </tbody>
             </table>
         </div>
+        <Pagination CurrentPage="_paged.PageIndex" TotalPages="_paged.TotalPages" OnPageChange="PageChangedAsync" />
     }
 </div>
 
@@ -151,7 +156,9 @@
                OnCancel="() => _pendingDelete = null"/>
 
 @code {
-    private List<Package>? _packages;
+    private PaginatedList<Package>? _paged;
+    private List<Business> _allBusinesses = [];
+    private List<PackageType> _packageTypes = [];
     private string _search = "";
     private string _businessFilter = "";
     private string _typeFilter = "";
@@ -160,19 +167,11 @@
     private Guid? _myBusinessId;
     private Package? _pendingDelete;
     private bool _deleting;
-
-    private IEnumerable<Business> DistinctBusinesses => _packages is null ? [] :
-        _packages.Select(p => p.Business).DistinctBy(b => b.Id).OrderBy(b => b.Name);
-
-    private IEnumerable<PackageType> DistinctPackageTypes => _packages is null ? [] :
-        _packages.Select(p => p.PackageType).DistinctBy(t => t.Id).OrderBy(t => t.Name);
-
-    private List<Package> Filtered => _packages is null ? [] : _packages
-        .Where(p =>
-            TextHelpers.MatchesSearch(_search, p.Name, p.Description) &&
-            (_businessFilter == "" || p.BusinessId.ToString() == _businessFilter) &&
-            (_typeFilter == "" || p.PackageTypeId.ToString() == _typeFilter))
-        .ToList();
+    private int _pageIndex = 1;
+    private const int PageSize = 10;
+    // Guards every reload trigger (search, filters, paging, post-mutation refresh) so
+    // overlapping ones cancel each other instead of using the shared DbContext concurrently.
+    private readonly Debouncer _reloadGate = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -184,14 +183,69 @@
         if (_isBusinessManager && currentUserId is not null)
             _myBusinessId = (await BusinessService.GetByManagerIdAsync(currentUserId))?.Id;
 
-        _packages = (await PackageController.GetAllAsync()).Value;
+        _allBusinesses = (await BusinessService.GetAllAsync())?.OrderBy(b => b.Name).ToList() ?? [];
+        _packageTypes = (await PackageTypeService.GetAllAsync()).OrderBy(t => t.Name).ToList();
+
+        await LoadPageAsync();
+
+        ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
     }
 
-    private void ClearFilters()
+    private async Task LoadPageAsync()
+    {
+        Guid? businessId = Guid.TryParse(_businessFilter, out var bId) ? bId : null;
+        Guid? packageTypeId = Guid.TryParse(_typeFilter, out var tId) ? tId : null;
+        _paged = (await PackageController.GetPagedAsync(_pageIndex, PageSize, _search, businessId, packageTypeId)).Value;
+
+        // A mutation (e.g. deleting the last item on the last page) can shrink TotalPages below
+        // the page we're currently viewing — re-fetch the now-last valid page instead of showing empty.
+        if (_paged is not null && _paged.Items.Count == 0 && _pageIndex > _paged.TotalPages)
+        {
+            _pageIndex = _paged.TotalPages;
+            _paged = (await PackageController.GetPagedAsync(_pageIndex, PageSize, _search, businessId, packageTypeId)).Value;
+        }
+    }
+
+    private Task ReloadAsync(int delayMs = 0) => _reloadGate.DebounceAsync(LoadPageAsync, delayMs);
+
+    private Task OnSearchInputAsync()
+    {
+        _pageIndex = 1;
+        return ReloadAsync(300);
+    }
+
+    private Task FilterChangedAsync()
+    {
+        _pageIndex = 1;
+        return ReloadAsync();
+    }
+
+    private Task PageChangedAsync(int page)
+    {
+        _pageIndex = page;
+        return ReloadAsync();
+    }
+
+    private string PickupLabel(Package package)
+    {
+        var start = ClientTimeZoneService.ToLocal(package.PickupStart);
+        var end = ClientTimeZoneService.ToLocal(package.PickupEnd);
+        return $"{start:MMM d, HH:mm} – {end:HH:mm}";
+    }
+
+    private void HandleTimeZoneChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        ClientTimeZoneService.OnChange -= HandleTimeZoneChanged;
+    }
+
+    private Task ClearFiltersAsync()
     {
         _search         = "";
         _businessFilter = "";
         _typeFilter     = "";
+        return FilterChangedAsync();
     }
 
     private void RequestDelete(Package package)
@@ -209,7 +263,7 @@
 
         _deleting = true;
         await PackageController.DeleteAsync(_pendingDelete);
-        _packages = (await PackageController.GetAllAsync()).Value;
+        await ReloadAsync();
         _deleting = false;
         _pendingDelete = null;
     }

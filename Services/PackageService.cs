@@ -1,4 +1,5 @@
 using Netrom_Eco_Meal.Entities;
+using Netrom_Eco_Meal.Models;
 using Netrom_Eco_Meal.Repositories.Interfaces;
 using Netrom_Eco_Meal.Services.Interfaces;
 
@@ -13,6 +14,11 @@ public class PackageService(
     public async Task<List<Package>> GetAllAsync()
     {
         return await packageRepository.GetAllAsync();
+    }
+
+    public async Task<PaginatedList<Package>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessId, Guid? packageTypeId)
+    {
+        return await packageRepository.GetPagedAsync(pageIndex, pageSize, search, businessId, packageTypeId);
     }
 
     public async Task<Package?> GetByIdAsync(Guid id)

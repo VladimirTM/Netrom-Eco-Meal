@@ -1,11 +1,15 @@
 @page "/orders"
 @layout PublicLayout
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Mvc
 @using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services
 @rendermode InteractiveServer
+@implements IDisposable
 @inject OrderController OrderController
+@inject ClientTimeZoneService ClientTimeZoneService
 @attribute [Authorize(Roles = AppRoles.Customer)]
 
 <PageTitle>Your orders — Eco Meal</PageTitle>
@@ -22,11 +26,11 @@
                 <span class="orders-stat-label">orders placed</span>
             </div>
             <div class="orders-stat">
-                <span class="orders-stat-value">@(_orders is null ? "—" : _orders.Sum(o => o.OrderPackages.Sum(op => op.Quantity)).ToString())</span>
+                <span class="orders-stat-value">@(_orders is null ? "—" : _orders.Where(o => o.Status.Name == OrderStatuses.Completed).Sum(o => o.OrderPackages.Sum(op => op.Quantity)).ToString())</span>
                 <span class="orders-stat-label">portions rescued</span>
             </div>
             <div class="orders-stat">
-                <span class="orders-stat-value">@(_orders is null ? "—" : _orders.Select(o => o.BusinessId).Distinct().Count().ToString())</span>
+                <span class="orders-stat-value">@(_orders is null ? "—" : _orders.Where(o => o.Status.Name == OrderStatuses.Completed).Select(o => o.BusinessId).Distinct().Count().ToString())</span>
                 <span class="orders-stat-label">kitchens visited</span>
             </div>
         </div>
@@ -34,23 +38,28 @@
 </section>
 
 <section class="orders-list-section">
+    @if (_actionError is not null)
+    {
+        <div class="alert alert-danger" role="alert">@_actionError</div>
+    }
+
     @if (_orders is not null && _orders.Count > 0)
     {
         <div class="orders-chip-row">
-            <button type="button" class="orders-chip @(_statusFilter == "" ? "orders-chip-active" : "")" @onclick='() => _statusFilter = ""'>
+            <button type="button" class="orders-chip @(_statusFilter == "" ? "orders-chip-active" : "")" @onclick="() => FilterChangedAsync(null)">
                 All
             </button>
-            @foreach (var status in DistinctStatuses)
+            @foreach (var status in StatusOrder)
             {
                 <button type="button" class="orders-chip @(_statusFilter == status ? "orders-chip-active" : "")"
-                        @onclick="() => _statusFilter = status">
+                        @onclick="() => FilterChangedAsync(status)">
                     @status
                 </button>
             }
         </div>
     }
 
-    @if (_orders is null)
+    @if (_orders is null || _paged is null)
     {
         <div class="d-flex justify-content-center py-5">
             <div class="spinner-border text-primary" role="status">
@@ -67,7 +76,7 @@
             <a href="/" class="btn btn-primary px-4">Browse packages</a>
         </div>
     }
-    else if (Filtered.Count == 0)
+    else if (_paged.Items.Count == 0)
     {
         <div class="orders-empty">
             <i class="bi bi-filter-circle"></i>
@@ -77,7 +86,7 @@
     else
     {
         <div class="orders-stack">
-            @foreach (var order in Filtered)
+            @foreach (var order in _paged.Items)
             {
                 <article class="order-ticket">
                     <div class="order-ticket-main">
@@ -109,6 +118,16 @@
                                 <span class="order-ticket-total-value">@order.OrderPackages.Sum(op => op.Quantity * op.Package.Price).ToString("C")</span>
                             </div>
                         </div>
+
+                        @* Mirrors OrderService's allowed transitions — a customer can back out any time before pickup is confirmed complete. *@
+                        @if (order.Status.Name is OrderStatuses.Pending or OrderStatuses.Confirmed)
+                        {
+                            <div class="order-ticket-actions">
+                                <button type="button" class="order-action-btn order-action-cancel" @onclick="() => RequestCancel(order)">
+                                    Cancel order
+                                </button>
+                            </div>
+                        }
                     </div>
 
                     <div class="order-ticket-seam"></div>
@@ -121,36 +140,107 @@
                 </article>
             }
         </div>
+        <Pagination CurrentPage="_paged.PageIndex" TotalPages="_paged.TotalPages" OnPageChange="PageChangedAsync" />
     }
 </section>
+
+<ConfirmDialog IsOpen="@(_pendingCancel is not null)"
+               Title="Cancel order?"
+               Message="@(_pendingCancel is null ? "" : $"Order #{_pendingCancel.OrderNumber:000} at {_pendingCancel.Business.Name} will be cancelled. This can't be undone.")"
+               ConfirmLabel="Cancel order"
+               Busy="@_cancelling"
+               OnConfirm="ConfirmCancelAsync"
+               OnCancel="() => _pendingCancel = null"/>
 
 @code {
     // Lifecycle order for the filter chips, not alphabetical or appearance order.
     private static readonly string[] StatusOrder = [OrderStatuses.Pending, OrderStatuses.Confirmed, OrderStatuses.Completed, OrderStatuses.Cancelled];
 
+    // Loaded once, unfiltered, purely for the lifetime stats in the hero — the rendered
+    // ticket list itself comes from the paginated/filtered server query below.
     private List<Order>? _orders;
+    private PaginatedList<Order>? _paged;
     private string _statusFilter = "";
+    private int _pageIndex = 1;
+    private const int PageSize = 10;
+    // Guards every reload trigger (status chips, paging) so overlapping ones cancel
+    // each other instead of using the shared DbContext concurrently.
+    private readonly Debouncer _reloadGate = new();
 
-    private IEnumerable<string> DistinctStatuses => _orders is null ? [] :
-        StatusOrder.Where(s => _orders.Any(o => o.Status.Name == s));
-
-    private List<Order> Filtered => _orders is null ? [] : _orders
-        .Where(o => _statusFilter == "" || o.Status.Name == _statusFilter)
-        .ToList();
+    private Order? _pendingCancel;
+    private bool _cancelling;
+    private string? _actionError;
 
     protected override async Task OnInitializedAsync()
     {
         _orders = (await OrderController.GetMyOrdersAsync()).Value ?? [];
+        await LoadPageAsync();
+
+        ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
     }
 
-    private static string PickupWindow(Order order)
+    private async Task LoadPageAsync()
+    {
+        _paged = (await OrderController.GetMyOrdersPagedAsync(_pageIndex, PageSize, _statusFilter == "" ? null : _statusFilter)).Value;
+    }
+
+    private Task ReloadAsync() => _reloadGate.DebounceAsync(LoadPageAsync);
+
+    private void RequestCancel(Order order) => _pendingCancel = order;
+
+    private async Task ConfirmCancelAsync()
+    {
+        if (_pendingCancel is null)
+            return;
+
+        _cancelling = true;
+        _actionError = null;
+
+        var result = await OrderController.CancelMyOrderAsync(_pendingCancel.Id);
+        if (result.Result is ConflictObjectResult conflict)
+        {
+            _actionError = conflict.Value as string ?? "That order couldn't be cancelled.";
+        }
+        else
+        {
+            // The cancelled order affects both the lifetime stats (unfiltered _orders) and
+            // the ticket list currently on screen, so refresh both.
+            _orders = (await OrderController.GetMyOrdersAsync()).Value ?? [];
+            await ReloadAsync();
+        }
+
+        _cancelling = false;
+        _pendingCancel = null;
+    }
+
+    private Task FilterChangedAsync(string? status)
+    {
+        _statusFilter = status ?? "";
+        _pageIndex = 1;
+        return ReloadAsync();
+    }
+
+    private Task PageChangedAsync(int page)
+    {
+        _pageIndex = page;
+        return ReloadAsync();
+    }
+
+    private void HandleTimeZoneChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        ClientTimeZoneService.OnChange -= HandleTimeZoneChanged;
+    }
+
+    private string PickupWindow(Order order)
     {
         if (order.OrderPackages.Count == 0)
             return "time to be confirmed";
 
         // An order can span packages with different windows — show the widest span that covers them all.
-        var start = order.OrderPackages.Min(op => op.Package.PickupStart);
-        var end = order.OrderPackages.Max(op => op.Package.PickupEnd);
+        var start = ClientTimeZoneService.ToLocal(order.OrderPackages.Min(op => op.Package.PickupStart));
+        var end = ClientTimeZoneService.ToLocal(order.OrderPackages.Max(op => op.Package.PickupEnd));
 
         return start.Date == end.Date
             ? $"{start:MMM d} · {start:HH:mm}–{end:HH:mm}"

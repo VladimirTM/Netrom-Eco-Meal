@@ -34,15 +34,15 @@
     <div class="alert alert-danger" role="alert">@_assignError</div>
 }
 
-@if (businesses is not null && businessTypes is not null)
+@if (_paged is not null && businessTypes is not null)
 {
     <div class="d-flex gap-3 mb-3 flex-wrap">
         <div class="input-group" style="max-width: 320px;">
             <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
             <input type="text" class="form-control border-start-0 ps-0" placeholder="Search name, description, address…"
-                   @bind="_search" @bind:event="oninput" />
+                   @bind="_search" @bind:event="oninput" @bind:after="OnSearchInputAsync" />
         </div>
-        <select class="form-select" style="max-width: 200px;" @bind="_typeFilter">
+        <select class="form-select" style="max-width: 200px;" @bind="_typeFilter" @bind:after="FilterChangedAsync">
             <option value="">All types</option>
             @foreach (var t in businessTypes)
             {
@@ -51,16 +51,16 @@
         </select>
         @if (!string.IsNullOrEmpty(_search) || _typeFilter != "")
         {
-            <button class="btn btn-outline-secondary" @onclick="ClearFilters">
+            <button class="btn btn-outline-secondary" @onclick="ClearFiltersAsync">
                 <i class="bi bi-x-lg me-1"></i> Clear
             </button>
         }
-        <span class="align-self-center text-muted small ms-auto">@Filtered.Count result@(Filtered.Count == 1 ? "" : "s")</span>
+        <span class="align-self-center text-muted small ms-auto">@_paged.TotalCount result@(_paged.TotalCount == 1 ? "" : "s")</span>
     </div>
 }
 
 <div class="card border-0 shadow-sm">
-    @if (businesses is null)
+    @if (_paged is null)
     {
         <div class="d-flex justify-content-center py-5">
             <div class="spinner-border text-primary" role="status">
@@ -68,12 +68,12 @@
             </div>
         </div>
     }
-    else if (Filtered.Count == 0)
+    else if (_paged.Items.Count == 0)
     {
         <div class="text-center py-5">
             <i class="bi bi-building fs-1 text-muted d-block mb-3"></i>
-            <p class="text-muted mb-3">@(businesses.Count == 0 ? "No businesses registered yet." : "No businesses match your filters.")</p>
-            @if (businesses.Count == 0 && _isAdmin)
+            <p class="text-muted mb-3">@((businesses?.Count ?? 0) == 0 ? "No businesses registered yet." : "No businesses match your filters.")</p>
+            @if ((businesses?.Count ?? 0) == 0 && _isAdmin)
             {
                 <a href="/businesses/create" class="btn btn-outline-primary">Create your first business</a>
             }
@@ -100,7 +100,7 @@
                 </tr>
                 </thead>
                 <tbody>
-                @foreach (var business in Filtered)
+                @foreach (var business in _paged.Items)
                 {
                     var canEdit = _isAdmin || (_isBusinessManager && business.Id == _myBusinessId);
                     <tr>
@@ -179,6 +179,7 @@
                 </tbody>
             </table>
         </div>
+        <Pagination CurrentPage="_paged.PageIndex" TotalPages="_paged.TotalPages" OnPageChange="PageChangedAsync" />
     }
 </div>
 
@@ -191,7 +192,10 @@
                OnCancel="() => _pendingDelete = null"/>
 
 @code {
+    // Full, unfiltered list — kept only for cross-page checks (my business, manager assigned
+    // elsewhere) that a single paginated page can't answer on its own.
     private List<Business>? businesses;
+    private PaginatedList<Business>? _paged;
     private List<BusinessType>? businessTypes;
     private List<Services.Interfaces.UserWithRole> _businessManagers = [];
     private string _search = "";
@@ -204,12 +208,11 @@
     private string? _assignError;
     private Business? _pendingDelete;
     private bool _deleting;
-
-    private List<Business> Filtered => businesses is null ? [] : businesses
-        .Where(b =>
-            TextHelpers.MatchesSearch(_search, b.Name, b.Description, b.Address) &&
-            (_typeFilter == "" || b.BusinessTypeId.ToString() == _typeFilter))
-        .ToList();
+    private int _pageIndex = 1;
+    private const int PageSize = 10;
+    // Guards every reload trigger (search, filters, paging, post-mutation refresh) so
+    // overlapping ones cancel each other instead of using the shared DbContext concurrently.
+    private readonly Debouncer _reloadGate = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -226,12 +229,49 @@
 
         if (_isAdmin)
             _businessManagers = (await UserController.GetByRoleAsync(AppRoles.BusinessManager)).Value ?? [];
+
+        await LoadPageAsync();
     }
 
-    private void ClearFilters()
+    private async Task LoadPageAsync()
+    {
+        Guid? typeId = Guid.TryParse(_typeFilter, out var id) ? id : null;
+        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId)).Value;
+
+        // A mutation (e.g. deleting the last item on the last page) can shrink TotalPages below
+        // the page we're currently viewing — re-fetch the now-last valid page instead of showing empty.
+        if (_paged is not null && _paged.Items.Count == 0 && _pageIndex > _paged.TotalPages)
+        {
+            _pageIndex = _paged.TotalPages;
+            _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId)).Value;
+        }
+    }
+
+    private Task ReloadAsync(int delayMs = 0) => _reloadGate.DebounceAsync(LoadPageAsync, delayMs);
+
+    private Task OnSearchInputAsync()
+    {
+        _pageIndex = 1;
+        return ReloadAsync(300);
+    }
+
+    private Task FilterChangedAsync()
+    {
+        _pageIndex = 1;
+        return ReloadAsync();
+    }
+
+    private Task PageChangedAsync(int page)
+    {
+        _pageIndex = page;
+        return ReloadAsync();
+    }
+
+    private Task ClearFiltersAsync()
     {
         _search     = "";
         _typeFilter = "";
+        return FilterChangedAsync();
     }
 
     private void RequestDelete(Business business)
@@ -250,6 +290,7 @@
         _deleting = true;
         await BusinessController.DeleteAsync(_pendingDelete);
         businesses = (await BusinessController.GetAllAsync()).Value;
+        await ReloadAsync();
         _deleting = false;
         _pendingDelete = null;
     }
@@ -278,5 +319,6 @@
             _assignError = "That manager was just assigned to another business. Please try again.";
 
         businesses = (await BusinessController.GetAllAsync()).Value;
+        await ReloadAsync();
     }
 }

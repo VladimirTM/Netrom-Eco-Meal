@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Netrom_Eco_Meal.Models;
 using Netrom_Eco_Meal.Services.Interfaces;
 
 namespace Netrom_Eco_Meal.Controllers;
@@ -16,6 +17,11 @@ public class UserController(IUserService userService) : ControllerBase
     public async Task<ActionResult<List<UserWithRole>>> GetByRoleAsync(string role)
     {
         return await userService.GetByRoleAsync(role);
+    }
+
+    public async Task<ActionResult<PaginatedList<UserWithRole>>> GetPagedAsync(int pageIndex, int pageSize, string? search, string? role)
+    {
+        return await userService.GetPagedAsync(pageIndex, pageSize, search, role);
     }
 
     public async Task<ActionResult> UpdateRoleAsync(string userId, string role)

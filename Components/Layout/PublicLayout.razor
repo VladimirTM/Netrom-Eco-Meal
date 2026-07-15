@@ -4,6 +4,7 @@
 @using Netrom_Eco_Meal.Services
 @implements IDisposable
 @inject CartService CartService
+@inject ClientTimeZoneService ClientTimeZoneService
 
 <div class="public-shell">
     <header class="public-header">
@@ -35,6 +36,7 @@
                         }
                         @* Clears the localStorage cart so it doesn't leak into the next session. *@
                         <form method="post" action="api/auth/logout">
+                            <AntiforgeryToken />
                             <button type="submit" class="public-header-logout" title="Sign out"
                                     onclick="EcoMeal.cart.clear('@CartService.StorageKey')">
                                 <i class="bi bi-box-arrow-right"></i>
@@ -86,9 +88,13 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // RestoreAsync needs JS interop (localStorage), only available after the first render.
+        // Both need JS interop (localStorage / Intl API), only available after the first render.
         if (firstRender)
+        {
             await CartService.RestoreAsync();
+            await ClientTimeZoneService.InitializeAsync();
+            StateHasChanged();
+        }
     }
 
     private void HandleCartChanged() => InvokeAsync(StateHasChanged);

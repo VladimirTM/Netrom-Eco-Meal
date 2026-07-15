@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Netrom_Eco_Meal.Entities;
+using Netrom_Eco_Meal.Models;
 using Netrom_Eco_Meal.Services.Interfaces;
 
 namespace Netrom_Eco_Meal.Controllers;
@@ -12,6 +13,11 @@ public class BusinessController(IBusinessService businessService) : ControllerBa
     public async Task<ActionResult<List<Business>>> GetAllAsync()
     {
         return await businessService.GetAllAsync();
+    }
+
+    public async Task<ActionResult<PaginatedList<Business>>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId)
+    {
+        return await businessService.GetPagedAsync(pageIndex, pageSize, search, businessTypeId);
     }
 
     public async Task<ActionResult<Business?>> GetByIdAsync(Guid id)

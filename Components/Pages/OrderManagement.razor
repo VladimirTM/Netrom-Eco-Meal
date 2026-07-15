@@ -5,9 +5,14 @@
 @using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services
+@using Netrom_Eco_Meal.Services.Interfaces
 @rendermode InteractiveServer
+@implements IDisposable
 @inject OrderController OrderController
+@inject IBusinessService BusinessService
 @inject AuthenticationStateProvider AuthStateProvider
+@inject ClientTimeZoneService ClientTimeZoneService
 @attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
 
 <PageTitle>Manage Orders — Eco Meal</PageTitle>
@@ -30,43 +35,43 @@
     <div class="alert alert-danger" role="alert">@_actionError</div>
 }
 
-@if (_orders is not null)
+@if (_paged is not null)
 {
     <div class="d-flex gap-3 mb-3 flex-wrap">
         <div class="input-group" style="max-width: 320px;">
             <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
             <input type="text" class="form-control border-start-0 ps-0" placeholder="Search order # or customer…"
-                   @bind="_search" @bind:event="oninput" />
+                   @bind="_search" @bind:event="oninput" @bind:after="OnSearchInputAsync" />
         </div>
         @if (_isAdmin)
         {
-            <select class="form-select" style="max-width: 220px;" @bind="_businessFilter">
+            <select class="form-select" style="max-width: 220px;" @bind="_businessFilter" @bind:after="FilterChangedAsync">
                 <option value="">All businesses</option>
-                @foreach (var b in DistinctBusinesses)
+                @foreach (var b in _allBusinesses)
                 {
                     <option value="@b.Id">@b.Name</option>
                 }
             </select>
         }
-        <select class="form-select" style="max-width: 180px;" @bind="_statusFilter">
+        <select class="form-select" style="max-width: 180px;" @bind="_statusFilter" @bind:after="FilterChangedAsync">
             <option value="">All statuses</option>
-            @foreach (var s in DistinctStatuses)
+            @foreach (var s in StatusOrder)
             {
                 <option value="@s">@s</option>
             }
         </select>
         @if (!string.IsNullOrEmpty(_search) || _businessFilter != "" || _statusFilter != "")
         {
-            <button class="btn btn-outline-secondary" @onclick="ClearFilters">
+            <button class="btn btn-outline-secondary" @onclick="ClearFiltersAsync">
                 <i class="bi bi-x-lg me-1"></i> Clear
             </button>
         }
-        <span class="align-self-center text-muted small ms-auto">@Filtered.Count result@(Filtered.Count == 1 ? "" : "s")</span>
+        <span class="align-self-center text-muted small ms-auto">@_paged.TotalCount result@(_paged.TotalCount == 1 ? "" : "s")</span>
     </div>
 }
 
 <div class="card border-0 shadow-sm">
-    @if (_orders is null)
+    @if (_paged is null)
     {
         <div class="d-flex justify-content-center py-5">
             <div class="spinner-border text-primary" role="status">
@@ -74,11 +79,11 @@
             </div>
         </div>
     }
-    else if (Filtered.Count == 0)
+    else if (_paged.Items.Count == 0)
     {
         <div class="text-center py-5">
             <i class="bi bi-receipt fs-1 text-muted d-block mb-3"></i>
-            <p class="text-muted mb-0">@(_orders.Count == 0 ? "No orders have been placed yet." : "No orders match your filters.")</p>
+            <p class="text-muted mb-0">@(_paged.TotalCount == 0 && string.IsNullOrEmpty(_search) && _businessFilter == "" && _statusFilter == "" ? "No orders have been placed yet." : "No orders match your filters.")</p>
         </div>
     }
     else
@@ -105,7 +110,7 @@
                 </tr>
                 </thead>
                 <tbody>
-                @foreach (var order in Filtered)
+                @foreach (var order in _paged.Items)
                 {
                     <tr>
                         <td class="px-4 fw-semibold">#@order.OrderNumber.ToString("000")</td>
@@ -168,13 +173,15 @@
                 </tbody>
             </table>
         </div>
+        <Pagination CurrentPage="_paged.PageIndex" TotalPages="_paged.TotalPages" OnPageChange="PageChangedAsync" />
     }
 </div>
 
 @code {
     private static readonly string[] StatusOrder = [OrderStatuses.Pending, OrderStatuses.Confirmed, OrderStatuses.Completed, OrderStatuses.Cancelled];
 
-    private List<Order>? _orders;
+    private PaginatedList<Order>? _paged;
+    private List<Business> _allBusinesses = [];
     private string _search = "";
     private string _businessFilter = "";
     private string _statusFilter = "";
@@ -183,26 +190,32 @@
     private string _forbiddenReason = "";
     private string? _actionError;
     private Guid? _busyOrderId;
-
-    private IEnumerable<Business> DistinctBusinesses => _orders is null ? [] :
-        _orders.Select(o => o.Business).DistinctBy(b => b.Id).OrderBy(b => b.Name);
-
-    private IEnumerable<string> DistinctStatuses => _orders is null ? [] :
-        StatusOrder.Where(s => _orders.Any(o => o.Status.Name == s));
-
-    private List<Order> Filtered => _orders is null ? [] : _orders
-        .Where(o =>
-            TextHelpers.MatchesSearch(_search, o.OrderNumber.ToString("000"), o.User.Name) &&
-            (_businessFilter == "" || o.BusinessId.ToString() == _businessFilter) &&
-            (_statusFilter == "" || o.Status.Name == _statusFilter))
-        .ToList();
+    private int _pageIndex = 1;
+    private const int PageSize = 10;
+    // Guards every reload trigger (search, filters, paging) so overlapping ones cancel
+    // each other instead of using the shared DbContext concurrently.
+    private readonly Debouncer _reloadGate = new();
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         _isAdmin = authState.User.IsInRole(AppRoles.Admin);
 
-        var result = await OrderController.GetOrdersForManagementAsync();
+        if (_isAdmin)
+            _allBusinesses = (await BusinessService.GetAllAsync()).OrderBy(b => b.Name).ToList();
+
+        await LoadPageAsync();
+
+        if (_forbidden)
+            return;
+
+        ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
+    }
+
+    private async Task LoadPageAsync()
+    {
+        Guid? businessId = Guid.TryParse(_businessFilter, out var bId) ? bId : null;
+        var result = await OrderController.GetOrdersForManagementPagedAsync(_pageIndex, PageSize, _search, businessId, _statusFilter == "" ? null : _statusFilter);
         if (result.Result is UnauthorizedResult)
         {
             _forbidden = true;
@@ -210,14 +223,42 @@
             return;
         }
 
-        _orders = result.Value ?? [];
+        _paged = result.Value;
     }
 
-    private void ClearFilters()
+    private void HandleTimeZoneChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        ClientTimeZoneService.OnChange -= HandleTimeZoneChanged;
+    }
+
+    private Task ReloadAsync(int delayMs = 0) => _reloadGate.DebounceAsync(LoadPageAsync, delayMs);
+
+    private Task OnSearchInputAsync()
+    {
+        _pageIndex = 1;
+        return ReloadAsync(300);
+    }
+
+    private Task FilterChangedAsync()
+    {
+        _pageIndex = 1;
+        return ReloadAsync();
+    }
+
+    private Task PageChangedAsync(int page)
+    {
+        _pageIndex = page;
+        return ReloadAsync();
+    }
+
+    private Task ClearFiltersAsync()
     {
         _search = "";
         _businessFilter = "";
         _statusFilter = "";
+        return FilterChangedAsync();
     }
 
     private async Task ChangeStatusAsync(Order order, string statusName)
@@ -230,24 +271,24 @@
         {
             _actionError = conflict.Value as string ?? "That status change couldn't be completed.";
         }
-        else if (result.Value is not null && _orders is not null)
+        else if (result.Value is not null && _paged is not null)
         {
-            var index = _orders.FindIndex(o => o.Id == result.Value.Id);
+            var index = _paged.Items.FindIndex(o => o.Id == result.Value.Id);
             if (index >= 0)
-                _orders[index] = result.Value;
+                _paged.Items[index] = result.Value;
         }
 
         _busyOrderId = null;
     }
 
-    private static string PickupWindow(Order order)
+    private string PickupWindow(Order order)
     {
         if (order.OrderPackages.Count == 0)
             return "—";
 
         // An order can span packages with different windows — show the widest span that covers them all.
-        var start = order.OrderPackages.Min(op => op.Package.PickupStart);
-        var end = order.OrderPackages.Max(op => op.Package.PickupEnd);
+        var start = ClientTimeZoneService.ToLocal(order.OrderPackages.Min(op => op.Package.PickupStart));
+        var end = ClientTimeZoneService.ToLocal(order.OrderPackages.Max(op => op.Package.PickupEnd));
 
         return start.Date == end.Date
             ? $"{start:MMM d} · {start:HH:mm}–{end:HH:mm}"

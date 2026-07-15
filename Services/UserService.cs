@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Database;
 using Netrom_Eco_Meal.Entities;
+using Netrom_Eco_Meal.Models;
 using Netrom_Eco_Meal.Services.Interfaces;
 
 namespace Netrom_Eco_Meal.Services;
@@ -44,6 +45,33 @@ public class UserService(
             .OrderBy(u => u.Name)
             .Select(u => new UserWithRole(u.Id, u.Name, u.Email!, role))
             .ToList();
+    }
+
+    public async Task<PaginatedList<UserWithRole>> GetPagedAsync(int pageIndex, int pageSize, string? search, string? role)
+    {
+        await EnsureAdminAsync();
+
+        // Left join so a roleless user still shows up (defaults to Customer, matching
+        // GetAllAsync/GetByRoleAsync). Projects to an anonymous type, not UserWithRole —
+        // EF can't translate OrderBy once a query is projected through a record constructor.
+        var query =
+            from u in userManager.Users
+            join ur in dbContext.UserRoles on u.Id equals ur.UserId into urJoin
+            from ur in urJoin.DefaultIfEmpty()
+            join r in dbContext.Roles on ur.RoleId equals r.Id into rJoin
+            from r in rJoin.DefaultIfEmpty()
+            select new { u.Id, u.Name, u.Email, Role = r.Name ?? AppRoles.Customer };
+
+        if (!string.IsNullOrWhiteSpace(search))
+            query = query.Where(u => EF.Functions.ILike(u.Name, $"%{search}%") || EF.Functions.ILike(u.Email!, $"%{search}%"));
+
+        if (!string.IsNullOrWhiteSpace(role))
+            query = query.Where(u => u.Role == role);
+
+        return await PaginatedList<UserWithRole>.CreateAsync(
+            query.OrderBy(u => u.Name),
+            u => new UserWithRole(u.Id, u.Name, u.Email!, u.Role),
+            pageIndex, pageSize);
     }
 
     public async Task<bool> UpdateRoleAsync(string userId, string role)

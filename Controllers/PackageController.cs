@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Netrom_Eco_Meal.Entities;
+using Netrom_Eco_Meal.Models;
 using Netrom_Eco_Meal.Services.Interfaces;
 
 namespace Netrom_Eco_Meal.Controllers;
@@ -12,6 +13,11 @@ public class PackageController(IPackageService packageService) : ControllerBase
     public async Task<ActionResult<List<Package>>> GetAllAsync()
     {
         return await packageService.GetAllAsync();
+    }
+
+    public async Task<ActionResult<PaginatedList<Package>>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessId, Guid? packageTypeId)
+    {
+        return await packageService.GetPagedAsync(pageIndex, pageSize, search, businessId, packageTypeId);
     }
 
     public async Task<ActionResult<Package?>> GetByIdAsync(Guid id)
