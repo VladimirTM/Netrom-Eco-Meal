@@ -18,6 +18,7 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Package> Packages { get; set; }
     public DbSet<PackageType> PackageTypes { get; set; }
     public DbSet<Status> Statuses { get; set; }
+    public DbSet<Review> Reviews { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -43,6 +44,11 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
 
         modelBuilder.Entity<Order>()
             .HasIndex(o => o.OrderNumber)
+            .IsUnique();
+
+        // One review per customer per business — resubmitting updates the existing row.
+        modelBuilder.Entity<Review>()
+            .HasIndex(r => new { r.BusinessId, r.UserId })
             .IsUnique();
 
         // Optimistic concurrency so two managers confirming the same package can't oversell stock.

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Database;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Models;
@@ -60,6 +61,12 @@ public class OrderRepository(EcoMealDbContext context) : IOrderRepository
     public async Task<Order?> GetByIdAsync(Guid id)
     {
         return await OrdersWithIncludes().FirstOrDefaultAsync(o => o.Id == id);
+    }
+
+    public async Task<bool> HasCompletedOrderAsync(string userId, Guid businessId)
+    {
+        return await context.Orders.AnyAsync(o =>
+            o.UserId == userId && o.BusinessId == businessId && o.Status.Name == OrderStatuses.Completed);
     }
 
     public async Task AddAsync(Order order)

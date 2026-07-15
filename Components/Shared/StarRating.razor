@@ -1,0 +1,58 @@
+@* Read-only mode renders a fractional gold fill over a grey track; editable mode is a 1-5 click/hover picker. *@
+@if (Editable)
+{
+    <div class="star-rating-input" style="font-size:@Size" role="radiogroup" aria-label="Your rating">
+        @for (var i = 1; i <= 5; i++)
+        {
+            var starValue = i;
+            <button type="button" class="star-rating-btn" aria-label="@starValue star@(starValue == 1 ? "" : "s")"
+                    @onmouseenter="() => _hovered = starValue" @onmouseleave="() => _hovered = 0"
+                    @onclick="() => SelectAsync(starValue)">
+                <i class="bi @(starValue <= (_hovered > 0 ? _hovered : SelectedValue) ? "bi-star-fill" : "bi-star")"></i>
+            </button>
+        }
+    </div>
+}
+else
+{
+    <span class="star-rating-group">
+        <span class="star-rating" style="font-size:@Size" aria-label="@Value.ToString("0.0") out of 5 stars">
+            <span class="star-rating-track">
+                @for (var i = 0; i < 5; i++)
+                {
+                    <i class="bi bi-star-fill"></i>
+                }
+            </span>
+            <span class="star-rating-fill" style="width:@(FillPercent.ToString(System.Globalization.CultureInfo.InvariantCulture))%">
+                @for (var i = 0; i < 5; i++)
+                {
+                    <i class="bi bi-star-fill"></i>
+                }
+            </span>
+        </span>
+        @if (ShowValue)
+        {
+            <span class="star-rating-value">@Value.ToString("0.0")@(Count is not null ? $" ({Count})" : "")</span>
+        }
+    </span>
+}
+
+@code {
+    [Parameter] public double Value { get; set; }
+    [Parameter] public bool Editable { get; set; }
+    [Parameter] public int SelectedValue { get; set; }
+    [Parameter] public EventCallback<int> SelectedValueChanged { get; set; }
+    [Parameter] public string Size { get; set; } = "1rem";
+    [Parameter] public bool ShowValue { get; set; }
+    [Parameter] public int? Count { get; set; }
+
+    private int _hovered;
+
+    private double FillPercent => Math.Clamp(Value, 0, 5) / 5 * 100;
+
+    private async Task SelectAsync(int value)
+    {
+        SelectedValue = value;
+        await SelectedValueChanged.InvokeAsync(value);
+    }
+}

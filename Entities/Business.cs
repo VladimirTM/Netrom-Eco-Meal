@@ -18,4 +18,5 @@ public class Business
     public ApplicationUser? Manager { get; set; }
     public ICollection<Package> Packages { get; set; } = [];
     public ICollection<Order> Orders { get; set; } = [];
+    public ICollection<Review> Reviews { get; set; } = [];
 }

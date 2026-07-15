@@ -40,6 +40,8 @@ builder.Services.AddScoped<IPackageService, PackageService>();
 builder.Services.AddScoped<IPackageTypeService, PackageTypeService>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
+builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<CurrentUserAccessor>();
@@ -50,6 +52,7 @@ builder.Services.AddScoped<BusinessController>();
 builder.Services.AddScoped<PackageController>();
 builder.Services.AddScoped<UserController>();
 builder.Services.AddScoped<OrderController>();
+builder.Services.AddScoped<ReviewController>();
 
 var app = builder.Build();
 
