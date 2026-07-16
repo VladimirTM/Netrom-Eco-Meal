@@ -32,7 +32,7 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
 
     public async Task<Business?> GetByIdAsync(Guid id)
     {
-        return await context.Businesses.Include(b => b.Manager).FirstOrDefaultAsync(o => o.Id == id);
+        return await context.Businesses.Include(b => b.Manager).Include(b => b.BusinessType).FirstOrDefaultAsync(o => o.Id == id);
     }
 
     public async Task<Business?> GetByManagerIdAsync(string managerId)

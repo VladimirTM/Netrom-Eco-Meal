@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Netrom_Eco_Meal.Components;
@@ -8,6 +9,12 @@ using Netrom_Eco_Meal.Repositories;
 using Netrom_Eco_Meal.Repositories.Interfaces;
 using Netrom_Eco_Meal.Services;
 using Netrom_Eco_Meal.Services.Interfaces;
+
+// Single-locale app: prices are always RON, so every ToString("C") call site (cart,
+// package cards, orders...) gets that formatting for free instead of the server's OS culture.
+var romanianCulture = new CultureInfo("ro-RO");
+CultureInfo.DefaultThreadCurrentCulture = romanianCulture;
+CultureInfo.DefaultThreadCurrentUICulture = romanianCulture;
 
 var builder = WebApplication.CreateBuilder(args);
 

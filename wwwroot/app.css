@@ -1923,31 +1923,34 @@ h1:focus {
     }
 }
 
-/* ── Business detail modal ── */
-.biz-modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(11, 31, 19, 0.55);
-    z-index: 48;
-    animation: cart-backdrop-in 0.2s ease-out;
+/* ── Business detail page ── */
+.biz-page {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 1.75rem 1.5rem 4rem;
 }
 
-.biz-modal {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: calc(100% - 2rem);
-    max-width: 720px;
-    max-height: calc(100vh - 3rem);
+.biz-page-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--em-muted);
+    text-decoration: none;
+    margin-bottom: 1.1rem;
+    transition: color 0.15s;
+}
+
+.biz-page-back:hover {
+    color: var(--em-leaf-dark);
+}
+
+.biz-page-card {
     background: #fff;
     border-radius: 20px;
     overflow: hidden;
-    z-index: 49;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 20px 60px rgba(0, 0, 0, 0.25);
-    animation: confirm-dialog-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
 .biz-modal-close {
@@ -2305,7 +2308,7 @@ h1:focus {
     left: 50%;
     transform: translate(-50%, -50%);
     width: calc(100% - 2rem);
-    max-width: 480px;
+    max-width: 640px;
     max-height: calc(100vh - 3rem);
     background: #fff;
     border-radius: 20px;
@@ -2317,7 +2320,7 @@ h1:focus {
 }
 
 .pkg-modal-hero {
-    height: 220px;
+    height: 300px;
     background-color: var(--em-forest);
     background-size: 100% 100%;
     background-repeat: no-repeat;
@@ -2325,11 +2328,11 @@ h1:focus {
 }
 
 .pkg-modal-body {
-    padding: 1.5rem 1.75rem 1.75rem;
+    padding: 1.75rem 2.25rem 2.25rem;
 }
 
 .pkg-modal-title {
-    font-size: 1.35rem;
+    font-size: 1.65rem;
     font-weight: 800;
     letter-spacing: -0.01em;
     color: var(--em-text);
@@ -2337,7 +2340,7 @@ h1:focus {
 }
 
 .pkg-modal-price {
-    font-size: 1.1rem;
+    font-size: 1.3rem;
     font-weight: 800;
     color: var(--em-leaf-dark);
     margin-bottom: 0.85rem;
@@ -2346,18 +2349,18 @@ h1:focus {
 .pkg-modal-facts {
     display: flex;
     flex-direction: column;
-    gap: 0.85rem;
+    gap: 0.95rem;
     background: var(--em-surface);
     border-radius: 14px;
-    padding: 1rem 1.1rem;
-    margin: 1.25rem 0 1.5rem;
+    padding: 1.15rem 1.3rem;
+    margin: 1.4rem 0 1.75rem;
 }
 
 .pkg-modal-fact {
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
-    font-size: 0.85rem;
+    font-size: 0.92rem;
 }
 
 .pkg-modal-fact i {
@@ -2389,19 +2392,16 @@ h1:focus {
 @media (prefers-reduced-motion: reduce) {
     .biz-card { animation: none; }
     .biz-card:hover { transform: none; }
-    .biz-modal-backdrop, .biz-modal { animation: none; }
     .biz-modal-inline-toast { animation: none; }
     .pkg-modal-backdrop, .pkg-modal { animation: none; }
 }
 
 @media (max-width: 640px) {
-    .biz-modal {
-        top: 0;
-        left: 0;
-        transform: none;
-        width: 100%;
-        height: 100%;
-        max-height: 100vh;
+    .biz-page {
+        padding: 1rem 0 3rem;
+    }
+
+    .biz-page-card {
         border-radius: 0;
     }
 

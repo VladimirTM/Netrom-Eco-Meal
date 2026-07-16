@@ -14,11 +14,11 @@ public class AuthService(SignInManager<ApplicationUser> signInManager, UserManag
         return await signInManager.PasswordSignInAsync(request.Email, request.Password, true, false);
     }
 
-    public async Task<SignInResult> RegisterAsync(RegisterRequest request, string name)
+    public async Task<string?> RegisterAsync(RegisterRequest request, string name)
     {
         if (await userManager.FindByEmailAsync(request.Email) is not null)
         {
-            return SignInResult.Failed;
+            return "An account with this email already exists.";
         }
 
         var user = new ApplicationUser
@@ -32,13 +32,14 @@ public class AuthService(SignInManager<ApplicationUser> signInManager, UserManag
         var result = await userManager.CreateAsync(user, request.Password);
         if (!result.Succeeded)
         {
-            return SignInResult.Failed;
+            return string.Join(" ", result.Errors.Select(e => e.Description));
         }
 
         // Self-registration always starts as Customer; only an admin can promote from here.
         await userManager.AddToRoleAsync(user, AppRoles.Customer);
 
-        return await signInManager.PasswordSignInAsync(request.Email, request.Password, true, false);
+        var signInResult = await signInManager.PasswordSignInAsync(request.Email, request.Password, true, false);
+        return signInResult.Succeeded ? null : "Account created, but automatic sign-in failed. Please log in.";
     }
 
     public async Task LogoutAsync()

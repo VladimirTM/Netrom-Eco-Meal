@@ -7,6 +7,7 @@ namespace Netrom_Eco_Meal.Services.Interfaces;
 public interface IAuthService
 {
     public Task<SignInResult> LoginAsync(LoginRequest request);
-    public Task<SignInResult> RegisterAsync(RegisterRequest request, string name);
+    // Returns null on success, or a user-facing error message on failure.
+    public Task<string?> RegisterAsync(RegisterRequest request, string name);
     public Task LogoutAsync();
 }

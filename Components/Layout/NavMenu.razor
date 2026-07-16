@@ -67,6 +67,7 @@
                 <div class="sidebar-user-role">@DisplayRole(context.User)</div>
             </div>
             <form method="post" action="api/auth/logout">
+                <AntiforgeryToken />
                 <button type="submit" class="sidebar-logout-btn" title="Sign out"
                         onclick="EcoMeal.cart.clear('@CartService.StorageKey')">
                     <i class="bi bi-box-arrow-right"></i>

@@ -17,15 +17,16 @@
 
         @* Plain HTML post (not EditForm) so returnUrl round-trips as a form field to AuthController. *@
         <form method="post" action="api/auth/login">
+            <AntiforgeryToken />
             <input type="hidden" name="returnUrl" value="@ReturnUrl"/>
             <div class="mb-3">
                 <label class="form-label fw-semibold" for="login-email">Email</label>
-                <input id="login-email" class="form-control" type="email" name="email"
+                <input id="login-email" class="form-control" type="email" name="email" required
                        placeholder="you@example.com" autocomplete="email"/>
             </div>
             <div class="mb-4">
                 <label class="form-label fw-semibold" for="login-password">Password</label>
-                <input id="login-password" class="form-control" type="password" name="password"
+                <input id="login-password" class="form-control" type="password" name="password" required
                        placeholder="••••••••" autocomplete="current-password"/>
             </div>
             @if (Error is not null)

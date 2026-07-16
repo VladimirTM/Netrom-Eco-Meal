@@ -13,6 +13,7 @@
 @inject ReviewController ReviewController
 @inject IBusinessTypeService BusinessTypeService
 @inject CartService CartService
+@inject NavigationManager NavigationManager
 
 <PageTitle>Eco Meal — rescue surplus food near you</PageTitle>
 
@@ -139,8 +140,6 @@
     }
 </section>
 
-<BusinessDetailModal @bind-BusinessId="_selectedBusinessId"/>
-
 @code {
     private PaginatedList<Business>? _paged;
     private List<BusinessType>? _businessTypes;
@@ -152,7 +151,6 @@
     private string _businessTypeFilter = "";
     private int _pageIndex = 1;
     private const int PageSize = 9;
-    private Guid? _selectedBusinessId;
     private readonly Debouncer _reloadGate = new();
 
     private bool HasActiveFilters => _search != "" || _businessTypeFilter != "";
@@ -219,7 +217,7 @@
         ? "background-color: var(--em-forest);"
         : $"background-image: url('{imageUrl}');";
 
-    private void OpenBusiness(Guid businessId) => _selectedBusinessId = businessId;
+    private void OpenBusiness(Guid businessId) => NavigationManager.NavigateTo($"/businesses/{businessId}");
 
     private void HandleCartChanged() => InvokeAsync(StateHasChanged);
 

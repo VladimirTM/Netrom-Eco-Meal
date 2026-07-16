@@ -1,3 +1,5 @@
+@page "/businesses/{Id:guid}"
+@layout PublicLayout
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Mvc
 @using Netrom_Eco_Meal.Constants
@@ -5,6 +7,7 @@
 @using Netrom_Eco_Meal.Entities
 @using Netrom_Eco_Meal.Services
 @using Netrom_Eco_Meal.Services.Interfaces
+@rendermode InteractiveServer
 @implements IDisposable
 @inject BusinessController BusinessController
 @inject PackageController PackageController
@@ -12,26 +15,28 @@
 @inject CartService CartService
 @inject ClientTimeZoneService ClientTimeZoneService
 
-@if (BusinessId is not null)
-{
-    <div class="biz-modal-backdrop" @onclick="Close"></div>
-    <div class="biz-modal" role="dialog" aria-modal="true" aria-labelledby="biz-modal-title">
-        <button type="button" class="biz-modal-close" @onclick="Close" aria-label="Close">
-            <i class="bi bi-x-lg"></i>
-        </button>
+<PageTitle>@(_business?.Name ?? "Business") — Eco Meal</PageTitle>
 
-        @if (_business is null)
-        {
-            <div class="biz-modal-loading">
-                <div class="spinner-border text-light" role="status"><span class="visually-hidden">Loading...</span></div>
-            </div>
-        }
-        else
-        {
+@if (_business is null && !_loading)
+{
+    <NotFoundPanel Title="Business not found" Message="This kitchen no longer exists — it may have closed or been removed." BackHref="/" BackLabel="Back to home"/>
+}
+else if (_loading)
+{
+    <div class="biz-modal-loading">
+        <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+    </div>
+}
+else
+{
+    <div class="biz-page">
+        <a href="/" class="biz-page-back"><i class="bi bi-arrow-left"></i> Back to all kitchens</a>
+
+        <div class="biz-page-card">
             <div class="biz-modal-hero" style="@HeroStyle">
                 <div class="biz-modal-hero-overlay">
-                    <span class="biz-modal-eyebrow">@_business.BusinessType.Name</span>
-                    <h2 class="biz-modal-title" id="biz-modal-title">@_business.Name</h2>
+                    <span class="biz-modal-eyebrow">@_business!.BusinessType.Name</span>
+                    <h1 class="biz-modal-title" id="biz-modal-title">@_business.Name</h1>
                     <div class="biz-modal-meta">
                         <span class="biz-modal-address"><i class="bi bi-geo-alt-fill"></i>@_business.Address</span>
                         @if (_reviews.Count > 0)
@@ -169,7 +174,7 @@
                     }
                 </section>
             </div>
-        }
+        </div>
     </div>
 }
 
@@ -190,10 +195,9 @@
                OnCancel="() => _pendingSwitch = null"/>
 
 @code {
-    [Parameter] public Guid? BusinessId { get; set; }
-    [Parameter] public EventCallback<Guid?> BusinessIdChanged { get; set; }
+    [Parameter] public Guid Id { get; set; }
 
-    private Guid? _loadedBusinessId;
+    private bool _loading = true;
     private Business? _business;
     private List<Package> _packages = [];
     private bool _loadingPackages;
@@ -226,39 +230,24 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (BusinessId == _loadedBusinessId)
-            return;
+        _loading = true;
+        _business = (await BusinessController.GetByIdAsync(Id)).Value;
+        _loading = false;
 
-        _loadedBusinessId = BusinessId;
-        _business = null;
-        _packages = [];
-        _reviews = [];
-        _reviewContext = null;
-        _reviewRating = 0;
-        _reviewComment = "";
-        _reviewError = null;
-        _toastMessage = null;
-        _pendingSwitch = null;
-        _selectedPackage = null;
-
-        if (BusinessId is not { } businessId)
-            return;
-
-        _business = (await BusinessController.GetByIdAsync(businessId)).Value;
         if (_business is null)
             return;
 
         _loadingPackages = true;
         StateHasChanged();
 
-        var paged = (await PackageController.GetPagedAsync(1, 100, null, businessId, null)).Value;
+        var paged = (await PackageController.GetPagedAsync(1, 100, null, Id, null)).Value;
         _packages = paged?.Items
             .Where(p => p.PickupEnd > DateTime.UtcNow)
             .OrderBy(p => p.PickupEnd)
             .ToList() ?? [];
         _loadingPackages = false;
 
-        await ReloadReviewsAsync(businessId);
+        await ReloadReviewsAsync(Id);
     }
 
     private async Task ReloadReviewsAsync(Guid businessId)
@@ -332,8 +321,6 @@
     private void HandleCartChanged() => InvokeAsync(StateHasChanged);
 
     private void HandleTimeZoneChanged() => InvokeAsync(StateHasChanged);
-
-    private async Task Close() => await BusinessIdChanged.InvokeAsync(null);
 
     public void Dispose()
     {
