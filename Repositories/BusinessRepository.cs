@@ -14,7 +14,7 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
         return await context.Businesses.Include(b => b.BusinessType).Include(b => b.Manager).ToListAsync();
     }
 
-    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId)
+    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null)
     {
         var query = context.Businesses.Include(b => b.BusinessType).Include(b => b.Manager).AsQueryable();
 
@@ -26,6 +26,9 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
 
         if (businessTypeId.HasValue)
             query = query.Where(b => b.BusinessTypeId == businessTypeId);
+
+        if (managerId is not null)
+            query = query.Where(b => b.ManagerId == managerId);
 
         return await PaginatedList<Business>.CreateAsync(query.OrderBy(b => b.Name), pageIndex, pageSize);
     }

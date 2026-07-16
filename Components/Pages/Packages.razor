@@ -39,13 +39,16 @@
             <input type="text" class="form-control border-start-0 ps-0" placeholder="Search name or description…"
                    @bind="_search" @bind:event="oninput" @bind:after="OnSearchInputAsync" />
         </div>
-        <select class="form-select" style="max-width: 200px;" @bind="_businessFilter" @bind:after="FilterChangedAsync">
-            <option value="">All businesses</option>
-            @foreach (var b in _allBusinesses)
-            {
-                <option value="@b.Id">@b.Name</option>
-            }
-        </select>
+        @if (_isAdmin)
+        {
+            <select class="form-select" style="max-width: 200px;" @bind="_businessFilter" @bind:after="FilterChangedAsync">
+                <option value="">All businesses</option>
+                @foreach (var b in _allBusinesses)
+                {
+                    <option value="@b.Id">@b.Name</option>
+                }
+            </select>
+        }
         <select class="form-select" style="max-width: 180px;" @bind="_typeFilter" @bind:after="FilterChangedAsync">
             <option value="">All types</option>
             @foreach (var t in _packageTypes)
@@ -102,7 +105,7 @@
                 </tr>
                 </thead>
                 <tbody>
-                @* Managers can browse every business's packages here but only edit/delete their own. *@
+                @* Managers only see packages belonging to their own business here. *@
                 @foreach (var package in _paged.Items)
                 {
                     var canManage = _isAdmin || (_isBusinessManager && package.BusinessId == _myBusinessId);
@@ -193,7 +196,9 @@
 
     private async Task LoadPageAsync()
     {
-        Guid? businessId = Guid.TryParse(_businessFilter, out var bId) ? bId : null;
+        // An unassigned manager has no business — fall back to a Guid that can never match
+        // rather than leaving the filter null, which would otherwise show every business's packages.
+        Guid? businessId = _isBusinessManager ? _myBusinessId ?? Guid.Empty : (Guid.TryParse(_businessFilter, out var bId) ? bId : null);
         Guid? packageTypeId = Guid.TryParse(_typeFilter, out var tId) ? tId : null;
         _paged = (await PackageController.GetPagedAsync(_pageIndex, PageSize, _search, businessId, packageTypeId)).Value;
 

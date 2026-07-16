@@ -236,14 +236,15 @@
     private async Task LoadPageAsync()
     {
         Guid? typeId = Guid.TryParse(_typeFilter, out var id) ? id : null;
-        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId)).Value;
+        var managerId = _isBusinessManager ? _currentUserId : null;
+        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId, managerId)).Value;
 
         // A mutation (e.g. deleting the last item on the last page) can shrink TotalPages below
         // the page we're currently viewing — re-fetch the now-last valid page instead of showing empty.
         if (_paged is not null && _paged.Items.Count == 0 && _pageIndex > _paged.TotalPages)
         {
             _pageIndex = _paged.TotalPages;
-            _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId)).Value;
+            _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId, managerId)).Value;
         }
     }
 
