@@ -8,7 +8,9 @@
 @using Netrom_Eco_Meal.Services.Interfaces
 @rendermode InteractiveServer
 @implements IDisposable
+@inject BusinessController BusinessController
 @inject PackageController PackageController
+@inject ReviewController ReviewController
 @inject IBusinessTypeService BusinessTypeService
 @inject CartService CartService
 
@@ -23,20 +25,20 @@
         </h1>
         <p class="home-hero-sub">
             Local restaurants, bakeries and cafés list the food they'd otherwise throw out at closing time —
-            at a fraction of the price. Browse what's left and pick it up straight from the kitchen.
+            at a fraction of the price. Pick a kitchen to see what's left and book your pickup.
         </p>
 
         <div class="home-stats">
             <div class="home-stat">
-                <span class="home-stat-value">@(_packages is null ? "—" : _packages.Count.ToString())</span>
+                <span class="home-stat-value">@(_livePackages is null ? "—" : _livePackages.Count.ToString())</span>
                 <span class="home-stat-label">packages live</span>
             </div>
             <div class="home-stat">
-                <span class="home-stat-value">@(_packages is null ? "—" : _packages.Sum(p => CartService.AvailableQuantity(p)).ToString())</span>
+                <span class="home-stat-value">@(_livePackages is null ? "—" : _livePackages.Sum(p => CartService.AvailableQuantity(p)).ToString())</span>
                 <span class="home-stat-label">portions to save</span>
             </div>
             <div class="home-stat">
-                <span class="home-stat-value">@(_packages is null ? "—" : _packages.Select(p => p.BusinessId).Distinct().Count().ToString())</span>
+                <span class="home-stat-value">@(_livePackages is null ? "—" : _livePackages.Select(p => p.BusinessId).Distinct().Count().ToString())</span>
                 <span class="home-stat-label">kitchens on board</span>
             </div>
         </div>
@@ -44,16 +46,16 @@
 </section>
 
 <section class="home-browse">
-    @if (_packages is not null)
+    @if (_paged is not null)
     {
         <div class="home-filter-bar">
             <div class="input-group home-search">
                 <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
-                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search packages or kitchens…"
-                       @bind="_search" @bind:event="oninput"/>
+                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search kitchens…"
+                       @bind="_search" @bind:event="oninput" @bind:after="OnSearchInputAsync"/>
             </div>
 
-            <select class="form-select home-business-filter" @bind="_businessTypeFilter">
+            <select class="form-select home-business-filter" @bind="_businessTypeFilter" @bind:after="FilterChangedAsync">
                 <option value="">All kitchen types</option>
                 @foreach (var bt in _businessTypes ?? [])
                 {
@@ -63,35 +65,18 @@
 
             @if (HasActiveFilters)
             {
-                <button class="btn btn-outline-secondary btn-sm" @onclick="ClearFilters">
+                <button class="btn btn-outline-secondary btn-sm" @onclick="ClearFiltersAsync">
                     <i class="bi bi-x-lg me-1"></i>Clear
                 </button>
             }
         </div>
 
-        <div class="home-chip-row">
-            <button type="button" class="home-chip @(_typeFilter == "" ? "home-chip-active" : "")" @onclick='() => _typeFilter = ""'>
-                All types
-            </button>
-            @foreach (var t in DistinctPackageTypes)
-            {
-                <button type="button" class="home-chip @(_typeFilter == t.Id.ToString() ? "home-chip-active" : "")"
-                        @onclick="() => _typeFilter = t.Id.ToString()">
-                    @t.Name
-                </button>
-            }
-        </div>
-
         <div class="home-results-row">
-            <span class="text-muted small">@Filtered.Count package@(Filtered.Count == 1 ? "" : "s") found</span>
-            @if (Filtered.Count > 1)
-            {
-                <span class="text-muted small home-sort-hint"><i class="bi bi-hourglass-split"></i>Closing soonest first</span>
-            }
+            <span class="text-muted small">@_paged.TotalCount kitchen@(_paged.TotalCount == 1 ? "" : "s") found</span>
         </div>
     }
 
-    @if (_packages is null)
+    @if (_paged is null)
     {
         <div class="d-flex justify-content-center py-5">
             <div class="spinner-border text-primary" role="status">
@@ -99,167 +84,147 @@
             </div>
         </div>
     }
-    else if (Filtered.Count == 0)
+    else if (_paged.Items.Count == 0)
     {
         <div class="home-empty">
-            <i class="bi bi-basket2 fs-1 text-muted d-block mb-3"></i>
-            <p class="text-muted mb-0">@(_packages.Count == 0 ? "No packages are live right now — check back soon." : "Nothing matches your filters yet.")</p>
+            <i class="bi bi-shop fs-1 text-muted d-block mb-3"></i>
+            <p class="text-muted mb-0">@(_paged.TotalCount == 0 && !HasActiveFilters ? "No kitchens have joined yet — check back soon." : "Nothing matches your filters yet.")</p>
         </div>
     }
     else
     {
-        <div class="home-grid">
-            @foreach (var package in Filtered)
+        <div class="biz-grid">
+            @foreach (var business in _paged.Items)
             {
-                <article class="package-card">
-                    @if (!string.IsNullOrWhiteSpace(package.ImageUrl))
-                    {
-                        <div class="package-card-media">
-                            <img src="@package.ImageUrl" alt="@package.Name" class="package-card-image" loading="lazy"/>
-                        </div>
-                    }
-                    <div class="package-card-body">
-                        <div class="d-flex justify-content-between align-items-start gap-2">
-                            <span class="package-card-type">@package.PackageType.Name</span>
-                            <span class="package-card-qty">@CartService.AvailableQuantity(package) left</span>
-                        </div>
-                        <h2 class="package-card-name">@package.Name</h2>
-                        <div class="package-card-business">
-                            <i class="bi bi-shop"></i>@package.Business.Name
-                            @if (_businessTypeNames.TryGetValue(package.Business.BusinessTypeId, out var typeName))
-                            {
-                                <span class="package-card-business-type">&middot; @typeName</span>
-                            }
-                        </div>
-                        <p class="package-card-desc">@package.Description</p>
-                        <div class="package-card-footer">
-                            <div class="package-card-pickup">
-                                <i class="bi bi-clock"></i>
-                                @package.PickupStart.ToString("MMM d")&nbsp;&middot;&nbsp;@package.PickupStart.ToString("HH:mm")–@package.PickupEnd.ToString("HH:mm")
-                            </div>
-                            <div class="package-card-price">@package.Price.ToString("C")</div>
-                        </div>
-                        <AuthorizeView Roles="@AppRoles.Customer" Context="cartAuth">
-                            <Authorized>
-                                @if (CartService.AvailableQuantity(package) <= 0)
-                                {
-                                    <button type="button" class="package-card-add-btn" disabled>Sold out</button>
-                                }
-                                else
-                                {
-                                    <button type="button" class="package-card-add-btn" @onclick="() => AddToCart(package)">
-                                        <i class="bi bi-bag-plus"></i> Add to basket
-                                    </button>
-                                }
-                            </Authorized>
-                        </AuthorizeView>
+                var live = LivePackagesFor(business.Id);
+                var reviews = ReviewsFor(business.Id);
+                <button type="button" class="biz-card" @key="business.Id" @onclick="() => OpenBusiness(business.Id)">
+                    <div class="biz-card-media" style="@MediaStyle(business.ImageUrl)">
+                        @if (live.Count > 0)
+                        {
+                            <span class="biz-card-live-badge"><span class="biz-card-live-dot"></span>@live.Count live</span>
+                        }
+                        @if (reviews.Count > 0)
+                        {
+                            <span class="biz-card-rating-badge">
+                                <StarRating Value="@reviews.Average(r => r.Rating)" Size="0.65rem"/>
+                                @reviews.Average(r => r.Rating).ToString("0.0")
+                            </span>
+                        }
                     </div>
-                </article>
+                    <div class="biz-card-body">
+                        <span class="biz-card-type">@business.BusinessType.Name</span>
+                        <h2 class="biz-card-name">@business.Name</h2>
+                        <div class="biz-card-address"><i class="bi bi-geo-alt-fill"></i>@business.Address</div>
+                        <p class="biz-card-desc">@business.Description</p>
+                        <div class="biz-card-footer">
+                            @if (live.Count > 0)
+                            {
+                                <span class="biz-card-from">from @live.Min(p => p.Price).ToString("C")</span>
+                            }
+                            else
+                            {
+                                <span class="biz-card-from biz-card-from-muted">Nothing live now</span>
+                            }
+                            <span class="biz-card-cta">View kitchen <i class="bi bi-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </button>
             }
+        </div>
+
+        <div class="home-pagination">
+            <Pagination CurrentPage="_paged.PageIndex" TotalPages="_paged.TotalPages" OnPageChange="PageChangedAsync"/>
         </div>
     }
 </section>
 
-@* @key regenerates on every add so the toast re-animates even if the message text repeats. *@
-@if (_toastMessage is not null)
-{
-    <div class="toast-pill" @key="_toastToken">
-        <i class="bi bi-check-circle-fill"></i> @_toastMessage
-    </div>
-}
-
-<ConfirmDialog IsOpen="@(_pendingSwitch is not null)"
-               Title="Start a new basket?"
-               Message="@SwitchMessage"
-               ConfirmLabel="Start new basket"
-               CancelLabel="Keep current basket"
-               ConfirmClass="btn-primary"
-               Busy="@_switchingBasket"
-               OnConfirm="ConfirmSwitchBasketAsync"
-               OnCancel="CancelSwitchBasket"/>
+<BusinessDetailModal @bind-BusinessId="_selectedBusinessId"/>
 
 @code {
-    private List<Package>? _packages;
+    private PaginatedList<Business>? _paged;
     private List<BusinessType>? _businessTypes;
-    private Dictionary<Guid, string> _businessTypeNames = new();
+    private List<Package>? _livePackages;
+    private Dictionary<Guid, List<Package>> _livePackagesByBusiness = [];
+    private Dictionary<Guid, List<Review>> _reviewsByBusiness = [];
 
     private string _search = "";
-    private string _typeFilter = "";
     private string _businessTypeFilter = "";
-    private string? _toastMessage;
-    private Guid _toastToken;
-    private Package? _pendingSwitch;
-    private bool _switchingBasket;
+    private int _pageIndex = 1;
+    private const int PageSize = 9;
+    private Guid? _selectedBusinessId;
+    private readonly Debouncer _reloadGate = new();
 
-    private bool HasActiveFilters => _search != "" || _typeFilter != "" || _businessTypeFilter != "";
-
-    private string SwitchMessage => _pendingSwitch is null ? "" :
-        $"Your basket has items from {CartService.BusinessName}. Adding \"{_pendingSwitch.Name}\" from {_pendingSwitch.Business.Name} will clear it and start a new one.";
-
-    private IEnumerable<PackageType> DistinctPackageTypes => _packages is null ? [] :
-        _packages.Select(p => p.PackageType).DistinctBy(t => t.Id).OrderBy(t => t.Name);
-
-    private List<Package> Filtered => _packages is null ? [] : _packages
-        .Where(p =>
-            TextHelpers.MatchesSearch(_search, p.Name, p.Description, p.Business.Name) &&
-            (_typeFilter == "" || p.PackageTypeId.ToString() == _typeFilter) &&
-            (_businessTypeFilter == "" || p.Business.BusinessTypeId.ToString() == _businessTypeFilter))
-        .OrderBy(p => p.PickupEnd)
-        .ToList();
+    private bool HasActiveFilters => _search != "" || _businessTypeFilter != "";
 
     protected override async Task OnInitializedAsync()
     {
-        var packages = (await PackageController.GetAllAsync()).Value;
-        // Only show packages still orderable today — DbSeeder keeps seed data's window fresh.
-        _packages = packages?.Where(p => p.PickupEnd > DateTime.UtcNow).ToList();
         _businessTypes = await BusinessTypeService.GetAllAsync();
-        _businessTypeNames = _businessTypes.ToDictionary(t => t.Id, t => t.Name);
+
+        var packages = (await PackageController.GetAllAsync()).Value;
+        // Only count packages still orderable today — DbSeeder keeps seed data's window fresh.
+        _livePackages = packages?.Where(p => p.PickupEnd > DateTime.UtcNow).ToList() ?? [];
+        _livePackagesByBusiness = _livePackages.GroupBy(p => p.BusinessId).ToDictionary(g => g.Key, g => g.ToList());
 
         CartService.OnChange += HandleCartChanged;
+
+        await LoadPageAsync();
     }
+
+    private async Task LoadPageAsync()
+    {
+        Guid? typeId = Guid.TryParse(_businessTypeFilter, out var id) ? id : null;
+        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId)).Value;
+
+        // Only fetch reviews for the businesses actually shown on this page, not the whole table.
+        var businessIds = _paged?.Items.Select(b => b.Id).ToList() ?? [];
+        var reviews = businessIds.Count == 0 ? [] : (await ReviewController.GetByBusinessesAsync(businessIds)).Value ?? [];
+        _reviewsByBusiness = reviews.GroupBy(r => r.BusinessId).ToDictionary(g => g.Key, g => g.ToList());
+    }
+
+    private Task ReloadAsync(int delayMs = 0) => _reloadGate.DebounceAsync(LoadPageAsync, delayMs);
+
+    private Task OnSearchInputAsync()
+    {
+        _pageIndex = 1;
+        return ReloadAsync(300);
+    }
+
+    private Task FilterChangedAsync()
+    {
+        _pageIndex = 1;
+        return ReloadAsync();
+    }
+
+    private Task PageChangedAsync(int page)
+    {
+        _pageIndex = page;
+        return ReloadAsync();
+    }
+
+    private Task ClearFiltersAsync()
+    {
+        _search = "";
+        _businessTypeFilter = "";
+        return FilterChangedAsync();
+    }
+
+    private List<Package> LivePackagesFor(Guid businessId) =>
+        _livePackagesByBusiness.GetValueOrDefault(businessId, []);
+
+    private List<Review> ReviewsFor(Guid businessId) =>
+        _reviewsByBusiness.GetValueOrDefault(businessId, []);
+
+    private static string MediaStyle(string? imageUrl) => string.IsNullOrWhiteSpace(imageUrl)
+        ? "background-color: var(--em-forest);"
+        : $"background-image: url('{imageUrl}');";
+
+    private void OpenBusiness(Guid businessId) => _selectedBusinessId = businessId;
 
     private void HandleCartChanged() => InvokeAsync(StateHasChanged);
 
     public void Dispose()
     {
         CartService.OnChange -= HandleCartChanged;
-    }
-
-    private async Task AddToCart(Package package)
-    {
-        // A basket can only hold one business's packages — confirm before clearing it for a new one.
-        if (CartService.WouldReplaceCart(package))
-        {
-            _pendingSwitch = package;
-            return;
-        }
-
-        await CartService.AddAsync(package);
-        _toastMessage = $"Added \"{package.Name}\" to your basket.";
-        _toastToken = Guid.NewGuid();
-    }
-
-    private async Task ConfirmSwitchBasketAsync()
-    {
-        if (_pendingSwitch is null)
-            return;
-
-        var package = _pendingSwitch;
-        _switchingBasket = true;
-        await CartService.AddAsync(package);
-        _switchingBasket = false;
-        _pendingSwitch = null;
-
-        _toastMessage = $"Started a new basket from {package.Business.Name} — your previous items were cleared.";
-        _toastToken = Guid.NewGuid();
-    }
-
-    private void CancelSwitchBasket() => _pendingSwitch = null;
-
-    private void ClearFilters()
-    {
-        _search = "";
-        _typeFilter = "";
-        _businessTypeFilter = "";
     }
 }

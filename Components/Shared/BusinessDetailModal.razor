@@ -1,0 +1,343 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Mvc
+@using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services
+@using Netrom_Eco_Meal.Services.Interfaces
+@implements IDisposable
+@inject BusinessController BusinessController
+@inject PackageController PackageController
+@inject ReviewController ReviewController
+@inject CartService CartService
+@inject ClientTimeZoneService ClientTimeZoneService
+
+@if (BusinessId is not null)
+{
+    <div class="biz-modal-backdrop" @onclick="Close"></div>
+    <div class="biz-modal" role="dialog" aria-modal="true" aria-labelledby="biz-modal-title">
+        <button type="button" class="biz-modal-close" @onclick="Close" aria-label="Close">
+            <i class="bi bi-x-lg"></i>
+        </button>
+
+        @if (_business is null)
+        {
+            <div class="biz-modal-loading">
+                <div class="spinner-border text-light" role="status"><span class="visually-hidden">Loading...</span></div>
+            </div>
+        }
+        else
+        {
+            <div class="biz-modal-hero" style="@HeroStyle">
+                <div class="biz-modal-hero-overlay">
+                    <span class="biz-modal-eyebrow">@_business.BusinessType.Name</span>
+                    <h2 class="biz-modal-title" id="biz-modal-title">@_business.Name</h2>
+                    <div class="biz-modal-meta">
+                        <span class="biz-modal-address"><i class="bi bi-geo-alt-fill"></i>@_business.Address</span>
+                        @if (_reviews.Count > 0)
+                        {
+                            <StarRating Value="@AverageRating" ShowValue="true" Count="@_reviews.Count" Size="0.8rem"/>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="biz-modal-body">
+                <p class="biz-modal-desc">@_business.Description</p>
+
+                @if (_toastMessage is not null)
+                {
+                    <div class="biz-modal-inline-toast" @key="_toastToken">
+                        <i class="bi bi-check-circle-fill"></i> @_toastMessage
+                    </div>
+                }
+
+                <div class="biz-modal-divider"></div>
+
+                <section class="biz-modal-section">
+                    <h3 class="biz-modal-section-title"><i class="bi bi-bag-check"></i> What's available</h3>
+
+                    @if (_loadingPackages)
+                    {
+                        <div class="d-flex justify-content-center py-4">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+                        </div>
+                    }
+                    else if (_packages.Count == 0)
+                    {
+                        <p class="biz-modal-empty">Nothing live from this kitchen right now — check back later.</p>
+                    }
+                    else
+                    {
+                        <div class="biz-pkg-list">
+                            @foreach (var package in _packages)
+                            {
+                                var available = CartService.AvailableQuantity(package);
+                                <div class="biz-pkg-row biz-pkg-row-clickable" @onclick="() => _selectedPackage = package">
+                                    <div class="biz-pkg-info">
+                                        <div class="biz-pkg-name">@package.Name</div>
+                                        <div class="biz-pkg-meta">
+                                            <span class="biz-pkg-type">@package.PackageType.Name</span>
+                                            <span>&middot;</span>
+                                            <span><i class="bi bi-clock"></i>@PickupLabel(package)</span>
+                                        </div>
+                                        <p class="biz-pkg-desc">@package.Description</p>
+                                    </div>
+                                    <div class="biz-pkg-side">
+                                        <div class="biz-pkg-price">@package.Price.ToString("C")</div>
+                                        <div class="biz-pkg-qty">@available left</div>
+                                        <AuthorizeView Roles="@AppRoles.Customer" Context="cartAuth">
+                                            <Authorized>
+                                                @if (available <= 0)
+                                                {
+                                                    <button type="button" class="biz-pkg-add-btn" disabled @onclick:stopPropagation="true">Sold out</button>
+                                                }
+                                                else
+                                                {
+                                                    <button type="button" class="biz-pkg-add-btn" @onclick="() => AddToCart(package)" @onclick:stopPropagation="true">
+                                                        <i class="bi bi-bag-plus"></i> Add
+                                                    </button>
+                                                }
+                                            </Authorized>
+                                        </AuthorizeView>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </section>
+
+                <div class="biz-modal-divider"></div>
+
+                <section class="biz-modal-section">
+                    <h3 class="biz-modal-section-title"><i class="bi bi-chat-square-text"></i> Reviews</h3>
+
+                    <AuthorizeView Roles="@AppRoles.Customer" Context="reviewAuth">
+                        <Authorized>
+                            @if (_reviewContext is { CanReview: true })
+                            {
+                                <div class="biz-review-form">
+                                    <span class="biz-review-form-label">@(_reviewContext.MyReview is null ? "Leave a review" : "Update your review")</span>
+                                    <StarRating Editable="true" SelectedValue="_reviewRating" SelectedValueChanged="v => _reviewRating = v" Size="1.4rem"/>
+                                    <textarea class="form-control biz-review-textarea" rows="2" maxlength="600"
+                                              placeholder="What did you think? (optional)" @bind="_reviewComment"></textarea>
+                                    @if (_reviewError is not null)
+                                    {
+                                        <div class="alert alert-danger py-2 small mb-0">@_reviewError</div>
+                                    }
+                                    <button type="button" class="btn btn-primary btn-sm align-self-start" disabled="@(_reviewRating < 1 || _submittingReview)" @onclick="SubmitReviewAsync">
+                                        @if (_submittingReview)
+                                        {
+                                            <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                        }
+                                        @(_reviewContext.MyReview is null ? "Submit review" : "Update review")
+                                    </button>
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="biz-modal-review-hint">Order from @_business.Name and come back to leave a review.</p>
+                            }
+                        </Authorized>
+                    </AuthorizeView>
+
+                    @if (_reviews.Count == 0)
+                    {
+                        <p class="biz-modal-empty">No reviews yet — be the first to rescue a meal here.</p>
+                    }
+                    else
+                    {
+                        <div class="biz-review-list">
+                            @foreach (var review in _reviews)
+                            {
+                                <div class="biz-review-card">
+                                    <div class="biz-review-avatar">@TextHelpers.GetInitial(review.User.Name)</div>
+                                    <div class="biz-review-content">
+                                        <div class="biz-review-top">
+                                            <span class="biz-review-name">@review.User.Name</span>
+                                            <span class="biz-review-date">@ClientTimeZoneService.ToLocal(review.CreatedAt).ToString("MMM d, yyyy")</span>
+                                        </div>
+                                        <StarRating Value="@review.Rating" Size="0.75rem"/>
+                                        @if (!string.IsNullOrWhiteSpace(review.Comment))
+                                        {
+                                            <p class="biz-review-comment">@review.Comment</p>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </section>
+            </div>
+        }
+    </div>
+}
+
+<PackageDetailModal Package="_selectedPackage"
+                     AvailableQuantity="@(_selectedPackage is null ? 0 : CartService.AvailableQuantity(_selectedPackage))"
+                     PickupLabel="@(_selectedPackage is null ? "" : PickupLabel(_selectedPackage))"
+                     OnClose="() => _selectedPackage = null"
+                     OnAddToCart="AddToCart"/>
+
+<ConfirmDialog IsOpen="@(_pendingSwitch is not null)"
+               Title="Start a new basket?"
+               Message="@SwitchMessage"
+               ConfirmLabel="Start new basket"
+               CancelLabel="Keep current basket"
+               ConfirmClass="btn-primary"
+               Busy="@_switchingBasket"
+               OnConfirm="ConfirmSwitchBasketAsync"
+               OnCancel="() => _pendingSwitch = null"/>
+
+@code {
+    [Parameter] public Guid? BusinessId { get; set; }
+    [Parameter] public EventCallback<Guid?> BusinessIdChanged { get; set; }
+
+    private Guid? _loadedBusinessId;
+    private Business? _business;
+    private List<Package> _packages = [];
+    private bool _loadingPackages;
+    private List<Review> _reviews = [];
+    private ReviewContext? _reviewContext;
+    private int _reviewRating;
+    private string _reviewComment = "";
+    private bool _submittingReview;
+    private string? _reviewError;
+    private string? _toastMessage;
+    private Guid _toastToken;
+    private Package? _pendingSwitch;
+    private bool _switchingBasket;
+    private Package? _selectedPackage;
+
+    private double AverageRating => _reviews.Count == 0 ? 0 : _reviews.Average(r => r.Rating);
+
+    private string HeroStyle => string.IsNullOrWhiteSpace(_business?.ImageUrl)
+        ? "background-color: var(--em-forest);"
+        : $"background-image: linear-gradient(180deg, rgba(11,31,19,0.15) 0%, rgba(11,31,19,0.85) 100%), url('{_business.ImageUrl}');";
+
+    private string SwitchMessage => _pendingSwitch is null ? "" :
+        $"Your basket has items from {CartService.BusinessName}. Adding \"{_pendingSwitch.Name}\" from {_pendingSwitch.Business.Name} will clear it and start a new one.";
+
+    protected override void OnInitialized()
+    {
+        CartService.OnChange += HandleCartChanged;
+        ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (BusinessId == _loadedBusinessId)
+            return;
+
+        _loadedBusinessId = BusinessId;
+        _business = null;
+        _packages = [];
+        _reviews = [];
+        _reviewContext = null;
+        _reviewRating = 0;
+        _reviewComment = "";
+        _reviewError = null;
+        _toastMessage = null;
+        _pendingSwitch = null;
+        _selectedPackage = null;
+
+        if (BusinessId is not { } businessId)
+            return;
+
+        _business = (await BusinessController.GetByIdAsync(businessId)).Value;
+        if (_business is null)
+            return;
+
+        _loadingPackages = true;
+        StateHasChanged();
+
+        var paged = (await PackageController.GetPagedAsync(1, 100, null, businessId, null)).Value;
+        _packages = paged?.Items
+            .Where(p => p.PickupEnd > DateTime.UtcNow)
+            .OrderBy(p => p.PickupEnd)
+            .ToList() ?? [];
+        _loadingPackages = false;
+
+        await ReloadReviewsAsync(businessId);
+    }
+
+    private async Task ReloadReviewsAsync(Guid businessId)
+    {
+        _reviews = (await ReviewController.GetByBusinessAsync(businessId)).Value ?? [];
+        _reviewContext = (await ReviewController.GetContextAsync(businessId)).Value;
+
+        if (_reviewContext?.MyReview is { } mine)
+        {
+            _reviewRating = mine.Rating;
+            _reviewComment = mine.Comment ?? "";
+        }
+    }
+
+    private string PickupLabel(Package package)
+    {
+        var start = ClientTimeZoneService.ToLocal(package.PickupStart);
+        var end = ClientTimeZoneService.ToLocal(package.PickupEnd);
+        return $"{start:MMM d} · {start:HH:mm}–{end:HH:mm}";
+    }
+
+    private async Task AddToCart(Package package)
+    {
+        if (CartService.WouldReplaceCart(package))
+        {
+            _pendingSwitch = package;
+            return;
+        }
+
+        await CartService.AddAsync(package);
+        _toastMessage = $"Added \"{package.Name}\" to your basket.";
+        _toastToken = Guid.NewGuid();
+        _selectedPackage = null;
+    }
+
+    private async Task ConfirmSwitchBasketAsync()
+    {
+        if (_pendingSwitch is null)
+            return;
+
+        var package = _pendingSwitch;
+        _switchingBasket = true;
+        await CartService.AddAsync(package);
+        _switchingBasket = false;
+        _pendingSwitch = null;
+        _selectedPackage = null;
+
+        _toastMessage = $"Started a new basket from {package.Business.Name} — your previous items were cleared.";
+        _toastToken = Guid.NewGuid();
+    }
+
+    private async Task SubmitReviewAsync()
+    {
+        if (_business is null || _reviewRating < 1 || _submittingReview)
+            return;
+
+        _submittingReview = true;
+        _reviewError = null;
+        var result = await ReviewController.SubmitAsync(_business.Id, _reviewRating, _reviewComment);
+        _submittingReview = false;
+
+        if (result is ConflictObjectResult conflict)
+        {
+            _reviewError = conflict.Value?.ToString() ?? "We couldn't save your review. Please try again.";
+            return;
+        }
+
+        await ReloadReviewsAsync(_business.Id);
+    }
+
+    private void HandleCartChanged() => InvokeAsync(StateHasChanged);
+
+    private void HandleTimeZoneChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task Close() => await BusinessIdChanged.InvokeAsync(null);
+
+    public void Dispose()
+    {
+        CartService.OnChange -= HandleCartChanged;
+        ClientTimeZoneService.OnChange -= HandleTimeZoneChanged;
+    }
+}

@@ -1459,6 +1459,12 @@ h1:focus {
     color: var(--em-text);
 }
 
+.order-ticket-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.6rem;
+}
+
 .order-ticket-seam {
     position: relative;
     width: 0;
@@ -1675,4 +1681,763 @@ h1:focus {
 .order-action-empty {
     color: var(--em-muted);
     font-size: 0.78rem;
+}
+
+/* ── Star rating ── */
+.star-rating-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.star-rating {
+    position: relative;
+    display: inline-block;
+    line-height: 1;
+}
+
+.star-rating-track,
+.star-rating-fill {
+    display: flex;
+    gap: 1px;
+}
+
+.star-rating-track i {
+    color: #e2e5e9;
+}
+
+.star-rating-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.star-rating-fill i {
+    color: var(--em-rescue);
+}
+
+.star-rating-value {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: inherit;
+}
+
+.star-rating-input {
+    display: inline-flex;
+    gap: 0.15rem;
+}
+
+.star-rating-btn {
+    border: none;
+    background: none;
+    padding: 0.1rem;
+    line-height: 1;
+    color: #d1d5db;
+    cursor: pointer;
+    transition: transform 0.1s, color 0.15s;
+}
+
+.star-rating-btn i.bi-star-fill {
+    color: var(--em-rescue);
+}
+
+.star-rating-btn:hover {
+    transform: scale(1.08);
+}
+
+/* ── Business grid (home) ── */
+.biz-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    padding-bottom: 1rem;
+}
+
+.biz-card {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    border: none;
+    background: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    text-align: left;
+    padding: 0;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.05);
+    animation: card-rise 0.35s ease-out both;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.biz-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05), 0 16px 32px rgba(0, 0, 0, 0.09);
+}
+
+.biz-card:focus-visible {
+    outline: 2px solid var(--em-leaf-mid);
+    outline-offset: 2px;
+}
+
+.biz-card-media {
+    position: relative;
+    height: 160px;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    flex-shrink: 0;
+}
+
+.biz-card-live-badge {
+    position: absolute;
+    top: 0.75rem;
+    left: 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(11, 31, 19, 0.72);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.3rem 0.65rem;
+    border-radius: 999px;
+}
+
+.biz-card-live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--em-leaf);
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.35);
+}
+
+.biz-card-rating-badge {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--em-text);
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.3rem 0.6rem;
+    border-radius: 999px;
+}
+
+.biz-card-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    padding: 1.1rem 1.25rem 1.3rem;
+}
+
+.biz-card-type {
+    color: var(--em-leaf-dark);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.biz-card-name {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--em-text);
+    margin: 0.3rem 0 0.35rem;
+}
+
+.biz-card-address {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    color: var(--em-muted);
+    margin-bottom: 0.5rem;
+}
+
+.biz-card-desc {
+    font-size: 0.85rem;
+    color: var(--em-muted);
+    line-height: 1.5;
+    margin-bottom: 1rem;
+    flex: 1;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.biz-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding-top: 0.85rem;
+    border-top: 1px dashed #e5e7eb;
+}
+
+.biz-card-from {
+    font-size: 0.92rem;
+    font-weight: 800;
+    color: var(--em-leaf-dark);
+}
+
+.biz-card-from-muted {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--em-muted);
+}
+
+.biz-card-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--em-text);
+    transition: transform 0.15s, color 0.15s;
+}
+
+.biz-card:hover .biz-card-cta {
+    color: var(--em-leaf-dark);
+    transform: translateX(2px);
+}
+
+.home-pagination {
+    margin-top: 0.5rem;
+}
+
+.home-pagination nav {
+    border-top: none !important;
+    padding: 0 !important;
+}
+
+@media (max-width: 640px) {
+    .biz-grid {
+        grid-template-columns: 1fr;
+        gap: 1.1rem;
+    }
+}
+
+/* ── Business detail modal ── */
+.biz-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(11, 31, 19, 0.55);
+    z-index: 48;
+    animation: cart-backdrop-in 0.2s ease-out;
+}
+
+.biz-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: calc(100% - 2rem);
+    max-width: 720px;
+    max-height: calc(100vh - 3rem);
+    background: #fff;
+    border-radius: 20px;
+    overflow: hidden;
+    z-index: 49;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 20px 60px rgba(0, 0, 0, 0.25);
+    animation: confirm-dialog-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.biz-modal-close {
+    position: absolute;
+    top: 0.85rem;
+    right: 0.85rem;
+    z-index: 2;
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: none;
+    background: rgba(11, 31, 19, 0.55);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s;
+}
+
+.biz-modal-close:hover {
+    background: rgba(11, 31, 19, 0.75);
+}
+
+.biz-modal-loading {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem;
+}
+
+.biz-modal-hero {
+    flex-shrink: 0;
+    height: 260px;
+    background-color: var(--em-forest);
+    /* Two background layers: the darkening gradient always covers the hero, while the photo
+       is stretched to fill the section exactly (100% 100%), no cropping and no letterboxing. */
+    background-size: cover, 100% 100%;
+    background-repeat: no-repeat, no-repeat;
+    background-position: center, center;
+    display: flex;
+    align-items: flex-end;
+}
+
+.biz-modal-hero-overlay {
+    width: 100%;
+    padding: 1.5rem 3rem 1.25rem 1.75rem;
+    color: #fff;
+}
+
+.biz-modal-eyebrow {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.biz-modal-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin: 0.25rem 0 0.5rem;
+}
+
+.biz-modal-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.9rem;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.biz-modal-address i {
+    margin-right: 0.3rem;
+}
+
+.biz-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem 1.75rem 2rem;
+}
+
+.biz-modal-desc {
+    font-size: 0.92rem;
+    line-height: 1.6;
+    color: var(--em-muted);
+    margin: 0;
+}
+
+.biz-modal-inline-toast {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    background: var(--em-forest);
+    color: #fff;
+    padding: 0.55rem 1rem;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    animation: inline-toast-fade 3.2s ease forwards;
+}
+
+.biz-modal-inline-toast i {
+    color: var(--em-leaf);
+}
+
+@keyframes inline-toast-fade {
+    0%   { opacity: 0; transform: translateY(-4px); }
+    8%   { opacity: 1; transform: translateY(0); }
+    88%  { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+.biz-modal-divider {
+    border-top: 1px dashed #e5e7eb;
+    margin: 1.5rem 0;
+}
+
+.biz-modal-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--em-text);
+    margin-bottom: 1rem;
+}
+
+.biz-modal-section-title i {
+    color: var(--em-leaf-dark);
+}
+
+.biz-modal-empty {
+    font-size: 0.85rem;
+    color: var(--em-muted);
+    padding: 0.5rem 0 1rem;
+    margin: 0;
+}
+
+.biz-modal-review-hint {
+    font-size: 0.85rem;
+    color: var(--em-muted);
+    background: var(--em-surface);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1.25rem;
+}
+
+/* ── Packages inside the business modal ── */
+.biz-pkg-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.biz-pkg-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.95rem 0.6rem;
+    margin: 0 -0.6rem;
+    border-bottom: 1px dashed #e5e7eb;
+}
+
+.biz-pkg-row:last-child {
+    border-bottom: none;
+}
+
+.biz-pkg-row-clickable {
+    cursor: pointer;
+    border-radius: 10px;
+    transition: background-color 0.15s;
+}
+
+.biz-pkg-row-clickable:hover {
+    background: var(--em-surface);
+}
+
+.biz-pkg-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.biz-pkg-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--em-text);
+}
+
+.biz-pkg-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    font-size: 0.76rem;
+    color: var(--em-muted);
+    margin: 0.2rem 0 0.35rem;
+}
+
+.biz-pkg-type {
+    color: var(--em-leaf-dark);
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.68rem;
+    letter-spacing: 0.03em;
+}
+
+.biz-pkg-desc {
+    font-size: 0.82rem;
+    color: var(--em-muted);
+    line-height: 1.45;
+    margin: 0;
+}
+
+.biz-pkg-side {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.35rem;
+    min-width: 92px;
+}
+
+.biz-pkg-price {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--em-leaf-dark);
+}
+
+.biz-pkg-qty {
+    font-size: 0.72rem;
+    color: var(--em-muted);
+}
+
+.biz-pkg-add-btn {
+    border: none;
+    border-radius: 8px;
+    background: var(--em-leaf-mid);
+    color: #fff;
+    font-size: 0.76rem;
+    font-weight: 700;
+    padding: 0.35rem 0.7rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    transition: background-color 0.15s;
+}
+
+.biz-pkg-add-btn:hover:not(:disabled) {
+    background: var(--em-leaf-dark);
+}
+
+.biz-pkg-add-btn:disabled {
+    background: #e5e7eb;
+    color: var(--em-muted);
+    cursor: default;
+}
+
+/* ── Reviews inside the business modal ── */
+.biz-review-form {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+    background: var(--em-surface);
+    border-radius: 14px;
+    padding: 1.1rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.biz-review-form-label {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--em-text);
+}
+
+.biz-review-textarea {
+    width: 100%;
+    resize: vertical;
+    font-size: 0.85rem;
+}
+
+.biz-review-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+}
+
+.biz-review-card {
+    display: flex;
+    gap: 0.85rem;
+}
+
+.biz-review-avatar {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: rgba(34, 197, 94, 0.14);
+    color: var(--em-leaf-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.82rem;
+}
+
+.biz-review-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.biz-review-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.biz-review-name {
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: var(--em-text);
+}
+
+.biz-review-date {
+    font-size: 0.72rem;
+    color: var(--em-muted);
+    white-space: nowrap;
+}
+
+.biz-review-comment {
+    font-size: 0.84rem;
+    color: var(--em-muted);
+    line-height: 1.55;
+    margin: 0.35rem 0 0;
+}
+
+/* ── Package detail modal (drills down from the business modal) ── */
+.pkg-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(11, 31, 19, 0.55);
+    z-index: 51;
+    animation: cart-backdrop-in 0.2s ease-out;
+}
+
+.pkg-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: calc(100% - 2rem);
+    max-width: 480px;
+    max-height: calc(100vh - 3rem);
+    background: #fff;
+    border-radius: 20px;
+    overflow: hidden;
+    overflow-y: auto;
+    z-index: 52;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 20px 60px rgba(0, 0, 0, 0.25);
+    animation: confirm-dialog-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pkg-modal-hero {
+    height: 220px;
+    background-color: var(--em-forest);
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.pkg-modal-body {
+    padding: 1.5rem 1.75rem 1.75rem;
+}
+
+.pkg-modal-title {
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--em-text);
+    margin: 0.25rem 0 0.35rem;
+}
+
+.pkg-modal-price {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--em-leaf-dark);
+    margin-bottom: 0.85rem;
+}
+
+.pkg-modal-facts {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    background: var(--em-surface);
+    border-radius: 14px;
+    padding: 1rem 1.1rem;
+    margin: 1.25rem 0 1.5rem;
+}
+
+.pkg-modal-fact {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+}
+
+.pkg-modal-fact i {
+    color: var(--em-leaf-dark);
+    margin-top: 0.15rem;
+}
+
+.pkg-modal-fact-label {
+    font-size: 0.7rem;
+    color: var(--em-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.pkg-modal-fact-value {
+    font-weight: 700;
+    color: var(--em-text);
+}
+
+.pkg-modal-add-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.65rem 1rem;
+    font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .biz-card { animation: none; }
+    .biz-card:hover { transform: none; }
+    .biz-modal-backdrop, .biz-modal { animation: none; }
+    .biz-modal-inline-toast { animation: none; }
+    .pkg-modal-backdrop, .pkg-modal { animation: none; }
+}
+
+@media (max-width: 640px) {
+    .biz-modal {
+        top: 0;
+        left: 0;
+        transform: none;
+        width: 100%;
+        height: 100%;
+        max-height: 100vh;
+        border-radius: 0;
+    }
+
+    .biz-modal-hero {
+        height: 160px;
+    }
+
+    .biz-modal-body {
+        padding: 1.25rem 1.25rem 1.75rem;
+    }
+
+    .pkg-modal {
+        top: 0;
+        left: 0;
+        transform: none;
+        width: 100%;
+        height: 100%;
+        max-height: 100vh;
+        max-width: none;
+        border-radius: 0;
+    }
+
+    .pkg-modal-hero {
+        height: 180px;
+    }
+
+    .biz-pkg-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .biz-pkg-side {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        min-width: 0;
+    }
 }

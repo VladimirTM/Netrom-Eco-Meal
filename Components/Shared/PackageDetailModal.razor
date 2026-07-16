@@ -1,0 +1,74 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Entities
+
+@if (Package is not null)
+{
+    <div class="pkg-modal-backdrop" @onclick="() => OnClose.InvokeAsync()"></div>
+    <div class="pkg-modal" role="dialog" aria-modal="true" aria-labelledby="pkg-modal-title">
+        <button type="button" class="biz-modal-close" @onclick="() => OnClose.InvokeAsync()" aria-label="Close">
+            <i class="bi bi-x-lg"></i>
+        </button>
+
+        <div class="pkg-modal-hero" style="@HeroStyle"></div>
+
+        <div class="pkg-modal-body">
+            <span class="biz-modal-eyebrow">@Package.PackageType.Name</span>
+            <h2 class="pkg-modal-title" id="pkg-modal-title">@Package.Name</h2>
+            <div class="pkg-modal-price">@Package.Price.ToString("C")</div>
+
+            <p class="biz-modal-desc">@Package.Description</p>
+
+            <div class="pkg-modal-facts">
+                <div class="pkg-modal-fact">
+                    <i class="bi bi-shop"></i>
+                    <div>
+                        <div class="pkg-modal-fact-label">From</div>
+                        <div class="pkg-modal-fact-value">@Package.Business.Name</div>
+                    </div>
+                </div>
+                <div class="pkg-modal-fact">
+                    <i class="bi bi-clock"></i>
+                    <div>
+                        <div class="pkg-modal-fact-label">Pickup window</div>
+                        <div class="pkg-modal-fact-value">@PickupLabel</div>
+                    </div>
+                </div>
+                <div class="pkg-modal-fact">
+                    <i class="bi bi-bag-check"></i>
+                    <div>
+                        <div class="pkg-modal-fact-label">Available</div>
+                        <div class="pkg-modal-fact-value">@AvailableQuantity left</div>
+                    </div>
+                </div>
+            </div>
+
+            <AuthorizeView Roles="@AppRoles.Customer" Context="cartAuth">
+                <Authorized>
+                    @if (AvailableQuantity <= 0)
+                    {
+                        <button type="button" class="btn btn-secondary w-100 pkg-modal-add-btn" disabled>Sold out</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn btn-primary w-100 pkg-modal-add-btn" @onclick="() => OnAddToCart.InvokeAsync(Package)">
+                            <i class="bi bi-bag-plus"></i> Add to basket
+                        </button>
+                    }
+                </Authorized>
+            </AuthorizeView>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Package? Package { get; set; }
+    [Parameter] public int AvailableQuantity { get; set; }
+    [Parameter] public string PickupLabel { get; set; } = "";
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<Package> OnAddToCart { get; set; }
+
+    private string HeroStyle => string.IsNullOrWhiteSpace(Package?.ImageUrl)
+        ? "background-color: var(--em-forest);"
+        : $"background-image: url('{Package.ImageUrl}');";
+}
