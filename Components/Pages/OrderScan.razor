@@ -1,0 +1,105 @@
+@page "/orders/scan"
+@using Microsoft.AspNetCore.Authorization
+@using Netrom_Eco_Meal.Constants
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@inject IJSRuntime JSRuntime
+@attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
+
+<PageTitle>Scan pickup — Eco Meal</PageTitle>
+
+<div class="scan-page">
+    <div class="scan-header">
+        <h1 class="h4 fw-bold mb-1">Scan pickup QR code</h1>
+        <p class="scan-hint">Point the camera at the customer's pickup pass to bring up their order.</p>
+    </div>
+
+    @if (_cameraError is not null)
+    {
+        <div class="alert alert-danger" role="alert">@_cameraError</div>
+    }
+
+    <div class="scan-viewfinder">
+        <video @ref="_videoElement" autoplay playsinline muted></video>
+        <canvas @ref="_canvasElement" hidden></canvas>
+
+        @if (_scanning)
+        {
+            <div class="scan-frame-guide" aria-hidden="true">
+                <span class="scan-corner scan-corner-tl"></span>
+                <span class="scan-corner scan-corner-tr"></span>
+                <span class="scan-corner scan-corner-bl"></span>
+                <span class="scan-corner scan-corner-br"></span>
+            </div>
+        }
+        else
+        {
+            <div class="scan-idle-overlay">
+                <button type="button" class="btn btn-primary px-4" disabled="@_starting" @onclick="StartScanningAsync">
+                    @if (_starting)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    }
+                    <i class="bi bi-camera-fill me-1"></i> Start scanning
+                </button>
+            </div>
+        }
+    </div>
+
+    <a href="/orders/manage" class="biz-page-back scan-back-link"><i class="bi bi-arrow-left"></i> Back to order management</a>
+</div>
+
+@code {
+    private ElementReference _videoElement;
+    private ElementReference _canvasElement;
+    private IJSObjectReference? _module;
+    private bool _scanning;
+    private bool _starting;
+    private string? _cameraError;
+
+    // Camera init must be gated behind an explicit tap rather than firing on render — required
+    // for reliable behavior on iOS Safari, and avoids prompting for camera permission before the
+    // page has even finished settling its [Authorize] redirect chain.
+    private async Task StartScanningAsync()
+    {
+        _starting = true;
+        _cameraError = null;
+
+        try
+        {
+            // Co-located JS module (Blazor JS isolation) — the entire capture/decode loop runs
+            // client-side with zero per-frame interop; a successful decode does a real browser
+            // navigation, it never calls back into C#.
+            _module ??= await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/OrderScan.razor.js");
+            await _module.InvokeVoidAsync("startCamera", _videoElement, _canvasElement);
+            _scanning = true;
+        }
+        catch (JSException ex)
+        {
+            _cameraError = ex.Message.Contains("Permission", StringComparison.OrdinalIgnoreCase) ||
+                            ex.Message.Contains("NotAllowedError", StringComparison.OrdinalIgnoreCase)
+                ? "Camera access was denied. Allow camera access for this site in your browser settings and try again."
+                : "Couldn't start the camera. Make sure this device has one and try again.";
+        }
+
+        _starting = false;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is null)
+            return;
+
+        try
+        {
+            // Always stop the camera track on the way out — otherwise the OS camera-in-use
+            // indicator stays lit even after leaving this page.
+            await _module.InvokeVoidAsync("stopCamera");
+            await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit already gone (tab closed / navigated away) — nothing left to clean up client-side.
+        }
+    }
+}

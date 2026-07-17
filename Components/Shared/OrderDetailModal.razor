@@ -1,0 +1,70 @@
+@using Netrom_Eco_Meal.Entities
+
+@if (Order is not null)
+{
+    <div class="order-modal-backdrop" @onclick="() => OnClose.InvokeAsync()"></div>
+    <div class="order-modal" role="dialog" aria-modal="true" aria-labelledby="order-modal-title">
+        <button type="button" class="biz-modal-close" @onclick="() => OnClose.InvokeAsync()" aria-label="Close">
+            <i class="bi bi-x-lg"></i>
+        </button>
+
+        <div class="order-modal-body">
+            <div class="order-modal-top">
+                <div>
+                    <span class="biz-modal-eyebrow">Order #@Order.OrderNumber.ToString("000")</span>
+                    <h2 class="pkg-modal-title" id="order-modal-title">@Order.Business.Name</h2>
+                </div>
+                <span class="order-status-badge order-status-@Order.Status.Name.ToLowerInvariant()">@Order.Status.Name</span>
+            </div>
+
+            <div class="pkg-modal-facts">
+                <div class="pkg-modal-fact">
+                    <i class="bi bi-geo-alt"></i>
+                    <div>
+                        <div class="pkg-modal-fact-label">Pickup address</div>
+                        <div class="pkg-modal-fact-value">@Order.Business.Address</div>
+                    </div>
+                </div>
+                <div class="pkg-modal-fact">
+                    <i class="bi bi-clock"></i>
+                    <div>
+                        <div class="pkg-modal-fact-label">Pickup window</div>
+                        <div class="pkg-modal-fact-value">@PickupLabel</div>
+                    </div>
+                </div>
+                <div class="pkg-modal-fact">
+                    <i class="bi bi-person"></i>
+                    <div>
+                        <div class="pkg-modal-fact-label">Customer</div>
+                        <div class="pkg-modal-fact-value">@Order.User.Name</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="biz-modal-divider"></div>
+
+            <div class="biz-modal-section-title"><i class="bi bi-bag"></i> Items</div>
+            <div class="order-ticket-items">
+                @foreach (var line in Order.OrderPackages)
+                {
+                    <div class="order-ticket-line">
+                        <span class="order-ticket-line-qty">@(line.Quantity)&times;</span>
+                        <span class="order-ticket-line-name">@line.Package.Name</span>
+                        <span class="order-ticket-line-price">@((line.Quantity * line.Package.Price).ToString("C"))</span>
+                    </div>
+                }
+            </div>
+
+            <div class="order-modal-total">
+                <span>Total</span>
+                <span class="order-ticket-total-value">@Order.OrderPackages.Sum(op => op.Quantity * op.Package.Price).ToString("C")</span>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Order? Order { get; set; }
+    [Parameter] public string PickupLabel { get; set; } = "";
+    [Parameter] public EventCallback OnClose { get; set; }
+}

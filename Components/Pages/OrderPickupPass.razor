@@ -1,0 +1,154 @@
+@page "/orders/pickup/{Id:guid}"
+@layout PublicLayout
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Mvc
+@using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services
+@using QRCoder
+@rendermode InteractiveServer
+@implements IDisposable
+@inject OrderController OrderController
+@inject ClientTimeZoneService ClientTimeZoneService
+@inject NavigationManager NavigationManager
+@attribute [Authorize(Roles = AppRoles.Customer)]
+
+<PageTitle>Pickup pass — Eco Meal</PageTitle>
+
+<div class="pickup-pass-page">
+    <a href="/orders" class="biz-page-back"><i class="bi bi-arrow-left"></i> Back to your orders</a>
+
+    @if (_forbidden)
+    {
+        <ForbiddenPanel Message="You can only view the pickup pass for your own orders." BackHref="/orders" BackLabel="Back to your orders" />
+    }
+    else if (_notFound)
+    {
+        <NotFoundPanel Message="This order no longer exists." BackHref="/orders" BackLabel="Back to your orders" />
+    }
+    else if (_order is null)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (_order.Status.Name != OrderStatuses.Confirmed)
+    {
+        <div class="orders-empty">
+            <i class="bi bi-qr-code-scan"></i>
+            <p class="mb-1">No pickup pass to show.</p>
+            <span class="text-muted small d-block">@StatusExplanation</span>
+        </div>
+    }
+    else
+    {
+        <article class="order-ticket order-ticket--pass">
+            <div class="order-ticket-main">
+                <div class="order-ticket-top">
+                    <div class="order-ticket-kitchen">
+                        <div class="order-ticket-business"><i class="bi bi-shop"></i>@_order.Business.Name</div>
+                        <div class="order-ticket-address"><i class="bi bi-geo-alt"></i>@_order.Business.Address</div>
+                    </div>
+                    <span class="order-status-badge order-status-confirmed">@_order.Status.Name</span>
+                </div>
+
+                <div class="order-ticket-items">
+                    @foreach (var line in _order.OrderPackages)
+                    {
+                        <div class="order-ticket-line">
+                            <span class="order-ticket-line-qty">@(line.Quantity)&times;</span>
+                            <span class="order-ticket-line-name">@line.Package.Name</span>
+                            <span class="order-ticket-line-price">@((line.Quantity * line.Package.Price).ToString("C"))</span>
+                        </div>
+                    }
+                </div>
+
+                <div class="order-ticket-footer">
+                    <div class="order-ticket-pickup"><i class="bi bi-clock"></i>Pickup @PickupWindow(_order)</div>
+                    <div class="order-ticket-total">
+                        <span>Total</span>
+                        <span class="order-ticket-total-value">@_order.OrderPackages.Sum(op => op.Quantity * op.Package.Price).ToString("C")</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="order-ticket-seam"></div>
+
+            <div class="order-ticket-stub order-ticket-stub--pass">
+                <span class="order-ticket-stub-label">Order</span>
+                <span class="order-ticket-stub-number">#@_order.OrderNumber.ToString("000")</span>
+                <div class="order-ticket-stub-qr">
+                    @((MarkupString)_qrSvg!)
+                </div>
+                <span class="order-ticket-stub-hint">Hand your phone to the counter — they'll scan this to confirm pickup</span>
+            </div>
+        </article>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Order? _order;
+    private bool _forbidden;
+    private bool _notFound;
+    private string? _qrSvg;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await OrderController.GetMyOrderAsync(Id);
+        if (result.Result is UnauthorizedResult)
+        {
+            _forbidden = true;
+            return;
+        }
+        if (result.Result is NotFoundResult)
+        {
+            _notFound = true;
+            return;
+        }
+
+        _order = result.Value;
+
+        if (_order is not null && _order.Status.Name == OrderStatuses.Confirmed)
+        {
+            var payloadUrl = $"{NavigationManager.BaseUri}orders/validate/{_order.Id}";
+            var qrData = new QRCodeGenerator().CreateQrCode(payloadUrl, QRCodeGenerator.ECCLevel.Q);
+            _qrSvg = new SvgQRCode(qrData).GetGraphic(5, "#0b1f13", "#ffffff", true, SvgQRCode.SizingMode.ViewBoxAttribute);
+        }
+
+        ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
+    }
+
+    private void HandleTimeZoneChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        ClientTimeZoneService.OnChange -= HandleTimeZoneChanged;
+    }
+
+    private string StatusExplanation => _order!.Status.Name switch
+    {
+        OrderStatuses.Pending => "Your pickup pass appears once the business confirms this order.",
+        OrderStatuses.Completed => "This order has already been picked up.",
+        OrderStatuses.Cancelled => "This order was cancelled.",
+        _ => "This order's pickup pass isn't available.",
+    };
+
+    private string PickupWindow(Order order)
+    {
+        if (order.OrderPackages.Count == 0)
+            return "time to be confirmed";
+
+        // An order can span packages with different windows — show the widest span that covers them all.
+        var start = ClientTimeZoneService.ToLocal(order.OrderPackages.Min(op => op.Package.PickupStart));
+        var end = ClientTimeZoneService.ToLocal(order.OrderPackages.Max(op => op.Package.PickupEnd));
+
+        return start.Date == end.Date
+            ? $"{start:MMM d} · {start:HH:mm}–{end:HH:mm}"
+            : $"{start:MMM d, HH:mm} – {end:MMM d, HH:mm}";
+    }
+}

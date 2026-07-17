@@ -1,0 +1,192 @@
+@page "/orders/validate/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Mvc
+@using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services
+@rendermode InteractiveServer
+@implements IDisposable
+@inject OrderController OrderController
+@inject ClientTimeZoneService ClientTimeZoneService
+@attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
+
+<PageTitle>Confirm pickup — Eco Meal</PageTitle>
+
+@* Reachable both from the in-app scanner and by any external QR reader opening this URL directly —
+   must be fully self-sufficient and re-check authorization itself, never trust how the visitor arrived. *@
+<div class="validate-page">
+    @if (_forbidden)
+    {
+        <ForbiddenPanel Message="You don't manage this order's business." BackHref="/orders/manage" BackLabel="Back to orders"/>
+    }
+    else if (_notFound)
+    {
+        <NotFoundPanel Message="This order no longer exists." BackHref="/orders/manage" BackLabel="Back to orders"/>
+    }
+    else if (_order is null)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card border-0 shadow-sm validate-card">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                    <span class="biz-modal-eyebrow">Order #@_order.OrderNumber.ToString("000")</span>
+                    <h1 class="h4 fw-bold mb-0">@_order.Business.Name</h1>
+                </div>
+                <span class="order-status-badge order-status-@_order.Status.Name.ToLowerInvariant()">@_order.Status.Name</span>
+            </div>
+
+            @if (_actionError is not null)
+            {
+                <div class="alert alert-danger" role="alert">@_actionError</div>
+            }
+
+            @if (_completed)
+            {
+                <div class="biz-modal-inline-toast"><i class="bi bi-check-circle-fill"></i> Pickup confirmed</div>
+            }
+
+            <div class="pkg-modal-facts">
+                <div class="pkg-modal-fact">
+                    <i class="bi bi-person"></i>
+                    <div>
+                        <div class="pkg-modal-fact-label">Customer</div>
+                        <div class="pkg-modal-fact-value">@_order.User.Name</div>
+                    </div>
+                </div>
+                <div class="pkg-modal-fact">
+                    <i class="bi bi-clock"></i>
+                    <div>
+                        <div class="pkg-modal-fact-label">Pickup window</div>
+                        <div class="pkg-modal-fact-value">@PickupWindow(_order)</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="order-ticket-items">
+                @foreach (var line in _order.OrderPackages)
+                {
+                    <div class="order-ticket-line">
+                        <span class="order-ticket-line-qty">@(line.Quantity)&times;</span>
+                        <span class="order-ticket-line-name">@line.Package.Name</span>
+                        <span class="order-ticket-line-price">@((line.Quantity * line.Package.Price).ToString("C"))</span>
+                    </div>
+                }
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center validate-total">
+                <span class="text-muted small fw-semibold">Total</span>
+                <span class="order-ticket-total-value">@_order.OrderPackages.Sum(op => op.Quantity * op.Package.Price).ToString("C")</span>
+            </div>
+
+            @if (_order.Status.Name == OrderStatuses.Confirmed)
+            {
+                <button type="button" class="order-action-btn order-action-complete validate-confirm-btn" disabled="@_busy" @onclick="ConfirmPickupAsync">
+                    @if (_busy)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    }
+                    <i class="bi bi-check2-all"></i> Confirm pickup
+                </button>
+            }
+            else if (!_completed)
+            {
+                <p class="text-muted small mb-0">@StatusExplanation</p>
+            }
+
+            <a href="/orders/scan" class="validate-scan-next">Scan another order</a>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Order? _order;
+    private bool _forbidden;
+    private bool _notFound;
+    private bool _busy;
+    private bool _completed;
+    private string? _actionError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
+    }
+
+    private async Task LoadAsync()
+    {
+        var result = await OrderController.GetOrderForManagementAsync(Id);
+        if (result.Result is UnauthorizedResult)
+        {
+            _forbidden = true;
+            return;
+        }
+        if (result.Result is NotFoundResult)
+        {
+            _notFound = true;
+            return;
+        }
+
+        _order = result.Value;
+    }
+
+    private async Task ConfirmPickupAsync()
+    {
+        _busy = true;
+        _actionError = null;
+
+        var result = await OrderController.UpdateOrderStatusAsync(Id, OrderStatuses.Completed);
+        if (result.Result is ConflictObjectResult conflict)
+        {
+            // Someone else beat us to it (duplicate scan, manual complete, cancellation) —
+            // refresh from the server rather than leaving a stale status badge on screen.
+            _actionError = conflict.Value as string ?? "This order couldn't be completed.";
+            await LoadAsync();
+        }
+        else if (result.Value is not null)
+        {
+            _order = result.Value;
+            _completed = true;
+        }
+
+        _busy = false;
+    }
+
+    private void HandleTimeZoneChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        ClientTimeZoneService.OnChange -= HandleTimeZoneChanged;
+    }
+
+    private string StatusExplanation => _order!.Status.Name switch
+    {
+        OrderStatuses.Pending => "This order hasn't been confirmed by the business yet.",
+        OrderStatuses.Completed => "This order was already picked up.",
+        OrderStatuses.Cancelled => "This order was cancelled.",
+        _ => "This order can't be completed right now.",
+    };
+
+    private string PickupWindow(Order order)
+    {
+        if (order.OrderPackages.Count == 0)
+            return "time to be confirmed";
+
+        // An order can span packages with different windows — show the widest span that covers them all.
+        var start = ClientTimeZoneService.ToLocal(order.OrderPackages.Min(op => op.Package.PickupStart));
+        var end = ClientTimeZoneService.ToLocal(order.OrderPackages.Max(op => op.Package.PickupEnd));
+
+        return start.Date == end.Date
+            ? $"{start:MMM d} · {start:HH:mm}–{end:HH:mm}"
+            : $"{start:MMM d, HH:mm} – {end:MMM d, HH:mm}";
+    }
+}

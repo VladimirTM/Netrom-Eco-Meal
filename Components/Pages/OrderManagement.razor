@@ -28,6 +28,12 @@
         <h1 class="h3 fw-bold mb-1">Manage Orders</h1>
         <p class="text-muted small mb-0">@(_isAdmin ? "Review orders across every business" : "Confirm, complete, or cancel orders placed at your business")</p>
     </div>
+    @if (!_isAdmin)
+    {
+        <a href="/orders/scan" class="btn btn-primary px-4">
+            <i class="bi bi-qr-code-scan me-1"></i> Scan pickup
+        </a>
+    }
 </div>
 
 @if (_actionError is not null)
@@ -112,7 +118,7 @@
                 <tbody>
                 @foreach (var order in _paged.Items)
                 {
-                    <tr>
+                    <tr class="order-row-clickable" @onclick="() => _selectedOrder = order">
                         <td class="px-4 fw-semibold">#@order.OrderNumber.ToString("000")</td>
                         @if (_isAdmin)
                         {
@@ -142,7 +148,7 @@
                                 @* Allowed transitions mirror OrderService.UpdateStatusAsync — keep them in sync. *@
                                 else if (order.Status.Name == OrderStatuses.Pending)
                                 {
-                                    <div class="order-action-group">
+                                    <div class="order-action-group" @onclick:stopPropagation="true">
                                         <button type="button" class="order-action-btn order-action-confirm" @onclick="() => ChangeStatusAsync(order, OrderStatuses.Confirmed)">
                                             <i class="bi bi-check-lg"></i> Confirm
                                         </button>
@@ -153,7 +159,7 @@
                                 }
                                 else if (order.Status.Name == OrderStatuses.Confirmed)
                                 {
-                                    <div class="order-action-group">
+                                    <div class="order-action-group" @onclick:stopPropagation="true">
                                         <button type="button" class="order-action-btn order-action-complete" @onclick="() => ChangeStatusAsync(order, OrderStatuses.Completed)">
                                             <i class="bi bi-check2-all"></i> Complete
                                         </button>
@@ -177,6 +183,8 @@
     }
 </div>
 
+<OrderDetailModal Order="_selectedOrder" PickupLabel="@(_selectedOrder is null ? "" : PickupWindow(_selectedOrder))" OnClose="() => _selectedOrder = null"/>
+
 @code {
     private static readonly string[] StatusOrder = [OrderStatuses.Pending, OrderStatuses.Confirmed, OrderStatuses.Completed, OrderStatuses.Cancelled];
 
@@ -190,6 +198,7 @@
     private string _forbiddenReason = "";
     private string? _actionError;
     private Guid? _busyOrderId;
+    private Order? _selectedOrder;
     private int _pageIndex = 1;
     private const int PageSize = 10;
     // Guards every reload trigger (search, filters, paging) so overlapping ones cancel

@@ -119,15 +119,29 @@ public class OrderService(
 
     public async Task<Order> UpdateStatusAsync(Guid orderId, string statusName)
     {
-        var (isAdmin, business) = await ResolveManagedBusinessAsync();
+        var order = await GetOwnedOrderAsync(orderId);
+        return await ApplyStatusChangeAsync(order, statusName);
+    }
+
+    // Read-only counterpart used by the QR pickup validation page.
+    public async Task<Order> GetOrderForManagementAsync(Guid orderId) => await GetOwnedOrderAsync(orderId);
+
+    public async Task<Order> GetMyOrderAsync(Guid orderId)
+    {
+        if (!await currentUser.IsInRoleAsync(AppRoles.Customer))
+            throw new UnauthorizedAccessException("Only customers can view their own orders.");
+
+        var (_, userId) = await currentUser.GetCurrentUserAsync();
+        if (userId is null)
+            throw new UnauthorizedAccessException("You must be signed in to view this order.");
 
         var order = await orderRepository.GetByIdAsync(orderId)
             ?? throw new InvalidOperationException("This order no longer exists.");
 
-        if (!isAdmin && order.BusinessId != business!.Id)
-            throw new UnauthorizedAccessException("You can only manage orders that belong to your business.");
+        if (order.UserId != userId)
+            throw new UnauthorizedAccessException("You can only view your own orders.");
 
-        return await ApplyStatusChangeAsync(order, statusName);
+        return order;
     }
 
     public async Task<Order> CancelMyOrderAsync(Guid orderId)
@@ -195,6 +209,21 @@ public class OrderService(
             // Another confirm/cancel changed a package's stock (xmin token) — don't oversell.
             throw new InvalidOperationException("Stock for this order just changed — please refresh and try again.");
         }
+
+        return order;
+    }
+
+    // The one place "does this manager/admin own this order" is decided — shared by the
+    // status-change path and the QR validation page's read, so the check can't drift out of sync.
+    private async Task<Order> GetOwnedOrderAsync(Guid orderId)
+    {
+        var (isAdmin, business) = await ResolveManagedBusinessAsync();
+
+        var order = await orderRepository.GetByIdAsync(orderId)
+            ?? throw new InvalidOperationException("This order no longer exists.");
+
+        if (!isAdmin && order.BusinessId != business!.Id)
+            throw new UnauthorizedAccessException("You can only manage orders that belong to your business.");
 
         return order;
     }

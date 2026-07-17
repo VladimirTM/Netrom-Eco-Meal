@@ -14,5 +14,7 @@ public interface IOrderService
     public Task<PaginatedList<Order>> GetMyOrdersPagedAsync(int pageIndex, int pageSize, string? status);
     public Task<PaginatedList<Order>> GetOrdersForManagementPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessId, string? status);
     public Task<Order> UpdateStatusAsync(Guid orderId, string statusName);
+    public Task<Order> GetOrderForManagementAsync(Guid orderId);
+    public Task<Order> GetMyOrderAsync(Guid orderId);
     public Task<Order> CancelMyOrderAsync(Guid orderId);
 }

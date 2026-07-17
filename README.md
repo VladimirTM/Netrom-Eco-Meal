@@ -15,12 +15,14 @@ their business's packages and orders) and **Admin** (manages businesses, types a
 - Browse, search and filter businesses on the home page
 - View a business's live packages and add them to a basket
 - Check out and track past orders with pickup windows on `/orders`
+- Show a QR pickup pass for a confirmed order, scanned by the business at collection
 - Leave a star rating and comment on a business once you've ordered from it
 
 **BusinessManager** — assigned to one business by an Admin, scoped to it everywhere:
 
 - Manage their business's packages on `/packages`
 - Confirm, complete or cancel orders placed at their business on `/orders/manage`
+- Scan a customer's pickup QR code on `/orders/scan` to confirm pickup
 - See business-scoped stats on `/dashboard`
 
 **Admin** — full access, plus the only role that can create businesses:
@@ -36,6 +38,7 @@ their business's packages and orders) and **Admin** (manages businesses, types a
 - ASP.NET Core 10 / Blazor Server (interactive server render mode)
 - EF Core + PostgreSQL (Npgsql)
 - ASP.NET Identity for auth/roles
+- QRCoder for server-side pickup QR generation, jsQR (vendored) for client-side camera scanning
 
 ## Running locally
 
@@ -80,6 +83,11 @@ A seeded admin account is created automatically:
 
 Change `SeedAdmin__Email` / `SeedAdmin__Password` in `docker-compose.test.yml` before
 running if you don't want the default admin credentials.
+
+The pickup QR scanner (`/orders/scan`) uses the device camera, which browsers only allow
+over HTTPS or on `localhost`. It works fine when you open the app as `localhost:8081`,
+but won't get camera access if you open it via a LAN IP from another device (e.g. testing
+on a phone) — that needs a real HTTPS deployment.
 
 ## Seed data
 

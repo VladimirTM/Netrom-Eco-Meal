@@ -93,4 +93,36 @@ public class OrderController(IOrderService orderService) : ControllerBase
             return Conflict(ex.Message);
         }
     }
+
+    public async Task<ActionResult<Order>> GetMyOrderAsync(Guid orderId)
+    {
+        try
+        {
+            return await orderService.GetMyOrderAsync(orderId);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized();
+        }
+        catch (InvalidOperationException)
+        {
+            return NotFound();
+        }
+    }
+
+    public async Task<ActionResult<Order>> GetOrderForManagementAsync(Guid orderId)
+    {
+        try
+        {
+            return await orderService.GetOrderForManagementAsync(orderId);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized();
+        }
+        catch (InvalidOperationException)
+        {
+            return NotFound();
+        }
+    }
 }

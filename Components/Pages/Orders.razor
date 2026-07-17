@@ -88,7 +88,8 @@
         <div class="orders-stack">
             @foreach (var order in _paged.Items)
             {
-                <article class="order-ticket">
+                <article class="order-ticket order-ticket-clickable" role="button" tabindex="0"
+                         @onclick="() => _selectedOrder = order" @onkeydown="e => OnTicketKeyDown(e, order)">
                     <div class="order-ticket-main">
                         <div class="order-ticket-top">
                             <div class="order-ticket-kitchen">
@@ -123,7 +124,13 @@
                         @if (order.Status.Name is OrderStatuses.Pending or OrderStatuses.Confirmed)
                         {
                             <div class="order-ticket-actions">
-                                <button type="button" class="order-action-btn order-action-cancel" @onclick="() => RequestCancel(order)">
+                                @if (order.Status.Name == OrderStatuses.Confirmed)
+                                {
+                                    <a href="/orders/pickup/@order.Id" class="order-action-btn order-action-qr" @onclick:stopPropagation="true">
+                                        <i class="bi bi-qr-code"></i> Show QR code
+                                    </a>
+                                }
+                                <button type="button" class="order-action-btn order-action-cancel" @onclick="() => RequestCancel(order)" @onclick:stopPropagation="true">
                                     Cancel order
                                 </button>
                             </div>
@@ -152,6 +159,8 @@
                OnConfirm="ConfirmCancelAsync"
                OnCancel="() => _pendingCancel = null"/>
 
+<OrderDetailModal Order="_selectedOrder" PickupLabel="@(_selectedOrder is null ? "" : PickupWindow(_selectedOrder))" OnClose="() => _selectedOrder = null"/>
+
 @code {
     // Lifecycle order for the filter chips, not alphabetical or appearance order.
     private static readonly string[] StatusOrder = [OrderStatuses.Pending, OrderStatuses.Confirmed, OrderStatuses.Completed, OrderStatuses.Cancelled];
@@ -170,6 +179,7 @@
     private Order? _pendingCancel;
     private bool _cancelling;
     private string? _actionError;
+    private Order? _selectedOrder;
 
     protected override async Task OnInitializedAsync()
     {
@@ -187,6 +197,12 @@
     private Task ReloadAsync() => _reloadGate.DebounceAsync(LoadPageAsync);
 
     private void RequestCancel(Order order) => _pendingCancel = order;
+
+    private void OnTicketKeyDown(KeyboardEventArgs e, Order order)
+    {
+        if (e.Key is "Enter" or " ")
+            _selectedOrder = order;
+    }
 
     private async Task ConfirmCancelAsync()
     {
