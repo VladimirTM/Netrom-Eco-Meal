@@ -54,8 +54,14 @@ public class OrderService(
             if (!packages.TryGetValue(line.PackageId, out var package) || package.BusinessId != businessId)
                 throw new InvalidOperationException("One of the packages in your cart is no longer available.");
 
-            if (line.Quantity > package.Quantity)
-                throw new InvalidOperationException($"Only {package.Quantity} left of \"{package.Name}\" — please adjust your cart.");
+            // Package.Quantity only drops on confirm, so also subtract other customers' Pending reservations.
+            var pendingElsewhere = await dbContext.OrderPackages
+                .Where(op => op.PackageId == package.Id && op.Order.Status.Name == OrderStatuses.Pending)
+                .SumAsync(op => (int?)op.Quantity) ?? 0;
+            var available = package.Quantity - pendingElsewhere;
+
+            if (line.Quantity > available)
+                throw new InvalidOperationException($"Only {Math.Max(available, 0)} left of \"{package.Name}\" — please adjust your cart.");
 
             // Stock is reserved on confirm, not here — see UpdateStatusAsync.
             order.OrderPackages.Add(new OrderPackage
