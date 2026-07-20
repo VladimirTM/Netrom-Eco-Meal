@@ -73,6 +73,12 @@
                         <span class="order-ticket-total-value">@_order.OrderPackages.Sum(op => op.Quantity * op.Package.Price).ToString("C")</span>
                     </div>
                 </div>
+
+                @{ var kgSaved = _order.OrderPackages.Sum(op => op.Quantity * op.Package.WeightKg); }
+                @if (kgSaved > 0)
+                {
+                    <div class="order-ticket-impact"><i class="bi bi-leaf"></i> You're about to save ~@kgSaved.ToString("0.#") kg of food from waste</div>
+                }
             </div>
 
             <div class="order-ticket-seam"></div>

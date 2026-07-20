@@ -94,6 +94,11 @@ public class OrderController(IOrderService orderService) : ControllerBase
         }
     }
 
+    public async Task<ActionResult<decimal>> GetTotalKgSavedAsync()
+    {
+        return await orderService.GetTotalKgSavedAsync();
+    }
+
     public async Task<ActionResult<Order>> GetMyOrderAsync(Guid orderId)
     {
         try

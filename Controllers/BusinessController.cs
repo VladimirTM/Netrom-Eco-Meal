@@ -15,9 +15,9 @@ public class BusinessController(IBusinessService businessService) : ControllerBa
         return await businessService.GetAllAsync();
     }
 
-    public async Task<ActionResult<PaginatedList<Business>>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null)
+    public async Task<ActionResult<PaginatedList<Business>>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null, string? sortBy = null)
     {
-        return await businessService.GetPagedAsync(pageIndex, pageSize, search, businessTypeId, managerId);
+        return await businessService.GetPagedAsync(pageIndex, pageSize, search, businessTypeId, managerId, sortBy);
     }
 
     public async Task<ActionResult<Business?>> GetByIdAsync(Guid id)

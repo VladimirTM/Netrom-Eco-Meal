@@ -12,6 +12,8 @@ public class Package
     public required decimal Price { get; set; }
     // Live stock: decremented when an order is confirmed, restored if it's then cancelled.
     public required int Quantity { get; set; }
+    // Used to compute the "food saved" impact stats — set by the manager per package.
+    public required decimal WeightKg { get; set; }
     public required DateTime PickupStart { get; set; }
     public required DateTime PickupEnd { get; set; }
     public string? ImageUrl { get; set; }

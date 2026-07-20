@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Database;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Models;
@@ -14,7 +15,7 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
         return await context.Businesses.Include(b => b.BusinessType).Include(b => b.Manager).ToListAsync();
     }
 
-    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null)
+    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null, string? sortBy = null)
     {
         var query = context.Businesses.Include(b => b.BusinessType).Include(b => b.Manager).AsQueryable();
 
@@ -22,7 +23,10 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
             query = query.Where(b =>
                 EF.Functions.ILike(b.Name, $"%{search}%") ||
                 EF.Functions.ILike(b.Description, $"%{search}%") ||
-                EF.Functions.ILike(b.Address, $"%{search}%"));
+                EF.Functions.ILike(b.Address, $"%{search}%") ||
+                // Also surfaces a kitchen by what's actually in its live packages (e.g. "bread").
+                b.Packages.Any(p => p.PickupEnd > DateTime.UtcNow &&
+                    (EF.Functions.ILike(p.Name, $"%{search}%") || EF.Functions.ILike(p.Description, $"%{search}%"))));
 
         if (businessTypeId.HasValue)
             query = query.Where(b => b.BusinessTypeId == businessTypeId);
@@ -30,7 +34,12 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
         if (managerId is not null)
             query = query.Where(b => b.ManagerId == managerId);
 
-        return await PaginatedList<Business>.CreateAsync(query.OrderBy(b => b.Name), pageIndex, pageSize);
+        // Businesses with nothing live sort to the end regardless of sort mode.
+        query = sortBy == BusinessSortOptions.ClosingSoon
+            ? query.OrderBy(b => b.Packages.Where(p => p.PickupEnd > DateTime.UtcNow).Select(p => (DateTime?)p.PickupEnd).Min() ?? DateTime.MaxValue)
+            : query.OrderBy(b => b.Name);
+
+        return await PaginatedList<Business>.CreateAsync(query, pageIndex, pageSize);
     }
 
     public async Task<Business?> GetByIdAsync(Guid id)

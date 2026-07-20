@@ -144,6 +144,12 @@ public class OrderService(
         return order;
     }
 
+    // Public aggregate for the home hero — no per-user data exposed, so no auth check needed.
+    public async Task<decimal> GetTotalKgSavedAsync()
+    {
+        return await orderRepository.GetTotalWeightSavedKgAsync();
+    }
+
     public async Task<Order> CancelMyOrderAsync(Guid orderId)
     {
         if (!await currentUser.IsInRoleAsync(AppRoles.Customer))

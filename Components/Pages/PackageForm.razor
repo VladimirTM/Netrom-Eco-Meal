@@ -97,6 +97,13 @@
                     </div>
                     <div class="row g-3 mb-3">
                         <div class="col-sm-6">
+                            <label for="weightKg" class="form-label fw-semibold">Weight (kg)</label>
+                            <InputNumber id="weightKg" class="form-control" placeholder="1.0" @bind-Value="_model.WeightKg"/>
+                            <ValidationMessage For="@(() => _model.WeightKg)" class="validation-message small d-block mt-1"/>
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
                             <label for="pickupStart" class="form-label fw-semibold">Pickup Start</label>
                             <InputDate id="pickupStart" class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_model.PickupStart"/>
                         </div>
@@ -181,6 +188,7 @@
             _model.Description = existing.Description;
             _model.Price = existing.Price;
             _model.Quantity = existing.Quantity;
+            _model.WeightKg = existing.WeightKg;
             _model.PickupStart = ClientTimeZoneService.ToLocal(existing.PickupStart);
             _model.PickupEnd = ClientTimeZoneService.ToLocal(existing.PickupEnd);
             _model.ImageUrl = existing.ImageUrl;
@@ -248,6 +256,7 @@
                 Description = _model.Description!,
                 Price = _model.Price,
                 Quantity = _model.Quantity,
+                WeightKg = _model.WeightKg,
                 PickupStart = pickupStart,
                 PickupEnd = pickupEnd,
                 ImageUrl = _model.ImageUrl,
@@ -264,6 +273,7 @@
                 Description = _model.Description!,
                 Price = _model.Price,
                 Quantity = _model.Quantity,
+                WeightKg = _model.WeightKg,
                 PickupStart = pickupStart,
                 PickupEnd = pickupEnd,
                 ImageUrl = _model.ImageUrl,
@@ -289,6 +299,9 @@
 
         [Range(1, 1000, ErrorMessage = "Quantity must be at least 1.")]
         public int Quantity { get; set; } = 1;
+
+        [Range(0.01, 100, ErrorMessage = "Weight must be greater than 0.")]
+        public decimal WeightKg { get; set; } = 1;
 
         public DateTime PickupStart { get; set; } = DateTime.Now;
         public DateTime PickupEnd { get; set; } = DateTime.Now.AddHours(2);

@@ -29,6 +29,10 @@
                 <i class="bi bi-check-circle-fill"></i>
                 <h3>Order #@_placedOrderNumber placed</h3>
                 <p>@_placedBusinessName has your order — head over at pickup time to collect it.</p>
+                @if (_placedKgSaved is > 0)
+                {
+                    <p class="cart-confirmation-impact"><i class="bi bi-leaf"></i> ~@_placedKgSaved.Value.ToString("0.#") kg of food saved from waste</p>
+                }
                 <button type="button" class="btn btn-primary w-100" @onclick="CloseAndReset">Done</button>
             </div>
         }
@@ -96,6 +100,7 @@
     private string? _error;
     private int? _placedOrderNumber;
     private string? _placedBusinessName;
+    private decimal? _placedKgSaved;
 
     protected override void OnInitialized()
     {
@@ -109,6 +114,7 @@
     private async Task CloseAndReset()
     {
         _placedOrderNumber = null;
+        _placedKgSaved = null;
         await Close();
     }
 
@@ -136,6 +142,7 @@
 
         _placedOrderNumber = result.Value?.OrderNumber;
         _placedBusinessName = businessName;
+        _placedKgSaved = CartService.Items.Sum(i => i.Quantity * i.Package.WeightKg);
         await CartService.ClearAsync();
     }
 

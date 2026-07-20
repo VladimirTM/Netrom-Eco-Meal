@@ -1023,7 +1023,7 @@ h1:focus {
     color: #d1d5db;
 }
 
-.cart-confirmation i {
+.cart-confirmation > i {
     font-size: 2.5rem;
     color: var(--em-leaf-mid);
     margin-bottom: 0.75rem;
@@ -1039,6 +1039,24 @@ h1:focus {
 .cart-confirmation p {
     font-size: 0.85rem;
     margin-bottom: 1.5rem;
+}
+
+.cart-confirmation-impact {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem !important;
+    font-weight: 600;
+    color: var(--em-leaf-dark);
+    background: var(--em-rescue-soft);
+    padding: 0.5rem 0.85rem;
+    border-radius: 999px;
+    margin-top: -0.75rem;
+}
+
+.cart-confirmation-impact i {
+    font-size: 0.9rem;
+    margin: 0;
 }
 
 .cart-line {
@@ -1463,6 +1481,19 @@ h1:focus {
     display: flex;
     justify-content: flex-end;
     padding-top: 0.6rem;
+}
+
+.order-ticket-impact {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--em-leaf-dark);
+    background: var(--em-rescue-soft);
+    padding: 0.5rem 0.85rem;
+    border-radius: 999px;
+    margin-top: 0.85rem;
 }
 
 .order-ticket-seam {

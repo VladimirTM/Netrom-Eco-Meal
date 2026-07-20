@@ -17,4 +17,5 @@ public interface IOrderService
     public Task<Order> GetOrderForManagementAsync(Guid orderId);
     public Task<Order> GetMyOrderAsync(Guid orderId);
     public Task<Order> CancelMyOrderAsync(Guid orderId);
+    public Task<decimal> GetTotalKgSavedAsync();
 }

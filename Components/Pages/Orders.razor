@@ -33,6 +33,10 @@
                 <span class="orders-stat-value">@(_orders is null ? "—" : _orders.Where(o => o.Status.Name == OrderStatuses.Completed).Select(o => o.BusinessId).Distinct().Count().ToString())</span>
                 <span class="orders-stat-label">kitchens visited</span>
             </div>
+            <div class="orders-stat">
+                <span class="orders-stat-value">@(_orders is null ? "—" : _orders.Where(o => o.Status.Name == OrderStatuses.Completed).Sum(o => o.OrderPackages.Sum(op => op.Quantity * op.Package.WeightKg)).ToString("0.#"))</span>
+                <span class="orders-stat-label">kg saved</span>
+            </div>
         </div>
     </div>
 </section>

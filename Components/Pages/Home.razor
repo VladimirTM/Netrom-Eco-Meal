@@ -10,6 +10,7 @@
 @implements IDisposable
 @inject BusinessController BusinessController
 @inject PackageController PackageController
+@inject OrderController OrderController
 @inject ReviewController ReviewController
 @inject IBusinessTypeService BusinessTypeService
 @inject CartService CartService
@@ -42,6 +43,10 @@
                 <span class="home-stat-value">@(_livePackages is null ? "—" : _livePackages.Select(p => p.BusinessId).Distinct().Count().ToString())</span>
                 <span class="home-stat-label">kitchens on board</span>
             </div>
+            <div class="home-stat">
+                <span class="home-stat-value">@(_totalKgSaved is null ? "—" : _totalKgSaved.Value.ToString("0.#"))</span>
+                <span class="home-stat-label">kg of food saved</span>
+            </div>
         </div>
     </div>
 </section>
@@ -52,7 +57,7 @@
         <div class="home-filter-bar">
             <div class="input-group home-search">
                 <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
-                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search kitchens…"
+                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search kitchens or packages…"
                        @bind="_search" @bind:event="oninput" @bind:after="OnSearchInputAsync"/>
             </div>
 
@@ -62,6 +67,11 @@
                 {
                     <option value="@bt.Id">@bt.Name</option>
                 }
+            </select>
+
+            <select class="form-select home-business-filter" @bind="_sortBy" @bind:after="FilterChangedAsync">
+                <option value="@BusinessSortOptions.Name">Name (A–Z)</option>
+                <option value="@BusinessSortOptions.ClosingSoon">Closing soon</option>
             </select>
 
             @if (HasActiveFilters)
@@ -146,14 +156,16 @@
     private List<Package>? _livePackages;
     private Dictionary<Guid, List<Package>> _livePackagesByBusiness = [];
     private Dictionary<Guid, List<Review>> _reviewsByBusiness = [];
+    private decimal? _totalKgSaved;
 
     private string _search = "";
     private string _businessTypeFilter = "";
+    private string _sortBy = BusinessSortOptions.Name;
     private int _pageIndex = 1;
     private const int PageSize = 9;
     private readonly Debouncer _reloadGate = new();
 
-    private bool HasActiveFilters => _search != "" || _businessTypeFilter != "";
+    private bool HasActiveFilters => _search != "" || _businessTypeFilter != "" || _sortBy != BusinessSortOptions.Name;
 
     protected override async Task OnInitializedAsync()
     {
@@ -163,6 +175,7 @@
         // Only count packages still orderable today — DbSeeder keeps seed data's window fresh.
         _livePackages = packages?.Where(p => p.PickupEnd > DateTime.UtcNow).ToList() ?? [];
         _livePackagesByBusiness = _livePackages.GroupBy(p => p.BusinessId).ToDictionary(g => g.Key, g => g.ToList());
+        _totalKgSaved = (await OrderController.GetTotalKgSavedAsync()).Value;
 
         CartService.OnChange += HandleCartChanged;
 
@@ -172,7 +185,7 @@
     private async Task LoadPageAsync()
     {
         Guid? typeId = Guid.TryParse(_businessTypeFilter, out var id) ? id : null;
-        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId)).Value;
+        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId, sortBy: _sortBy)).Value;
 
         // Only fetch reviews for the businesses actually shown on this page, not the whole table.
         var businessIds = _paged?.Items.Select(b => b.Id).ToList() ?? [];
@@ -204,6 +217,7 @@
     {
         _search = "";
         _businessTypeFilter = "";
+        _sortBy = BusinessSortOptions.Name;
         return FilterChangedAsync();
     }
 

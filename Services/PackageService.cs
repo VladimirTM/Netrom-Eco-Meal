@@ -82,6 +82,7 @@ public class PackageService(
         packageToUpdate.PackageTypeId = package.PackageTypeId;
         packageToUpdate.Price = package.Price;
         packageToUpdate.Quantity = package.Quantity;
+        packageToUpdate.WeightKg = package.WeightKg;
         packageToUpdate.PickupStart = package.PickupStart;
         packageToUpdate.PickupEnd = package.PickupEnd;
         packageToUpdate.ImageUrl = package.ImageUrl;

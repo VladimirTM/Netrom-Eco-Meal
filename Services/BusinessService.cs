@@ -13,9 +13,9 @@ public class BusinessService(IBusinessRepository businessRepository, CurrentUser
         return await businessRepository.GetAllAsync();
     }
 
-    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null)
+    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null, string? sortBy = null)
     {
-        return await businessRepository.GetPagedAsync(pageIndex, pageSize, search, businessTypeId, managerId);
+        return await businessRepository.GetPagedAsync(pageIndex, pageSize, search, businessTypeId, managerId, sortBy);
     }
 
     public async Task<Business?> GetByIdAsync(Guid id)
