@@ -77,6 +77,15 @@ public class OrderRepository(EcoMealDbContext context) : IOrderRepository
             .SumAsync(op => (decimal?)(op.Quantity * op.Package.WeightKg)) ?? 0m;
     }
 
+    public async Task<List<Order>> GetStalePendingOrdersAsync(DateTime createdBefore)
+    {
+        var now = DateTime.UtcNow;
+        return await OrdersWithIncludes()
+            .Where(o => o.Status.Name == OrderStatuses.Pending &&
+                (o.CreatedAt < createdBefore || o.OrderPackages.Any(op => op.Package.PickupEnd < now)))
+            .ToListAsync();
+    }
+
     public async Task AddAsync(Order order)
     {
         await context.Orders.AddAsync(order);

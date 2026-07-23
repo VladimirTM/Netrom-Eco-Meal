@@ -15,7 +15,7 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
         return await context.Businesses.Include(b => b.BusinessType).Include(b => b.Manager).ToListAsync();
     }
 
-    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null, string? sortBy = null)
+    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null, string? sortBy = null, string? favoritedByUserId = null)
     {
         var query = context.Businesses.Include(b => b.BusinessType).Include(b => b.Manager).AsQueryable();
 
@@ -33,6 +33,9 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
 
         if (managerId is not null)
             query = query.Where(b => b.ManagerId == managerId);
+
+        if (favoritedByUserId is not null)
+            query = query.Where(b => b.Favorites.Any(f => f.UserId == favoritedByUserId));
 
         // Businesses with nothing live sort to the end regardless of sort mode.
         query = sortBy == BusinessSortOptions.ClosingSoon

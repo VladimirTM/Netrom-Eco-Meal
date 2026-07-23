@@ -203,6 +203,17 @@ public static class DbSeeder
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000024"), BusinessId = b12, PackageTypeId = surpriseBag, Name = "Stadium Snack Surprise Bag",   Description = "A grab-bag of grilled snacks and sides fresh from the fan zone grill.",    Price =  6.25m, Quantity = 8,  WeightKg = 1.5m, PickupStart = At(19,  0), PickupEnd = At(21, 30), ImageUrl = "https://loremflickr.com/640/360/football,snacks/all?lock=324" }
         };
 
+        // Plausible default tags per package type, so the feature has real demo data out of the box.
+        var defaultTagsByType = new Dictionary<Guid, string[]>
+        {
+            [breadBag] = [DietaryTags.Vegetarian, DietaryTags.ContainsGluten],
+            [pastryBox] = [DietaryTags.Vegetarian, DietaryTags.ContainsGluten, DietaryTags.ContainsDairy],
+            [veggieBox] = [DietaryTags.Vegan, DietaryTags.Vegetarian, DietaryTags.GlutenFree, DietaryTags.DairyFree],
+            [mealBox] = [DietaryTags.ContainsGluten, DietaryTags.ContainsDairy],
+        };
+        foreach (var seed in seedPackages)
+            seed.DietaryTags = [..defaultTagsByType.GetValueOrDefault(seed.PackageTypeId, [])];
+
         // Refresh only the pickup window (not quantity, which reflects real orders) for known
         // seed packages once it's expired, instead of re-inserting or touching admin-added ones.
         // Also refreshes stale placeholder images, same as SeedBusinessesAsync above.
@@ -234,6 +245,13 @@ public static class DbSeeder
             if (existing.WeightKg <= 0)
             {
                 existing.WeightKg = seed.WeightKg;
+            }
+
+            // Same backfill-only rule as WeightKg above — can't distinguish "never set" from
+            // "manager cleared it", so default to the demo tags either way.
+            if (existing.DietaryTags.Count == 0)
+            {
+                existing.DietaryTags = seed.DietaryTags;
             }
         }
 

@@ -17,6 +17,7 @@
             <AuthorizeView>
                 <Authorized>
                     <div class="d-flex align-items-center gap-2">
+                        <NotificationBell TriggerClass="public-cart-btn"/>
                         @if (context.User.IsInRole(AppRoles.Customer))
                         {
                             <a href="/orders" class="public-cart-btn" aria-label="Your orders">

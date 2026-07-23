@@ -10,6 +10,8 @@ public class Order
     public required Guid StatusId { get; set; }
     // Assigned by the order_numbers DB sequence on insert — never set this manually.
     public int OrderNumber { get; set; }
+    // Used by the stale-Pending expiry sweep to decide when a reservation has gone unconfirmed too long.
+    public DateTime CreatedAt { get; set; }
     [ForeignKey(nameof(UserId))]
     public required ApplicationUser User { get; set; }
     [ForeignKey(nameof(BusinessId))]

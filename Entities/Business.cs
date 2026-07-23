@@ -19,4 +19,5 @@ public class Business
     public ICollection<Package> Packages { get; set; } = [];
     public ICollection<Order> Orders { get; set; } = [];
     public ICollection<Review> Reviews { get; set; } = [];
+    public ICollection<Favorite> Favorites { get; set; } = [];
 }

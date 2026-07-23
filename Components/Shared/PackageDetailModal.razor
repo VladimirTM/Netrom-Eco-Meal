@@ -19,6 +19,16 @@
 
             <p class="biz-modal-desc">@Package.Description</p>
 
+            @if (Package.DietaryTags.Count > 0)
+            {
+                <div class="diet-tag-row mb-3">
+                    @foreach (var tag in Package.DietaryTags)
+                    {
+                        <span class="diet-tag @(Netrom_Eco_Meal.Constants.DietaryTags.IsAllergen(tag) ? "diet-tag-allergen" : "")">@tag</span>
+                    }
+                </div>
+            }
+
             <div class="pkg-modal-facts">
                 <div class="pkg-modal-fact">
                     <i class="bi bi-shop"></i>

@@ -23,7 +23,10 @@ builder.Services.AddRazorComponents()
 builder.Services.AddCascadingAuthenticationState();
 
 var connectionString = builder.Configuration.GetConnectionString("EcoMealContext");
-builder.Services.AddDbContext<EcoMealDbContext>(options => options.UseNpgsql(connectionString));
+// Lets NotificationRepository open short-lived contexts, so the polling bell doesn't race the
+// page over the shared per-circuit EcoMealDbContext below (also sourced from this factory).
+builder.Services.AddDbContextFactory<EcoMealDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.AddScoped<EcoMealDbContext>(sp => sp.GetRequiredService<IDbContextFactory<EcoMealDbContext>>().CreateDbContext());
 
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
@@ -51,6 +54,10 @@ builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
 builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IFavoriteRepository, FavoriteRepository>();
+builder.Services.AddScoped<IFavoriteService, FavoriteService>();
 builder.Services.AddScoped<CurrentUserAccessor>();
 builder.Services.AddScoped<CartService>();
 builder.Services.AddScoped<ClientTimeZoneService>();
@@ -60,6 +67,9 @@ builder.Services.AddScoped<PackageController>();
 builder.Services.AddScoped<UserController>();
 builder.Services.AddScoped<OrderController>();
 builder.Services.AddScoped<ReviewController>();
+builder.Services.AddScoped<NotificationController>();
+builder.Services.AddScoped<FavoriteController>();
+builder.Services.AddHostedService<PendingOrderExpiryService>();
 
 var app = builder.Build();
 

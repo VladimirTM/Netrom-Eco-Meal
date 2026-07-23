@@ -102,6 +102,21 @@
                             <ValidationMessage For="@(() => _model.WeightKg)" class="validation-message small d-block mt-1"/>
                         </div>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">
+                            Dietary & allergen tags <span class="text-muted fw-normal">(optional)</span>
+                        </label>
+                        <div class="pkg-form-tag-grid">
+                            @foreach (var tag in Netrom_Eco_Meal.Constants.DietaryTags.All)
+                            {
+                                <label class="pkg-form-tag-check">
+                                    <input type="checkbox" checked="@_model.DietaryTags.Contains(tag)"
+                                           @onchange="e => ToggleTag(tag, (bool)e.Value!)"/>
+                                    @tag
+                                </label>
+                            }
+                        </div>
+                    </div>
                     <div class="row g-3 mb-3">
                         <div class="col-sm-6">
                             <label for="pickupStart" class="form-label fw-semibold">Pickup Start</label>
@@ -189,6 +204,7 @@
             _model.Price = existing.Price;
             _model.Quantity = existing.Quantity;
             _model.WeightKg = existing.WeightKg;
+            _model.DietaryTags = [..existing.DietaryTags];
             _model.PickupStart = ClientTimeZoneService.ToLocal(existing.PickupStart);
             _model.PickupEnd = ClientTimeZoneService.ToLocal(existing.PickupEnd);
             _model.ImageUrl = existing.ImageUrl;
@@ -241,6 +257,19 @@
         ClientTimeZoneService.OnChange -= HandleTimeZoneChanged;
     }
 
+    private void ToggleTag(string tag, bool isSelected)
+    {
+        if (isSelected)
+        {
+            if (!_model.DietaryTags.Contains(tag))
+                _model.DietaryTags.Add(tag);
+        }
+        else
+        {
+            _model.DietaryTags.Remove(tag);
+        }
+    }
+
     private async Task Submit()
     {
         // The form works entirely in the viewer's local time — convert back to UTC for storage.
@@ -257,6 +286,7 @@
                 Price = _model.Price,
                 Quantity = _model.Quantity,
                 WeightKg = _model.WeightKg,
+                DietaryTags = _model.DietaryTags,
                 PickupStart = pickupStart,
                 PickupEnd = pickupEnd,
                 ImageUrl = _model.ImageUrl,
@@ -274,6 +304,7 @@
                 Price = _model.Price,
                 Quantity = _model.Quantity,
                 WeightKg = _model.WeightKg,
+                DietaryTags = _model.DietaryTags,
                 PickupStart = pickupStart,
                 PickupEnd = pickupEnd,
                 ImageUrl = _model.ImageUrl,
@@ -302,6 +333,8 @@
 
         [Range(0.01, 100, ErrorMessage = "Weight must be greater than 0.")]
         public decimal WeightKg { get; set; } = 1;
+
+        public List<string> DietaryTags { get; set; } = [];
 
         public DateTime PickupStart { get; set; } = DateTime.Now;
         public DateTime PickupEnd { get; set; } = DateTime.Now.AddHours(2);

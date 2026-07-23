@@ -12,6 +12,7 @@
 @inject PackageController PackageController
 @inject OrderController OrderController
 @inject ReviewController ReviewController
+@inject FavoriteController FavoriteController
 @inject IBusinessTypeService BusinessTypeService
 @inject CartService CartService
 @inject NavigationManager NavigationManager
@@ -74,6 +75,14 @@
                 <option value="@BusinessSortOptions.ClosingSoon">Closing soon</option>
             </select>
 
+            <AuthorizeView Roles="@AppRoles.Customer">
+                <Authorized>
+                    <button type="button" class="home-fav-toggle @(_favoritesOnly ? "home-fav-toggle-active" : "")" @onclick="ToggleFavoritesOnlyAsync">
+                        <i class="bi @(_favoritesOnly ? "bi-heart-fill" : "bi-heart")"></i> Favorites
+                    </button>
+                </Authorized>
+            </AuthorizeView>
+
             @if (HasActiveFilters)
             {
                 <button class="btn btn-outline-secondary btn-sm" @onclick="ClearFiltersAsync">
@@ -122,6 +131,15 @@
                                 @reviews.Average(r => r.Rating).ToString("0.0")
                             </span>
                         }
+                        <AuthorizeView Roles="@AppRoles.Customer" Context="favAuth">
+                            <Authorized>
+                                <button type="button" class="biz-card-fav-btn @(_favoriteBusinessIds.Contains(business.Id) ? "biz-card-fav-active" : "")"
+                                        @onclick="() => ToggleFavoriteAsync(business.Id)" @onclick:stopPropagation="true"
+                                        aria-label="@(_favoriteBusinessIds.Contains(business.Id) ? "Remove from favorites" : "Add to favorites")">
+                                    <i class="bi @(_favoriteBusinessIds.Contains(business.Id) ? "bi-heart-fill" : "bi-heart")"></i>
+                                </button>
+                            </Authorized>
+                        </AuthorizeView>
                     </div>
                     <div class="biz-card-body">
                         <span class="biz-card-type">@business.BusinessType.Name</span>
@@ -157,15 +175,17 @@
     private Dictionary<Guid, List<Package>> _livePackagesByBusiness = [];
     private Dictionary<Guid, List<Review>> _reviewsByBusiness = [];
     private decimal? _totalKgSaved;
+    private HashSet<Guid> _favoriteBusinessIds = [];
 
     private string _search = "";
     private string _businessTypeFilter = "";
     private string _sortBy = BusinessSortOptions.Name;
+    private bool _favoritesOnly;
     private int _pageIndex = 1;
     private const int PageSize = 9;
     private readonly Debouncer _reloadGate = new();
 
-    private bool HasActiveFilters => _search != "" || _businessTypeFilter != "" || _sortBy != BusinessSortOptions.Name;
+    private bool HasActiveFilters => _search != "" || _businessTypeFilter != "" || _sortBy != BusinessSortOptions.Name || _favoritesOnly;
 
     protected override async Task OnInitializedAsync()
     {
@@ -176,6 +196,7 @@
         _livePackages = packages?.Where(p => p.PickupEnd > DateTime.UtcNow).ToList() ?? [];
         _livePackagesByBusiness = _livePackages.GroupBy(p => p.BusinessId).ToDictionary(g => g.Key, g => g.ToList());
         _totalKgSaved = (await OrderController.GetTotalKgSavedAsync()).Value;
+        _favoriteBusinessIds = (await FavoriteController.GetMyFavoriteBusinessIdsAsync()).Value ?? [];
 
         CartService.OnChange += HandleCartChanged;
 
@@ -185,7 +206,7 @@
     private async Task LoadPageAsync()
     {
         Guid? typeId = Guid.TryParse(_businessTypeFilter, out var id) ? id : null;
-        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId, sortBy: _sortBy)).Value;
+        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId, sortBy: _sortBy, favoritesOnly: _favoritesOnly)).Value;
 
         // Only fetch reviews for the businesses actually shown on this page, not the whole table.
         var businessIds = _paged?.Items.Select(b => b.Id).ToList() ?? [];
@@ -218,7 +239,27 @@
         _search = "";
         _businessTypeFilter = "";
         _sortBy = BusinessSortOptions.Name;
+        _favoritesOnly = false;
         return FilterChangedAsync();
+    }
+
+    private Task ToggleFavoritesOnlyAsync()
+    {
+        _favoritesOnly = !_favoritesOnly;
+        return FilterChangedAsync();
+    }
+
+    private async Task ToggleFavoriteAsync(Guid businessId)
+    {
+        var isFavorite = (await FavoriteController.ToggleFavoriteAsync(businessId)).Value;
+        if (isFavorite)
+            _favoriteBusinessIds.Add(businessId);
+        else
+            _favoriteBusinessIds.Remove(businessId);
+
+        // The favorites-only filter's current page can go stale the moment something is unfavorited.
+        if (_favoritesOnly)
+            await ReloadAsync();
     }
 
     private List<Package> LivePackagesFor(Guid businessId) =>

@@ -18,4 +18,6 @@ public interface IOrderService
     public Task<Order> GetMyOrderAsync(Guid orderId);
     public Task<Order> CancelMyOrderAsync(Guid orderId);
     public Task<decimal> GetTotalKgSavedAsync();
+    // System-triggered, no current-user auth — called by the background expiry sweep.
+    public Task<int> ExpireStalePendingOrdersAsync();
 }

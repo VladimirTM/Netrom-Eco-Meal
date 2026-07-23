@@ -12,6 +12,7 @@
 @inject BusinessController BusinessController
 @inject PackageController PackageController
 @inject ReviewController ReviewController
+@inject FavoriteController FavoriteController
 @inject CartService CartService
 @inject ClientTimeZoneService ClientTimeZoneService
 
@@ -36,7 +37,17 @@ else
             <div class="biz-modal-hero" style="@HeroStyle">
                 <div class="biz-modal-hero-overlay">
                     <span class="biz-modal-eyebrow">@_business!.BusinessType.Name</span>
-                    <h1 class="biz-modal-title" id="biz-modal-title">@_business.Name</h1>
+                    <div class="d-flex align-items-start justify-content-between gap-2">
+                        <h1 class="biz-modal-title" id="biz-modal-title">@_business.Name</h1>
+                        <AuthorizeView Roles="@AppRoles.Customer" Context="favAuth">
+                            <Authorized>
+                                <button type="button" class="biz-modal-fav-btn @(_isFavorite ? "biz-modal-fav-active" : "")" @onclick="ToggleFavoriteAsync">
+                                    <i class="bi @(_isFavorite ? "bi-heart-fill" : "bi-heart")"></i>
+                                    @(_isFavorite ? "Favorited" : "Favorite")
+                                </button>
+                            </Authorized>
+                        </AuthorizeView>
+                    </div>
                     <div class="biz-modal-meta">
                         <span class="biz-modal-address"><i class="bi bi-geo-alt-fill"></i>@_business.Address</span>
                         @if (_reviews.Count > 0)
@@ -87,6 +98,15 @@ else
                                             <span><i class="bi bi-clock"></i>@PickupLabel(package)</span>
                                         </div>
                                         <p class="biz-pkg-desc">@package.Description</p>
+                                        @if (package.DietaryTags.Count > 0)
+                                        {
+                                            <div class="diet-tag-row">
+                                                @foreach (var tag in package.DietaryTags)
+                                                {
+                                                    <span class="diet-tag @(Netrom_Eco_Meal.Constants.DietaryTags.IsAllergen(tag) ? "diet-tag-allergen" : "")">@tag</span>
+                                                }
+                                            </div>
+                                        }
                                     </div>
                                     <div class="biz-pkg-side">
                                         <div class="biz-pkg-price">@package.Price.ToString("C")</div>
@@ -212,6 +232,7 @@ else
     private Package? _pendingSwitch;
     private bool _switchingBasket;
     private Package? _selectedPackage;
+    private bool _isFavorite;
 
     private double AverageRating => _reviews.Count == 0 ? 0 : _reviews.Average(r => r.Rating);
 
@@ -236,6 +257,9 @@ else
 
         if (_business is null)
             return;
+
+        var favoriteIds = (await FavoriteController.GetMyFavoriteBusinessIdsAsync()).Value ?? [];
+        _isFavorite = favoriteIds.Contains(Id);
 
         _loadingPackages = true;
         StateHasChanged();
@@ -281,6 +305,11 @@ else
         _toastMessage = $"Added \"{package.Name}\" to your basket.";
         _toastToken = Guid.NewGuid();
         _selectedPackage = null;
+    }
+
+    private async Task ToggleFavoriteAsync()
+    {
+        _isFavorite = (await FavoriteController.ToggleFavoriteAsync(Id)).Value;
     }
 
     private async Task ConfirmSwitchBasketAsync()

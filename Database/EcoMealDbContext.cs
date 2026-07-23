@@ -19,6 +19,8 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<PackageType> PackageTypes { get; set; }
     public DbSet<Status> Statuses { get; set; }
     public DbSet<Review> Reviews { get; set; }
+    public DbSet<Notification> Notifications { get; set; }
+    public DbSet<Favorite> Favorites { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,6 +52,15 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
         modelBuilder.Entity<Review>()
             .HasIndex(r => new { r.BusinessId, r.UserId })
             .IsUnique();
+
+        // One favorite per customer per business — toggling un-favorites instead of duplicating.
+        modelBuilder.Entity<Favorite>()
+            .HasIndex(f => new { f.UserId, f.BusinessId })
+            .IsUnique();
+
+        // Newest-first lookups for a user's bell dropdown are the only query pattern.
+        modelBuilder.Entity<Notification>()
+            .HasIndex(n => new { n.UserId, n.CreatedAt });
 
         // Optimistic concurrency so two managers confirming the same package can't oversell stock.
         modelBuilder.Entity<Package>()

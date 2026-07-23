@@ -14,6 +14,8 @@ public interface IOrderRepository
     public Task<Order?> GetByIdAsync(Guid id);
     public Task<bool> HasCompletedOrderAsync(string userId, Guid businessId);
     public Task<decimal> GetTotalWeightSavedKgAsync();
+    // Pending orders past their confirm window or a closed pickup slot — feeds the expiry sweep.
+    public Task<List<Order>> GetStalePendingOrdersAsync(DateTime createdBefore);
     public Task AddAsync(Order order);
     public Task DeleteAsync(Guid id);
     public Task SaveChangesAsync();

@@ -7,7 +7,7 @@ namespace Netrom_Eco_Meal.Services.Interfaces;
 public interface IBusinessService
 {
     public Task<List<Business>> GetAllAsync();
-    public Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null, string? sortBy = null);
+    public Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null, string? sortBy = null, bool favoritesOnly = false);
     public Task<Business?> GetByIdAsync(Guid id);
     public Task<Business?> GetByManagerIdAsync(string managerId);
     public Task AddAsync(Business business);

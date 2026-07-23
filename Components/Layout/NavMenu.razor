@@ -66,6 +66,7 @@
                 <div class="sidebar-user-email">@context.User.Identity?.Name</div>
                 <div class="sidebar-user-role">@DisplayRole(context.User)</div>
             </div>
+            <NotificationBell TriggerClass="sidebar-notif-btn"/>
             <form method="post" action="api/auth/logout">
                 <AntiforgeryToken />
                 <button type="submit" class="sidebar-logout-btn" title="Sign out"

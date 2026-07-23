@@ -12,6 +12,7 @@ public class OrderService(
     IOrderRepository orderRepository,
     IPackageRepository packageRepository,
     IBusinessService businessService,
+    INotificationService notificationService,
     EcoMealDbContext dbContext,
     CurrentUserAccessor currentUser) : IOrderService
 {
@@ -40,6 +41,7 @@ public class OrderService(
             User = user,
             BusinessId = businessId,
             StatusId = pendingStatus.Id,
+            CreatedAt = DateTime.UtcNow,
             // OrderNumber comes from the order_numbers DB sequence on insert (see EcoMealDbContext).
         };
 
@@ -75,6 +77,14 @@ public class OrderService(
 
         await orderRepository.AddAsync(order);
         await orderRepository.SaveChangesAsync();
+
+        var business = await businessService.GetByIdAsync(businessId);
+        if (business?.ManagerId is not null)
+        {
+            await notificationService.CreateAsync(business.ManagerId,
+                $"New order #{order.OrderNumber:000} from {user.Name} at {business.Name} needs confirmation.",
+                "/orders/manage");
+        }
 
         return order;
     }
@@ -150,6 +160,29 @@ public class OrderService(
         return await orderRepository.GetTotalWeightSavedKgAsync();
     }
 
+    // No current-user auth (background-sweep call). Pending orders never touched Package.Quantity,
+    // so cancelling needs no stock restore — it just stops counting against pendingElsewhere.
+    public async Task<int> ExpireStalePendingOrdersAsync()
+    {
+        var cancelledStatus = await dbContext.Statuses.FirstOrDefaultAsync(s => s.Name == OrderStatuses.Cancelled)
+            ?? throw new InvalidOperationException("Order status configuration is missing.");
+
+        var staleOrders = await orderRepository.GetStalePendingOrdersAsync(DateTime.UtcNow - OrderExpiry.PendingTimeout);
+
+        foreach (var order in staleOrders)
+        {
+            order.StatusId = cancelledStatus.Id;
+            await notificationService.CreateAsync(order.UserId,
+                $"Order #{order.OrderNumber:000} at {order.Business.Name} was automatically cancelled because it wasn't confirmed in time.",
+                "/orders");
+        }
+
+        if (staleOrders.Count > 0)
+            await orderRepository.SaveChangesAsync();
+
+        return staleOrders.Count;
+    }
+
     public async Task<Order> CancelMyOrderAsync(Guid orderId)
     {
         if (!await currentUser.IsInRoleAsync(AppRoles.Customer))
@@ -215,6 +248,16 @@ public class OrderService(
             // Another confirm/cancel changed a package's stock (xmin token) — don't oversell.
             throw new InvalidOperationException("Stock for this order just changed — please refresh and try again.");
         }
+
+        var (message, url) = statusName switch
+        {
+            OrderStatuses.Confirmed => ($"Order #{order.OrderNumber:000} at {order.Business.Name} was confirmed — show your QR code at pickup.", $"/orders/pickup/{order.Id}"),
+            OrderStatuses.Completed => ($"Order #{order.OrderNumber:000} at {order.Business.Name} is complete — thanks for rescuing food!", "/orders"),
+            OrderStatuses.Cancelled => ($"Order #{order.OrderNumber:000} at {order.Business.Name} was cancelled.", "/orders"),
+            _ => (null, null),
+        };
+        if (message is not null)
+            await notificationService.CreateAsync(order.UserId, message, url);
 
         return order;
     }
