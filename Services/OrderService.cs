@@ -31,6 +31,11 @@ public class OrderService(
         var user = await dbContext.Users.FindAsync(userId)
             ?? throw new UnauthorizedAccessException("Your account could not be found.");
 
+        var windowStart = DateTime.UtcNow - OrderRateLimit.Window;
+        var recentOrderCount = await dbContext.Orders.CountAsync(o => o.UserId == userId && o.CreatedAt >= windowStart);
+        if (recentOrderCount >= OrderRateLimit.MaxOrdersPerWindow)
+            throw new InvalidOperationException($"You've placed {OrderRateLimit.MaxOrdersPerWindow} orders in the last {OrderRateLimit.Window.TotalMinutes:0} minutes — please wait a bit before placing another.");
+
         var pendingStatus = await dbContext.Statuses.FirstOrDefaultAsync(s => s.Name == OrderStatuses.Pending)
             ?? throw new InvalidOperationException("Order status configuration is missing.");
 
@@ -127,6 +132,14 @@ public class OrderService(
         return await orderRepository.GetPagedForManagementAsync(pageIndex, pageSize, search, effectiveBusinessId, status);
     }
 
+    public async Task<List<Order>> GetOrdersInRangeAsync(DateTime? from, DateTime? to, Guid? businessId = null)
+    {
+        var (isAdmin, business) = await ResolveManagedBusinessAsync();
+        var effectiveBusinessId = isAdmin ? businessId : business!.Id;
+
+        return await orderRepository.GetInRangeAsync(effectiveBusinessId, from, to);
+    }
+
     public async Task<Order> UpdateStatusAsync(Guid orderId, string statusName)
     {
         var order = await GetOwnedOrderAsync(orderId);
@@ -181,6 +194,11 @@ public class OrderService(
             await orderRepository.SaveChangesAsync();
 
         return staleOrders.Count;
+    }
+
+    public async Task<Dictionary<Guid, int>> GetPendingReservedQuantitiesAsync(IEnumerable<Guid> packageIds)
+    {
+        return await orderRepository.GetPendingQuantitiesByPackageIdsAsync(packageIds);
     }
 
     public async Task<Order> CancelMyOrderAsync(Guid orderId)

@@ -10,6 +10,7 @@
 @implements IDisposable
 @inject OrderController OrderController
 @inject ClientTimeZoneService ClientTimeZoneService
+@inject CartService CartService
 @attribute [Authorize(Roles = AppRoles.Customer)]
 
 <PageTitle>Your orders — Eco Meal</PageTitle>
@@ -45,6 +46,11 @@
     @if (_actionError is not null)
     {
         <div class="alert alert-danger" role="alert">@_actionError</div>
+    }
+
+    @if (_reorderMessage is not null)
+    {
+        <div class="alert @(_reorderMessageIsError ? "alert-danger" : "alert-success")" role="alert">@_reorderMessage</div>
     }
 
     @if (_orders is not null && _orders.Count > 0)
@@ -139,6 +145,23 @@
                                 </button>
                             </div>
                         }
+                        else if (order.Status.Name is OrderStatuses.Completed or OrderStatuses.Cancelled)
+                        {
+                            <div class="order-ticket-actions">
+                                <button type="button" class="order-action-btn order-action-reorder" disabled="@(_reorderingOrderId == order.Id)"
+                                        @onclick="() => RequestReorderAsync(order)" @onclick:stopPropagation="true">
+                                    @if (_reorderingOrderId == order.Id)
+                                    {
+                                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-arrow-repeat"></i>
+                                    }
+                                    Order again
+                                </button>
+                            </div>
+                        }
                     </div>
 
                     <div class="order-ticket-seam"></div>
@@ -165,6 +188,16 @@
 
 <OrderDetailModal Order="_selectedOrder" PickupLabel="@(_selectedOrder is null ? "" : PickupWindow(_selectedOrder))" OnClose="() => _selectedOrder = null"/>
 
+<ConfirmDialog IsOpen="@(_pendingReorder is not null)"
+               Title="Start a new basket?"
+               Message="@ReorderSwitchMessage"
+               ConfirmLabel="Start new basket"
+               CancelLabel="Keep current basket"
+               ConfirmClass="btn-primary"
+               Busy="@(_reorderingOrderId is not null)"
+               OnConfirm="ConfirmReorderAsync"
+               OnCancel="() => _pendingReorder = null"/>
+
 @code {
     // Lifecycle order for the filter chips, not alphabetical or appearance order.
     private static readonly string[] StatusOrder = [OrderStatuses.Pending, OrderStatuses.Confirmed, OrderStatuses.Completed, OrderStatuses.Cancelled];
@@ -184,6 +217,14 @@
     private bool _cancelling;
     private string? _actionError;
     private Order? _selectedOrder;
+
+    private Order? _pendingReorder;
+    private Guid? _reorderingOrderId;
+    private string? _reorderMessage;
+    private bool _reorderMessageIsError;
+
+    private string ReorderSwitchMessage => _pendingReorder is null ? "" :
+        $"Your basket has items from {CartService.BusinessName}. Reordering from {_pendingReorder.Business.Name} will clear it and start a new one.";
 
     protected override async Task OnInitializedAsync()
     {
@@ -231,6 +272,68 @@
 
         _cancelling = false;
         _pendingCancel = null;
+    }
+
+    private async Task RequestReorderAsync(Order order)
+    {
+        _reorderMessage = null;
+
+        var stillLive = order.OrderPackages.Any(op => op.Package.PickupEnd > DateTime.UtcNow && op.Package.Quantity > 0);
+        if (!stillLive)
+        {
+            _reorderMessage = "None of the items from this order are available right now.";
+            _reorderMessageIsError = true;
+            return;
+        }
+
+        // A basket can only hold one business at a time — same check BusinessDetail uses before adding.
+        if (CartService.TotalCount > 0 && CartService.BusinessId != order.BusinessId)
+        {
+            _pendingReorder = order;
+            return;
+        }
+
+        await AddReorderLinesAsync(order);
+    }
+
+    private async Task ConfirmReorderAsync()
+    {
+        if (_pendingReorder is null)
+            return;
+
+        var order = _pendingReorder;
+        _pendingReorder = null;
+        await AddReorderLinesAsync(order);
+    }
+
+    private async Task AddReorderLinesAsync(Order order)
+    {
+        _reorderingOrderId = order.Id;
+
+        var addedCount = 0;
+        var skippedCount = 0;
+
+        foreach (var line in order.OrderPackages)
+        {
+            // Skip packages no longer live or in stock — CartService.AddAsync clamps quantity for the rest.
+            if (line.Package.PickupEnd <= DateTime.UtcNow || line.Package.Quantity <= 0)
+            {
+                skippedCount++;
+                continue;
+            }
+
+            await CartService.AddAsync(line.Package, line.Quantity);
+            addedCount++;
+        }
+
+        _reorderMessageIsError = addedCount == 0;
+        _reorderMessage = addedCount == 0
+            ? "None of the items from this order are available right now."
+            : skippedCount == 0
+                ? $"Added {addedCount} item{(addedCount == 1 ? "" : "s")} from {order.Business.Name} to your basket."
+                : $"Added {addedCount} item{(addedCount == 1 ? "" : "s")} from {order.Business.Name} — {skippedCount} item{(skippedCount == 1 ? "" : "s")} no longer available.";
+
+        _reorderingOrderId = null;
     }
 
     private Task FilterChangedAsync(string? status)

@@ -13,6 +13,7 @@
 @inject PackageController PackageController
 @inject ReviewController ReviewController
 @inject FavoriteController FavoriteController
+@inject OrderController OrderController
 @inject CartService CartService
 @inject ClientTimeZoneService ClientTimeZoneService
 
@@ -88,7 +89,7 @@ else
                         <div class="biz-pkg-list">
                             @foreach (var package in _packages)
                             {
-                                var available = CartService.AvailableQuantity(package);
+                                var available = CartService.AvailableQuantity(package, _reservedByPackage.GetValueOrDefault(package.Id));
                                 <div class="biz-pkg-row biz-pkg-row-clickable" @onclick="() => _selectedPackage = package">
                                     <div class="biz-pkg-info">
                                         <div class="biz-pkg-name">@package.Name</div>
@@ -199,7 +200,7 @@ else
 }
 
 <PackageDetailModal Package="_selectedPackage"
-                     AvailableQuantity="@(_selectedPackage is null ? 0 : CartService.AvailableQuantity(_selectedPackage))"
+                     AvailableQuantity="@(_selectedPackage is null ? 0 : CartService.AvailableQuantity(_selectedPackage, _reservedByPackage.GetValueOrDefault(_selectedPackage.Id)))"
                      PickupLabel="@(_selectedPackage is null ? "" : PickupLabel(_selectedPackage))"
                      OnClose="() => _selectedPackage = null"
                      OnAddToCart="AddToCart"/>
@@ -233,6 +234,7 @@ else
     private bool _switchingBasket;
     private Package? _selectedPackage;
     private bool _isFavorite;
+    private Dictionary<Guid, int> _reservedByPackage = [];
 
     private double AverageRating => _reviews.Count == 0 ? 0 : _reviews.Average(r => r.Rating);
 
@@ -269,6 +271,7 @@ else
             .Where(p => p.PickupEnd > DateTime.UtcNow)
             .OrderBy(p => p.PickupEnd)
             .ToList() ?? [];
+        _reservedByPackage = (await OrderController.GetPendingReservedQuantitiesAsync(_packages.Select(p => p.Id))).Value ?? [];
         _loadingPackages = false;
 
         await ReloadReviewsAsync(Id);

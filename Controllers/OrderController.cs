@@ -70,6 +70,18 @@ public class OrderController(IOrderService orderService) : ControllerBase
         }
     }
 
+    public async Task<ActionResult<List<Order>>> GetOrdersInRangeAsync(DateTime? from, DateTime? to, Guid? businessId = null)
+    {
+        try
+        {
+            return await orderService.GetOrdersInRangeAsync(from, to, businessId);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized();
+        }
+    }
+
     public async Task<ActionResult<Order>> UpdateOrderStatusAsync(Guid orderId, string statusName)
     {
         try
@@ -97,6 +109,11 @@ public class OrderController(IOrderService orderService) : ControllerBase
     public async Task<ActionResult<decimal>> GetTotalKgSavedAsync()
     {
         return await orderService.GetTotalKgSavedAsync();
+    }
+
+    public async Task<ActionResult<Dictionary<Guid, int>>> GetPendingReservedQuantitiesAsync(IEnumerable<Guid> packageIds)
+    {
+        return await orderService.GetPendingReservedQuantitiesAsync(packageIds);
     }
 
     public async Task<ActionResult<Order>> GetMyOrderAsync(Guid orderId)

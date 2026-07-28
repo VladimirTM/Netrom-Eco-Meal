@@ -129,6 +129,51 @@
     }
 </div>
 
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-transparent border-0 pt-4 px-4 pb-0">
+        <h6 class="fw-semibold mb-0">Last 14 days</h6>
+    </div>
+    <div class="card-body px-4 pb-4">
+        @if (_ordersUnavailable)
+        {
+            <p class="text-muted small mb-0">You don't manage a business yet, so there's no trend to show.</p>
+        }
+        else if (_dailyStats is null)
+        {
+            <div class="d-flex justify-content-center py-4">
+                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="dash-trend-row">
+                <span class="dash-trend-label">Orders</span>
+                <div class="dash-trend-chart">
+                    @foreach (var day in _dailyStats)
+                    {
+                        <div class="dash-trend-bar-wrap" title="@day.Date.ToString("MMM d"): @day.OrderCount order@(day.OrderCount == 1 ? "" : "s")">
+                            <div class="dash-trend-bar dash-trend-bar-orders" style="height: @(BarHeightPx(day.OrderCount, _maxOrderCount))px"></div>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="dash-trend-row">
+                <span class="dash-trend-label">Kg saved</span>
+                <div class="dash-trend-chart">
+                    @foreach (var day in _dailyStats)
+                    {
+                        <div class="dash-trend-bar-wrap" title="@day.Date.ToString("MMM d"): @day.KgSaved.ToString("0.#") kg saved">
+                            <div class="dash-trend-bar dash-trend-bar-kg" style="height: @(BarHeightPx(day.KgSaved, _maxKgSaved))px"></div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
 <div class="card border-0 shadow-sm">
     <div class="card-header bg-transparent border-0 pt-4 px-4 pb-0">
         <h6 class="fw-semibold mb-0">Quick Actions</h6>
@@ -180,6 +225,11 @@
     private int? _userCount;
     private bool _ordersUnavailable;
 
+    private record DailyStat(DateOnly Date, int OrderCount, decimal KgSaved);
+    private List<DailyStat>? _dailyStats;
+    private int _maxOrderCount = 1;
+    private decimal _maxKgSaved = 1m;
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -203,8 +253,46 @@
 
         var orders = await OrderController.GetOrdersForManagementAsync();
         if (orders.Result is UnauthorizedResult)
+        {
             _ordersUnavailable = true;
-        else
-            _orderCount = orders.Value?.Count ?? 0;
+            return;
+        }
+
+        _orderCount = orders.Value?.Count ?? 0;
+        await LoadDailyStatsAsync();
+    }
+
+    private async Task LoadDailyStatsAsync()
+    {
+        // Bucketed in UTC, not local time — good enough for a trend shape, no JS interop needed.
+        var since = DateTime.UtcNow.Date.AddDays(-13);
+        var rangeOrders = (await OrderController.GetOrdersInRangeAsync(since, null)).Value ?? [];
+
+        _dailyStats = Enumerable.Range(0, 14)
+            .Select(i => since.AddDays(i))
+            .Select(day =>
+            {
+                var ordersThatDay = rangeOrders.Where(o => o.CreatedAt.Date == day).ToList();
+                var kgSaved = ordersThatDay
+                    .Where(o => o.Status.Name == OrderStatuses.Completed)
+                    .Sum(o => o.OrderPackages.Sum(op => op.Quantity * op.Package.WeightKg));
+
+                return new DailyStat(DateOnly.FromDateTime(day), ordersThatDay.Count, kgSaved);
+            })
+            .ToList();
+
+        _maxOrderCount = Math.Max(1, _dailyStats.Max(d => d.OrderCount));
+        _maxKgSaved = Math.Max(1m, _dailyStats.Max(d => d.KgSaved));
+    }
+
+    // Pixels, not percentage height — percentages don't reliably resolve through an unstretched flex-item chain.
+    private const int ChartHeightPx = 64;
+
+    private static int BarHeightPx(decimal value, decimal max)
+    {
+        if (value <= 0)
+            return 3;
+
+        return (int)Math.Clamp(value / max * ChartHeightPx, 4, ChartHeightPx);
     }
 }

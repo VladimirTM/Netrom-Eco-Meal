@@ -58,6 +58,22 @@ public class OrderRepository(EcoMealDbContext context) : IOrderRepository
         return await PaginatedList<Order>.CreateAsync(query.OrderByDescending(o => o.OrderNumber), pageIndex, pageSize);
     }
 
+    public async Task<List<Order>> GetInRangeAsync(Guid? businessId, DateTime? from, DateTime? to)
+    {
+        var query = OrdersWithIncludes().AsQueryable();
+
+        if (businessId.HasValue)
+            query = query.Where(o => o.BusinessId == businessId);
+
+        if (from.HasValue)
+            query = query.Where(o => o.CreatedAt >= from.Value);
+
+        if (to.HasValue)
+            query = query.Where(o => o.CreatedAt <= to.Value);
+
+        return await query.OrderByDescending(o => o.OrderNumber).ToListAsync();
+    }
+
     public async Task<Order?> GetByIdAsync(Guid id)
     {
         return await OrdersWithIncludes().FirstOrDefaultAsync(o => o.Id == id);
@@ -84,6 +100,19 @@ public class OrderRepository(EcoMealDbContext context) : IOrderRepository
             .Where(o => o.Status.Name == OrderStatuses.Pending &&
                 (o.CreatedAt < createdBefore || o.OrderPackages.Any(op => op.Package.PickupEnd < now)))
             .ToListAsync();
+    }
+
+    public async Task<Dictionary<Guid, int>> GetPendingQuantitiesByPackageIdsAsync(IEnumerable<Guid> packageIds)
+    {
+        var ids = packageIds.ToList();
+        if (ids.Count == 0)
+            return [];
+
+        return await context.OrderPackages
+            .Where(op => ids.Contains(op.PackageId) && op.Order.Status.Name == OrderStatuses.Pending)
+            .GroupBy(op => op.PackageId)
+            .Select(g => new { PackageId = g.Key, Quantity = g.Sum(op => op.Quantity) })
+            .ToDictionaryAsync(g => g.PackageId, g => g.Quantity);
     }
 
     public async Task AddAsync(Order order)

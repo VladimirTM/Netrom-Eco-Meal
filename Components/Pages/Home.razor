@@ -37,7 +37,7 @@
                 <span class="home-stat-label">packages live</span>
             </div>
             <div class="home-stat">
-                <span class="home-stat-value">@(_livePackages is null ? "—" : _livePackages.Sum(p => CartService.AvailableQuantity(p)).ToString())</span>
+                <span class="home-stat-value">@(_livePackages is null ? "—" : _livePackages.Sum(p => CartService.AvailableQuantity(p, _reservedByPackage.GetValueOrDefault(p.Id))).ToString())</span>
                 <span class="home-stat-label">portions to save</span>
             </div>
             <div class="home-stat">
@@ -173,6 +173,7 @@
     private List<BusinessType>? _businessTypes;
     private List<Package>? _livePackages;
     private Dictionary<Guid, List<Package>> _livePackagesByBusiness = [];
+    private Dictionary<Guid, int> _reservedByPackage = [];
     private Dictionary<Guid, List<Review>> _reviewsByBusiness = [];
     private decimal? _totalKgSaved;
     private HashSet<Guid> _favoriteBusinessIds = [];
@@ -195,6 +196,7 @@
         // Only count packages still orderable today — DbSeeder keeps seed data's window fresh.
         _livePackages = packages?.Where(p => p.PickupEnd > DateTime.UtcNow).ToList() ?? [];
         _livePackagesByBusiness = _livePackages.GroupBy(p => p.BusinessId).ToDictionary(g => g.Key, g => g.ToList());
+        _reservedByPackage = (await OrderController.GetPendingReservedQuantitiesAsync(_livePackages.Select(p => p.Id))).Value ?? [];
         _totalKgSaved = (await OrderController.GetTotalKgSavedAsync()).Value;
         _favoriteBusinessIds = (await FavoriteController.GetMyFavoriteBusinessIdsAsync()).Value ?? [];
 

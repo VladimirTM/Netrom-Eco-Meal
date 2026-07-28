@@ -1801,8 +1801,72 @@ h1:focus {
     color: #fff;
 }
 
+.order-action-reorder {
+    color: var(--em-leaf-dark);
+    border-color: rgba(21, 128, 61, 0.3);
+    background: rgba(21, 128, 61, 0.07);
+}
+.order-action-reorder:hover:not(:disabled) {
+    background: var(--em-leaf-dark);
+    border-color: var(--em-leaf-dark);
+    color: #fff;
+}
+.order-action-reorder:disabled {
+    opacity: 0.7;
+    cursor: default;
+}
+
 .order-row-clickable {
     cursor: pointer;
+}
+
+/* ── Dashboard trend chart (last 14 days) ── */
+.dash-trend-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+.dash-trend-row:last-child {
+    margin-bottom: 0;
+}
+
+.dash-trend-label {
+    flex-shrink: 0;
+    width: 70px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--em-muted);
+}
+
+.dash-trend-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.25rem;
+    height: 64px;
+    flex: 1;
+}
+
+.dash-trend-bar-wrap {
+    display: flex;
+    align-items: flex-end;
+    flex: 1;
+    height: 100%;
+}
+
+.dash-trend-bar {
+    width: 100%;
+    min-height: 3px;
+    border-radius: 3px 3px 0 0;
+    transition: height 0.2s ease;
+}
+
+.dash-trend-bar-orders {
+    background: var(--em-leaf-mid);
+}
+
+.dash-trend-bar-kg {
+    background: var(--em-rescue);
 }
 
 /* ── Star rating ── */

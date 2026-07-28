@@ -30,7 +30,9 @@ public class CartService(IJSRuntime jsRuntime, IPackageService packageService)
 
     public int InCartQuantity(Guid packageId) => _items.FirstOrDefault(i => i.Package.Id == packageId)?.Quantity ?? 0;
 
-    public int AvailableQuantity(Package package) => Math.Max(0, package.Quantity - InCartQuantity(package.Id));
+    // reservedElsewhere: other Pending reservations against this package, not just the local cart.
+    public int AvailableQuantity(Package package, int reservedElsewhere = 0) =>
+        Math.Max(0, package.Quantity - reservedElsewhere - InCartQuantity(package.Id));
 
     public async Task RestoreAsync()
     {

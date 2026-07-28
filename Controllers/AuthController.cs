@@ -8,10 +8,12 @@ namespace Netrom_Eco_Meal.Controllers;
 // Each form embeds <AntiforgeryToken /> so this validation has something to check.
 [ApiController]
 [Route("api/[controller]")]
-[ManualValidateAntiforgeryToken]
 public class AuthController(IAuthService authService) : ControllerBase
 {
+    // Login/Register stay antiforgery-protected — forging either has real impact. Logout deliberately
+    // doesn't (see below).
     [HttpPost("login")]
+    [ManualValidateAntiforgeryToken]
     public async Task<IActionResult> LoginAsync([FromForm] LoginRequest request, [FromForm] string? returnUrl)
     {
         if (!ModelState.IsValid)
@@ -28,6 +30,7 @@ public class AuthController(IAuthService authService) : ControllerBase
     }
 
     [HttpPost("register")]
+    [ManualValidateAntiforgeryToken]
     public async Task<IActionResult> RegisterAsync([FromForm] RegisterRequest request, [FromForm] string name, [FromForm] string? returnUrl)
     {
         if (!ModelState.IsValid || string.IsNullOrWhiteSpace(name))
@@ -43,6 +46,8 @@ public class AuthController(IAuthService authService) : ControllerBase
         return LocalRedirect($"/account/register?error={Uri.EscapeDataString(error)}&returnUrl={returnUrl}");
     }
 
+    // No [ManualValidateAntiforgeryToken]: a forged logout only logs the victim out, and the header's
+    // form can render tokenless via NotFoundPage's HttpContext-less in-circuit fallback.
     [HttpPost("logout")]
     public async Task<IActionResult> LogoutAsync([FromQuery] string? returnUrl)
     {
