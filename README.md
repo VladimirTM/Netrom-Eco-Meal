@@ -82,7 +82,9 @@ A seeded admin account is created automatically:
 - **Password:** Admin123!
 
 Change `SeedAdmin__Email` / `SeedAdmin__Password` in `docker-compose.test.yml` before
-running if you don't want the default admin credentials.
+running if you don't want the default admin credentials. Two demo accounts (see
+[Seed data](#seed-data) below) are also created regardless of that setting, so you can log
+in as a customer or business manager and see the app already in use.
 
 The pickup QR scanner (`/orders/scan`) uses the device camera, which browsers only allow
 over HTTPS or on `localhost`. It works fine when you open the app as `localhost:8081`,
@@ -96,3 +98,28 @@ On first run (and on every subsequent startup) `DbSeeder` makes sure the referen
 businesses/packages in Timișoara exist. It's safe to re-run: it only fills in what's
 missing and refreshes expired pickup windows or stale placeholder images, it never
 touches data you've added or customized through the app.
+
+It also creates two demo accounts, so every feature has real data to look at right away
+instead of an empty app:
+
+- **Customer** — demo.customer@ecomeal.local / Demo123! — has past orders in every status
+  (completed, confirmed, cancelled, pending) across several businesses, so `/orders`,
+  reorder, the QR pickup pass, favorites and reviews all show something real.
+- **BusinessManager** — demo.manager@ecomeal.local / Demo123! — assigned to Stadionul de
+  Gusturi, with a pending order waiting to be confirmed on `/orders/manage` and enough
+  order history for `/dashboard`'s trend chart and CSV export to be worth looking at.
+
+This activity is only ever seeded once, the first time the app starts against a genuinely
+empty database — unlike the reference/demo-catalog data above, it won't touch orders
+placed for real afterward.
+
+## Running tests
+
+`Tests/Netrom-Eco-Meal.Tests.csproj` is a separate xUnit project (unit tests for
+`OrderService`'s status-transition/stock logic, plus integration tests that run the real
+migrations + `DbSeeder` against a Postgres container via Testcontainers). Requires Docker
+to be running locally:
+
+```bash
+dotnet test
+```

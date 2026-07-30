@@ -11,6 +11,14 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <!-- Tests/ is its own project; the Web SDK's default globs would otherwise also pull its
+           generated obj/ files (e.g. GlobalUsings referencing Xunit) into this project. -->
+      <Compile Remove="Tests/**" />
+      <Content Remove="Tests/**" />
+      <None Remove="Tests/**" />
+    </ItemGroup>
+
+    <ItemGroup>
       <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.9" />
       <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
       <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">

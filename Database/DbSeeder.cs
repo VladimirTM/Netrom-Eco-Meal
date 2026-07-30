@@ -7,6 +7,17 @@ namespace Netrom_Eco_Meal.Database;
 
 public static class DbSeeder
 {
+    // Fixed demo credentials so every feature (dashboard trends, reorder, favorites, reviews,
+    // the notification bell, QR pickup...) has something to look at without extra config. Not
+    // real accounts, so — unlike SeedAdmin — no reason to gate these behind configuration.
+    private const string DemoCustomerEmail = "demo.customer@ecomeal.local";
+    private const string DemoCustomerPassword = "Demo123!";
+    private const string DemoManagerEmail = "demo.manager@ecomeal.local";
+    private const string DemoManagerPassword = "Demo123!";
+
+    // The managed business for the demo manager/orders below — Stadionul de Gusturi.
+    private static readonly Guid DemoManagedBusinessId = new("44444444-0000-0000-0000-000000000001");
+
     public static async Task SeedAsync(IServiceProvider services, IConfiguration configuration)
     {
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
@@ -30,29 +41,11 @@ public static class DbSeeder
         }
         else
         {
-            var existingAdmin = await userManager.FindByEmailAsync(adminEmail);
-            if (existingAdmin is null)
-            {
-                var admin = new ApplicationUser
-                {
-                    Name = "Admin",
-                    UserName = adminEmail,
-                    Email = adminEmail,
-                    EmailConfirmed = true,
-                };
-                var result = await userManager.CreateAsync(admin, adminPassword);
-
-                if (result.Succeeded)
-                {
-                    await userManager.AddToRoleAsync(admin, AppRoles.Admin);
-                }
-                else
-                {
-                    logger.LogWarning("Failed to seed admin account {Email}: {Errors}", adminEmail,
-                        string.Join("; ", result.Errors.Select(e => e.Description)));
-                }
-            }
+            await GetOrCreateUserAsync(userManager, adminEmail, "Admin", AppRoles.Admin, adminPassword, logger);
         }
+
+        var demoCustomer = await GetOrCreateUserAsync(userManager, DemoCustomerEmail, "Demo Customer", AppRoles.Customer, DemoCustomerPassword, logger);
+        var demoManager = await GetOrCreateUserAsync(userManager, DemoManagerEmail, "Demo Manager", AppRoles.BusinessManager, DemoManagerPassword, logger);
 
         var db = services.GetRequiredService<EcoMealDbContext>();
         await SeedBusinessTypesAsync(db);
@@ -60,6 +53,31 @@ public static class DbSeeder
         await SeedStatusesAsync(db);
         await SeedBusinessesAsync(db);
         await SeedPackagesAsync(db);
+
+        if (demoCustomer is not null && demoManager is not null)
+            await SeedDemoActivityAsync(db, demoCustomer, demoManager.Id);
+    }
+
+    // Shared by the admin account above and the demo customer/manager below — same
+    // find-or-create-and-assign-role shape, only the role and idempotency trigger differ.
+    private static async Task<ApplicationUser?> GetOrCreateUserAsync(
+        UserManager<ApplicationUser> userManager, string email, string name, string role, string password, ILogger logger)
+    {
+        var existing = await userManager.FindByEmailAsync(email);
+        if (existing is not null) return existing;
+
+        var user = new ApplicationUser { Name = name, UserName = email, Email = email, EmailConfirmed = true };
+        var result = await userManager.CreateAsync(user, password);
+
+        if (!result.Succeeded)
+        {
+            logger.LogWarning("Failed to seed account {Email}: {Errors}", email,
+                string.Join("; ", result.Errors.Select(e => e.Description)));
+            return null;
+        }
+
+        await userManager.AddToRoleAsync(user, role);
+        return user;
     }
 
     private static async Task SeedBusinessTypesAsync(EcoMealDbContext db)
@@ -254,6 +272,83 @@ public static class DbSeeder
                 existing.DietaryTags = seed.DietaryTags;
             }
         }
+
+        await db.SaveChangesAsync();
+    }
+
+    // Gives the demo customer/manager accounts a lived-in history — orders in every status,
+    // spread across the last 14 days so the dashboard trend chart and CSV export have something
+    // to show, plus favorites/reviews/notifications. Guarded by "no orders exist yet" so it only
+    // ever runs once, on a genuinely fresh database — it never touches real orders placed later.
+    private static async Task SeedDemoActivityAsync(EcoMealDbContext db, ApplicationUser demoCustomer, string demoManagerId)
+    {
+        if (await db.Orders.AnyAsync()) return;
+
+        var managedBusiness = await db.Businesses.FindAsync(DemoManagedBusinessId);
+        if (managedBusiness is not null && managedBusiness.ManagerId is null)
+            managedBusiness.ManagerId = demoManagerId;
+
+        var b1 = DemoManagedBusinessId;                                    // Stadionul de Gusturi (managed)
+        var b2 = new Guid("44444444-0000-0000-0000-000000000002");         // VAR Bistro
+        var b3 = new Guid("44444444-0000-0000-0000-000000000003");         // Derby Deli
+        var b7 = new Guid("44444444-0000-0000-0000-000000000007");         // Extra Time Café
+        var b9 = new Guid("44444444-0000-0000-0000-000000000009");         // Fault Fresh Market
+        var b10 = new Guid("44444444-0000-0000-0000-000000000010");        // Penalty Pantry
+
+        var statusIdByName = await db.Statuses.ToDictionaryAsync(s => s.Name, s => s.Id);
+        var packagesById = await db.Packages.ToDictionaryAsync(p => p.Id);
+        var now = DateTime.UtcNow;
+
+        Order MakeOrder(Guid businessId, Guid packageId, int quantity, string statusName, DateTime createdAt)
+        {
+            var order = new Order
+            {
+                Id = Guid.NewGuid(),
+                UserId = demoCustomer.Id,
+                User = demoCustomer,
+                BusinessId = businessId,
+                StatusId = statusIdByName[statusName],
+                CreatedAt = createdAt,
+            };
+            order.OrderPackages.Add(new OrderPackage { Id = Guid.NewGuid(), OrderId = order.Id, PackageId = packageId, Quantity = quantity });
+
+            // Mirrors OrderService.ApplyStatusChangeAsync: only Confirmed/Completed reserve stock.
+            if (statusName is OrderStatuses.Confirmed or OrderStatuses.Completed)
+                packagesById[packageId].Quantity -= quantity;
+
+            return order;
+        }
+
+        var oldCompleted = MakeOrder(b1, new Guid("55555555-0000-0000-0000-000000000002"), 1, OrderStatuses.Completed, now.AddDays(-12));
+        var midCompleted = MakeOrder(b3, new Guid("55555555-0000-0000-0000-000000000005"), 1, OrderStatuses.Completed, now.AddDays(-9));
+        var recentCompleted = MakeOrder(b1, new Guid("55555555-0000-0000-0000-000000000001"), 1, OrderStatuses.Completed, now.AddDays(-6));
+        var cancelled = MakeOrder(b9, new Guid("55555555-0000-0000-0000-000000000017"), 1, OrderStatuses.Cancelled, now.AddDays(-3));
+        var confirmed = MakeOrder(b2, new Guid("55555555-0000-0000-0000-000000000004"), 1, OrderStatuses.Confirmed, now.AddDays(-1));
+        var pending = MakeOrder(b1, new Guid("55555555-0000-0000-0000-000000000008"), 1, OrderStatuses.Pending, now.AddMinutes(-20));
+
+        db.Orders.AddRange(oldCompleted, midCompleted, recentCompleted, cancelled, confirmed, pending);
+
+        db.Favorites.AddRange(
+            new Favorite { Id = Guid.NewGuid(), UserId = demoCustomer.Id, BusinessId = b1, CreatedAt = now },
+            new Favorite { Id = Guid.NewGuid(), UserId = demoCustomer.Id, BusinessId = b7, CreatedAt = now },
+            new Favorite { Id = Guid.NewGuid(), UserId = demoCustomer.Id, BusinessId = b10, CreatedAt = now }
+        );
+
+        db.Reviews.AddRange(
+            new Review { Id = Guid.NewGuid(), BusinessId = b1, UserId = demoCustomer.Id, Rating = 5, Comment = "Great surprise bag, saved us from cooking twice!", CreatedAt = now.AddDays(-6) },
+            new Review { Id = Guid.NewGuid(), BusinessId = b3, UserId = demoCustomer.Id, Rating = 4, Comment = "Solid portion, will order again.", CreatedAt = now.AddDays(-9) }
+        );
+
+        // Orders need to be saved first so the order_numbers sequence assigns OrderNumber before
+        // it's referenced in the notification text below.
+        await db.SaveChangesAsync();
+
+        db.Notifications.AddRange(
+            new Notification { Id = Guid.NewGuid(), UserId = demoCustomer.Id, Message = $"Order #{recentCompleted.OrderNumber:000} at Stadionul de Gusturi is complete — thanks for rescuing food!", Url = "/orders", IsRead = true, CreatedAt = now.AddDays(-6) },
+            new Notification { Id = Guid.NewGuid(), UserId = demoCustomer.Id, Message = $"Order #{cancelled.OrderNumber:000} at Fault Fresh Market was cancelled.", Url = "/orders", IsRead = true, CreatedAt = now.AddDays(-3) },
+            new Notification { Id = Guid.NewGuid(), UserId = demoCustomer.Id, Message = $"Order #{confirmed.OrderNumber:000} at VAR Bistro was confirmed — show your QR code at pickup.", Url = $"/orders/pickup/{confirmed.Id}", IsRead = false, CreatedAt = now.AddDays(-1) },
+            new Notification { Id = Guid.NewGuid(), UserId = demoManagerId, Message = $"New order #{pending.OrderNumber:000} from {demoCustomer.Name} at Stadionul de Gusturi needs confirmation.", Url = "/orders/manage", IsRead = false, CreatedAt = now.AddMinutes(-20) }
+        );
 
         await db.SaveChangesAsync();
     }

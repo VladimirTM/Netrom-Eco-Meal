@@ -19,6 +19,7 @@ Unlike a typical API + SPA split, this is **one ASP.NET Core project** that is b
 8. [Background Services](#8-background-services)
 9. [Database Seeding](#9-database-seeding)
 10. [Configuration Reference](#10-configuration-reference)
+11. [Automated Tests](#11-automated-tests)
 
 ---
 
@@ -42,7 +43,8 @@ Netrom-Eco-Meal/
 ├── Models/                      # PaginatedList<T>, Debouncer (frontend-facing, see FRONTEND_ARCHITECTURE.md)
 ├── Migrations/                  # EF-generated migration history
 ├── Components/                  # Blazor UI — see FRONTEND_ARCHITECTURE.md
-└── wwwroot/                     # Static assets — see FRONTEND_ARCHITECTURE.md
+├── wwwroot/                     # Static assets — see FRONTEND_ARCHITECTURE.md
+└── Tests/                       # Netrom-Eco-Meal.Tests — xUnit, see §11
 ```
 
 `Program.cs` wires every layer with plain `AddScoped<TInterface, TImplementation>()` calls — no assembly scanning, no MediatR, no separate composition-root project.
@@ -545,6 +547,7 @@ Registered via `builder.Services.AddHostedService<PendingOrderExpiryService>()`.
    - An existing row's `ImageUrl` is only overwritten if it's currently blank or points at a retired placeholder host (`picsum.photos`) — `IsStalePlaceholderImage` — so an admin's own custom image is never clobbered by a re-seed.
    - A package's `PickupStart`/`PickupEnd` are only refreshed (advanced to "today") if the existing window has **already expired** — so the storefront always opens with live, orderable packages on any given day, without resetting `Quantity` (which reflects real orders placed against it) or touching a still-valid future window.
    - `WeightKg` and `DietaryTags` are **backfill-only** — only set if currently `0`/empty — since the seeder can't distinguish "never set" from "a manager deliberately cleared it," so it defaults to filling in demo data either way rather than guessing.
+5. **Demo customer/manager activity** (`SeedDemoActivityAsync`) — creates `demo.customer@ecomeal.local`/`demo.manager@ecomeal.local` (fixed passwords, not configuration-gated like the admin account, since they carry no real data), assigns the demo manager to Stadionul de Gusturi, and — **only on a genuinely fresh database** (`if (await db.Orders.AnyAsync()) return;`, unlike the reconcile-on-every-run steps above) — creates six orders spanning every status (`Pending`/`Confirmed`/`Completed`×3/`Cancelled`) across the last 14 days plus favorites, reviews, and notifications. This exists so every feature (dashboard trend chart, CSV export, reorder, the notification bell, QR pickup, reviews) has real data to look at immediately after a fresh `docker compose up`, without manually clicking through the app first. Because it's gated on "no orders exist yet" rather than reconciled like steps 3–4, it never touches orders placed by real usage afterward.
 
 This reconciliation approach — add-if-missing, refresh-if-stale, backfill-if-empty, never overwrite a live/customized value — is what lets the exact same seeder run unconditionally on every container start (see `docker-compose.test.yml`) without ever fighting real usage data.
 
@@ -561,3 +564,16 @@ This reconciliation approach — add-if-missing, refresh-if-stale, backfill-if-e
 No `appsettings.Production.json` exists — the only environment-specific file is `appsettings.Development.json`, which layers in the seed-admin credentials for local dev so a fresh `dotnet run` against an empty DB has a working login without extra setup. `docker-compose.test.yml` is explicitly documented (README) as a local test/demo harness, not a production deployment (fixed DB password, HTTP only).
 
 `Program.cs` also sets a fixed `CultureInfo("ro-RO")` as both `DefaultThreadCurrentCulture` and `DefaultThreadCurrentUICulture` at startup — every `ToString("C")` call across the app (cart totals, package prices, order totals) formats as RON without any per-call culture handling, since the app has exactly one supported locale.
+
+---
+
+## 11. Automated Tests
+
+`Tests/Netrom-Eco-Meal.Tests.csproj` is a separate xUnit project referencing the main project (`Netrom-Eco-Meal.csproj` excludes `Tests/**` from its own item globs — see the `<Compile Remove>` in the `.csproj` — since the Web SDK's default globbing would otherwise also pull the test project's generated `obj/` files into the main build). Run everything with `dotnet test` from the repo root, or `dotnet test Netrom-Eco-Meal.slnx`.
+
+Two kinds of tests, deliberately using different EF Core providers for different reasons:
+
+- **`Services/OrderServiceTests.cs`** — unit tests for `OrderService`'s status-transition/stock logic (rate limiting, the pending-reservation math in `PlaceOrderAsync`, confirm/cancel stock reservation and restoration, illegal-transition rejection, manager/admin/customer authorization scoping). `IOrderRepository`/`IPackageRepository`/`IBusinessService`/`INotificationService` are mocked with Moq; `EcoMealDbContext` is real but backed by the EF Core **InMemory** provider (`Tests/TestSupport/InMemoryDb.cs`), since `OrderService` queries it directly for a few things (rate-limit counts, status lookups, pending-reservation sums) that are simple enough for InMemory to translate correctly. `CurrentUserAccessor` is also real, constructed around a `FakeAuthenticationStateProvider` test double instead of mocking the concrete class.
+- **`Database/DbSeederTests.cs`** — integration tests that run `DbSeeder.SeedAsync` against a **real Postgres** container (`Testcontainers.PostgreSql`, `Tests/TestSupport/PostgresFixture.cs`), applying real EF migrations first via `MigrateAsync()` — exactly what `Program.cs` does on startup. This is deliberate, not incidental: an InMemory-provider test wouldn't replay real migration history, so it can't catch the class of bug this project has hit before (see §9 point 4's history and the old `SeedData`/`MoreSeedData` migrations vs. `DbSeeder` conflict) — only a real migration run proves the current seed data actually wins. One Postgres container is shared per test class; each test gets its own logical database on it (`CreateDatabaseAsync`) for isolation without paying container-startup cost per test. Requires Docker to be running locally.
+
+Given this split, Postgres-only query behavior (`EF.Functions.ILike` in `OrderRepository`, the `xmin` optimistic-concurrency token on `Package`, the `order_numbers` sequence) is exercised by the seeding integration tests' real Postgres round-trip, not by the InMemory-backed unit tests.
