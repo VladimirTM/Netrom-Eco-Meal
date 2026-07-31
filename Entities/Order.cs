@@ -12,6 +12,8 @@ public class Order
     public int OrderNumber { get; set; }
     // Used by the stale-Pending expiry sweep to decide when a reservation has gone unconfirmed too long.
     public DateTime CreatedAt { get; set; }
+    // Set once OrderLifecycleSweepService sends the "pickup closes soon" reminder, so it isn't sent twice.
+    public DateTime? PickupReminderSentAt { get; set; }
     [ForeignKey(nameof(UserId))]
     public required ApplicationUser User { get; set; }
     [ForeignKey(nameof(BusinessId))]

@@ -58,7 +58,7 @@ public class DbSeederTests(PostgresFixture fixture)
 
         var statusNames = await db.Statuses.Select(s => s.Name).ToListAsync();
         Assert.Equal(
-            new HashSet<string> { OrderStatuses.Pending, OrderStatuses.Confirmed, OrderStatuses.Completed, OrderStatuses.Cancelled },
+            new HashSet<string> { OrderStatuses.Pending, OrderStatuses.Confirmed, OrderStatuses.Completed, OrderStatuses.Cancelled, OrderStatuses.NoShow },
             statusNames.ToHashSet());
 
         Assert.Equal(12, await db.Businesses.CountAsync());
@@ -101,11 +101,12 @@ public class DbSeederTests(PostgresFixture fixture)
         Assert.Equal(manager.Id, managedBusiness!.ManagerId);
 
         var orders = await db.Orders.Include(o => o.Status).Where(o => o.UserId == customer.Id).ToListAsync();
-        Assert.Equal(6, orders.Count);
+        Assert.Equal(7, orders.Count);
         Assert.Equal(3, orders.Count(o => o.Status.Name == OrderStatuses.Completed));
         Assert.Single(orders, o => o.Status.Name == OrderStatuses.Confirmed);
         Assert.Single(orders, o => o.Status.Name == OrderStatuses.Cancelled);
         Assert.Single(orders, o => o.Status.Name == OrderStatuses.Pending);
+        Assert.Single(orders, o => o.Status.Name == OrderStatuses.NoShow);
 
         // Every order should have been assigned a real OrderNumber by the DB sequence.
         Assert.All(orders, o => Assert.True(o.OrderNumber > 0));
@@ -156,7 +157,7 @@ public class DbSeederTests(PostgresFixture fixture)
         await using var finalDb = provider.GetRequiredService<EcoMealDbContext>();
         Assert.Equal(12, await finalDb.Businesses.CountAsync());
         Assert.Equal(24, await finalDb.Packages.CountAsync());
-        Assert.Equal(6, await finalDb.Orders.CountAsync());
+        Assert.Equal(7, await finalDb.Orders.CountAsync());
         Assert.Equal(3, await finalDb.Favorites.CountAsync());
         Assert.Equal(2, await finalDb.Reviews.CountAsync());
     }

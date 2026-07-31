@@ -61,6 +61,37 @@ Migrations and seed data (roles, business/package types, the demo Timișoara bus
 and packages, and the admin account) run automatically on startup — no separate migrate
 step needed.
 
+No SMTP server is required to run the app: emails (order updates, back-in-stock alerts,
+account confirmation/password reset) are just logged instead of sent when `Email:Smtp:Host`
+isn't configured. See [Email](#email) below to wire up a real sender or a local catcher.
+
+## Email
+
+Order confirm/complete/cancel/no-show, pickup reminders, and back-in-stock alerts send an
+email alongside the in-app notification, via a small SMTP sender (`IAppEmailSender`/
+`SmtpEmailSender`, plain `System.Net.Mail`, no extra package). Configure it with:
+
+```bash
+dotnet user-secrets set "Email:Smtp:Host" "smtp.example.com"
+dotnet user-secrets set "Email:Smtp:Port" "587"
+dotnet user-secrets set "Email:Smtp:Username" "..."
+dotnet user-secrets set "Email:Smtp:Password" "..."
+dotnet user-secrets set "Email:Smtp:EnableSsl" "true"
+dotnet user-secrets set "Email:FromAddress" "no-reply@ecomeal.local"
+dotnet user-secrets set "App:BaseUrl" "http://localhost:5000"   # used to build links in emails
+```
+
+Leave `Email:Smtp:Host` unset (the default) and every email is logged instead of sent —
+handy for local dev without a real mailbox. `docker-compose.test.yml` instead points it at
+a bundled [Mailpit](https://github.com/axllent/mailpit) container, so emails are visible in
+a real inbox UI without any external service — see [Running with Docker](#running-with-docker).
+
+By default, self-registered accounts sign in immediately (no confirmation required), the
+same as before this feature existed. Set `Identity:RequireConfirmedAccount` to `true` to
+require clicking an emailed confirmation link before sign-in works — this needs
+`Email:Smtp:Host` configured to actually deliver that link. Password reset
+(`/account/forgot-password`) works either way, regardless of that flag.
+
 ## Running with Docker
 
 `docker-compose.test.yml` spins up Postgres and the app together, which is the easiest
@@ -86,6 +117,14 @@ running if you don't want the default admin credentials. Two demo accounts (see
 [Seed data](#seed-data) below) are also created regardless of that setting, so you can log
 in as a customer or business manager and see the app already in use.
 
+This compose file also runs a [Mailpit](https://github.com/axllent/mailpit) container and
+points the app's SMTP settings at it, so every email the app sends (order updates,
+back-in-stock alerts, account confirmation, password reset) is visible at
+**http://localhost:8025** instead of going nowhere. It also sets
+`Identity__RequireConfirmedAccount=true`, so a freshly self-registered account needs its
+confirmation link (check Mailpit) clicked before it can sign in — the two seeded demo
+accounts are unaffected, since they're created pre-confirmed.
+
 The pickup QR scanner (`/orders/scan`) uses the device camera, which browsers only allow
 over HTTPS or on `localhost`. It works fine when you open the app as `localhost:8081`,
 but won't get camera access if you open it via a LAN IP from another device (e.g. testing
@@ -103,8 +142,8 @@ It also creates two demo accounts, so every feature has real data to look at rig
 instead of an empty app:
 
 - **Customer** — demo.customer@ecomeal.local / Demo123! — has past orders in every status
-  (completed, confirmed, cancelled, pending) across several businesses, so `/orders`,
-  reorder, the QR pickup pass, favorites and reviews all show something real.
+  (completed, confirmed, cancelled, no-show, pending) across several businesses, so
+  `/orders`, reorder, the QR pickup pass, favorites and reviews all show something real.
 - **BusinessManager** — demo.manager@ecomeal.local / Demo123! — assigned to Stadionul de
   Gusturi, with a pending order waiting to be confirmed on `/orders/manage` and enough
   order history for `/dashboard`'s trend chart and CSV export to be worth looking at.

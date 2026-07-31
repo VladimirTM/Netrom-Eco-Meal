@@ -1,0 +1,47 @@
+@page "/account/confirm-email"
+@layout EmptyLayout
+@using Netrom_Eco_Meal.Controllers
+@inject AuthController AuthController
+
+<PageTitle>Confirm account — Eco Meal</PageTitle>
+
+<div class="login-page">
+    <div class="login-card">
+        <div class="login-brand">
+            <img src="logo.png" alt="Eco Meal" class="login-logo"/>
+            <div>
+                <div class="login-brand-name">Eco Meal</div>
+                <div class="login-brand-sub">Surplus food, rescued</div>
+            </div>
+        </div>
+
+        <h1 class="login-heading">Confirm account</h1>
+
+        @if (_error is null)
+        {
+            <div class="alert alert-success py-2 small mb-3" role="alert">Your account is confirmed — you can now sign in.</div>
+        }
+        else
+        {
+            <div class="alert alert-danger py-2 small mb-3" role="alert">@_error</div>
+        }
+
+        <a class="btn btn-primary w-100 py-2 fw-semibold" href="/account/login">Sign in</a>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? UserId { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Token { get; set; }
+
+    private string? _error = "This confirmation link is invalid.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(UserId) && !string.IsNullOrWhiteSpace(Token))
+            _error = await AuthController.ConfirmEmailAsync(UserId, Token);
+    }
+}

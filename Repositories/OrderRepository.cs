@@ -102,6 +102,27 @@ public class OrderRepository(EcoMealDbContext context) : IOrderRepository
             .ToListAsync();
     }
 
+    // "Overdue" means every line's pickup window has closed — a Confirmed order can span packages
+    // with different windows, so a single stale line isn't enough to call the whole thing a no-show.
+    public async Task<List<Order>> GetOverduePickupOrdersAsync(DateTime now)
+    {
+        return await OrdersWithIncludes()
+            .Where(o => o.Status.Name == OrderStatuses.Confirmed && o.OrderPackages.All(op => op.Package.PickupEnd < now))
+            .ToListAsync();
+    }
+
+    // Due once even the latest-closing line falls within the lead time, as long as the order
+    // hasn't fully closed yet (that's the no-show sweep's job instead) or already been reminded.
+    public async Task<List<Order>> GetPickupReminderCandidatesAsync(DateTime remindBy, DateTime now)
+    {
+        return await OrdersWithIncludes()
+            .Where(o => o.Status.Name == OrderStatuses.Confirmed
+                && o.PickupReminderSentAt == null
+                && o.OrderPackages.All(op => op.Package.PickupEnd <= remindBy)
+                && o.OrderPackages.Any(op => op.Package.PickupEnd > now))
+            .ToListAsync();
+    }
+
     public async Task<Dictionary<Guid, int>> GetPendingQuantitiesByPackageIdsAsync(IEnumerable<Guid> packageIds)
     {
         var ids = packageIds.ToList();

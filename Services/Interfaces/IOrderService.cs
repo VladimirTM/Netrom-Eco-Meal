@@ -22,6 +22,10 @@ public interface IOrderService
     public Task<decimal> GetTotalKgSavedAsync();
     // System-triggered, no current-user auth — called by the background expiry sweep.
     public Task<int> ExpireStalePendingOrdersAsync();
+    // System-triggered — marks Confirmed orders whose pickup window fully closed as NoShow.
+    public Task<int> ExpireNoShowOrdersAsync();
+    // System-triggered — emails/notifies customers whose pickup window closes soon.
+    public Task<int> SendPickupRemindersAsync();
     // Public stock info (same audience as package browsing) — no auth restriction.
     public Task<Dictionary<Guid, int>> GetPendingReservedQuantitiesAsync(IEnumerable<Guid> packageIds);
 }

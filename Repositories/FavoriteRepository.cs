@@ -43,4 +43,12 @@ public class FavoriteRepository(EcoMealDbContext context) : IFavoriteRepository
         await context.SaveChangesAsync();
         return true;
     }
+
+    public async Task<List<ApplicationUser>> GetFavoritingUsersAsync(Guid businessId)
+    {
+        return await context.Favorites
+            .Where(f => f.BusinessId == businessId)
+            .Select(f => f.User)
+            .ToListAsync();
+    }
 }

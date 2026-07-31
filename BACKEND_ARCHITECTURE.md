@@ -95,7 +95,7 @@ ApplicationUser (IdentityUser)
   ├──< Notification
   └──── Business                      (Manager — 0..1, unique index on ManagerId)
 
-Order ──── Status                     (Pending | Confirmed | Completed | Cancelled)
+Order ──── Status                     (Pending | Confirmed | Completed | Cancelled | NoShow)
 ```
 
 ### Entities
@@ -137,7 +137,7 @@ public class BusinessType { public Guid Id; public required string Name; }
 public class PackageType  { public Guid Id; public required string Name; }
 public class Status       { public Guid Id; public required string Name; }
 ```
-Three near-identical lookup tables, seeded once by `DbSeeder` and never written to afterward. `Status.Name` values are fixed by `Constants.OrderStatuses` (`Pending`/`Confirmed`/`Completed`/`Cancelled`) and looked up by name everywhere rather than by a hardcoded `Guid` — the seed IDs exist only so re-seeding is idempotent.
+Three near-identical lookup tables, seeded once by `DbSeeder` and never written to afterward. `Status.Name` values are fixed by `Constants.OrderStatuses` (`Pending`/`Confirmed`/`Completed`/`Cancelled`/`NoShow`) and looked up by name everywhere rather than by a hardcoded `Guid` — the seed IDs exist only so re-seeding is idempotent. `NoShow` was added after the original four in a way that had to work around an old migration having hardcoded `InsertData` for those four (see §9) — `SeedStatusesAsync` adds whichever names are missing rather than bailing out when the table is merely non-empty.
 
 #### Package
 ```csharp
@@ -160,6 +160,8 @@ public class Package
     public ICollection<OrderPackage> OrderPackages { get; set; } = [];
 }
 ```
+Restocking a package from `0` to a positive `Quantity` (or publishing a brand-new one) notifies everyone who's favorited that business — see `PackageService` in §5; there's no per-package "notify me" subscription, so Favorites doubles as the closest proxy.
+
 `Quantity` carries an EF Core **shadow property row-version** — `modelBuilder.Entity<Package>().Property<uint>("xmin").IsRowVersion()` maps Postgres's native `xmin` system column as an optimistic-concurrency token, with zero extra columns to migrate. Two managers confirming orders against the same package's last unit at the same time get a `DbUpdateConcurrencyException` on the loser, translated by `OrderService` into "Stock for this order just changed — please refresh and try again" instead of silently overselling. `DietaryTags` is stored as a plain `List<string>` — EF Core 8+ maps this to a Postgres `text[]` column with no extra configuration needed.
 
 #### Order / OrderPackage
@@ -172,6 +174,7 @@ public class Order
     public required Guid StatusId { get; set; }
     public int OrderNumber { get; set; }            // assigned by the order_numbers DB sequence on insert
     public DateTime CreatedAt { get; set; }
+    public DateTime? PickupReminderSentAt { get; set; }  // set once, so the reminder sweep never double-sends
     public required ApplicationUser User { get; set; }
     public Business Business { get; set; } = null!;
     public Status Status { get; set; } = null!;
@@ -233,7 +236,7 @@ public class Notification
     public ApplicationUser User { get; set; } = null!;
 }
 ```
-Created server-side by `OrderService` at every status transition (new order → the business's manager; confirmed/completed/cancelled → the customer) and by `PendingOrderExpiryService` on auto-cancel. Indexed on `(UserId, CreatedAt)` since "this user's notifications, newest first" is the only query pattern (`NotificationRepository.GetRecentByUserIdAsync`). See [§4](#4-repository-pattern) for why this repository is architecturally distinct from the rest.
+Created server-side by `OrderService` at every status transition (new order → the business's manager; confirmed/completed/cancelled/no-show → the customer), by `OrderLifecycleSweepService` on auto-cancel/pickup-reminder/no-show, and by `PackageService` on restock. Every one of those customer-facing order-lifecycle notifications also fires a best-effort email via `IAppEmailSender` (see §5/§8) — the in-app bell record is still the source of truth; the email is a delivery-channel add-on that never blocks the underlying transition if it fails. Indexed on `(UserId, CreatedAt)` since "this user's notifications, newest first" is the only query pattern (`NotificationRepository.GetRecentByUserIdAsync`). See [§4](#4-repository-pattern) for why this repository is architecturally distinct from the rest.
 
 ### DateTime handling
 
@@ -256,9 +259,9 @@ No generic base — each interface is purpose-built. All "write" repositories fo
 |---|---|---|
 | `IBusinessRepository` / `BusinessRepository` | `GetAllAsync`, `GetPagedAsync(search, businessTypeId, managerId?, sortBy?, favoritedByUserId?)`, `GetByIdAsync`, `GetByManagerIdAsync`, `AddAsync`, `DeleteAsync`, `SaveChangesAsync` | `GetPagedAsync`'s search also matches **live packages'** name/description (`b.Packages.Any(p => p.PickupEnd > now && ...)`), so searching "bread" surfaces a bakery even if its own name/description doesn't mention bread. `sortBy: "closingSoon"` orders by each business's nearest live `PickupEnd` (`?? DateTime.MaxValue` so businesses with nothing live sort last regardless of mode) |
 | `IBusinessTypeRepository` / `BusinessTypeRepository` | `GetAllAsync` | Read-only lookup, no writes anywhere in the app |
-| `IFavoriteRepository` / `FavoriteRepository` | `GetFavoriteBusinessIdsAsync`, `IsFavoriteAsync`, `AddAsync`, `RemoveAsync` | `AddAsync`/`RemoveAsync` persist immediately — the one repository that breaks the stage-then-save convention (see §3 Favorite) |
+| `IFavoriteRepository` / `FavoriteRepository` | `GetFavoriteBusinessIdsAsync`, `IsFavoriteAsync`, `AddAsync`, `RemoveAsync`, `GetFavoritingUsersAsync` | `AddAsync`/`RemoveAsync` persist immediately — the one repository that breaks the stage-then-save convention (see §3 Favorite). `GetFavoritingUsersAsync` feeds `PackageService`'s back-in-stock notifications |
 | `INotificationRepository` / `NotificationRepository` | `GetRecentByUserIdAsync`, `GetUnreadCountAsync`, `MarkAsReadAsync`, `MarkAllAsReadAsync`, `CreateAsync` | Takes `IDbContextFactory<EcoMealDbContext>`, not the circuit-scoped `EcoMealDbContext` — every method opens and disposes its own short-lived context. This is what lets `NotificationBell`'s 30-second background poll (see FRONTEND_ARCHITECTURE.md) query the DB without racing whatever query the routed page is running against the shared per-circuit context at the same moment. `MarkAsReadAsync`/`MarkAllAsReadAsync` use `ExecuteUpdateAsync` — a single `UPDATE ... WHERE` round-trip, no load-then-save |
-| `IOrderRepository` / `OrderRepository` | `GetAllAsync`, `GetByUserIdAsync`, `GetByBusinessIdAsync`, `GetPagedByUserIdAsync`, `GetPagedForManagementAsync(search, businessId?, status?)`, `GetInRangeAsync(businessId?, from?, to?)`, `GetByIdAsync`, `HasCompletedOrderAsync`, `GetTotalWeightSavedKgAsync`, `GetStalePendingOrdersAsync`, `GetPendingQuantitiesByPackageIdsAsync`, `AddAsync`, `DeleteAsync`, `SaveChangesAsync` | The busiest repository — see `OrderService` in §5 for how its methods compose. `GetPagedForManagementAsync`'s order-number search strips a leading `#` and substring-matches the plain integer (`EF.Functions.ILike(o.OrderNumber.ToString(), ...)`) because Npgsql can't translate the zero-padded `ToString("000")` overload into SQL. `GetInRangeAsync` is unpaginated and date-bounded — it feeds both the CSV export and the dashboard trend chart (see §6 and FRONTEND_ARCHITECTURE.md §11). `GetPendingQuantitiesByPackageIdsAsync` is a `GroupBy`/`Sum` over `OrderPackages` for a batch of package IDs — the same Pending-reservation shape `PlaceOrderAsync`'s `pendingElsewhere` check computes per-package, exposed in bulk for display (§5) |
+| `IOrderRepository` / `OrderRepository` | `GetAllAsync`, `GetByUserIdAsync`, `GetByBusinessIdAsync`, `GetPagedByUserIdAsync`, `GetPagedForManagementAsync(search, businessId?, status?)`, `GetInRangeAsync(businessId?, from?, to?)`, `GetByIdAsync`, `HasCompletedOrderAsync`, `GetTotalWeightSavedKgAsync`, `GetStalePendingOrdersAsync`, `GetOverduePickupOrdersAsync`, `GetPickupReminderCandidatesAsync`, `GetPendingQuantitiesByPackageIdsAsync`, `AddAsync`, `DeleteAsync`, `SaveChangesAsync` | The busiest repository — see `OrderService` in §5 for how its methods compose. `GetPagedForManagementAsync`'s order-number search strips a leading `#` and substring-matches the plain integer (`EF.Functions.ILike(o.OrderNumber.ToString(), ...)`) because Npgsql can't translate the zero-padded `ToString("000")` overload into SQL. `GetInRangeAsync` is unpaginated and date-bounded — it feeds both the CSV export and the dashboard trend chart (see §6 and FRONTEND_ARCHITECTURE.md §11). `GetPendingQuantitiesByPackageIdsAsync` is a `GroupBy`/`Sum` over `OrderPackages` for a batch of package IDs — the same Pending-reservation shape `PlaceOrderAsync`'s `pendingElsewhere` check computes per-package, exposed in bulk for display (§5) |
 | `IPackageRepository` / `PackageRepository` | `GetAllAsync`, `GetPagedAsync(search, businessId?, packageTypeId?)`, `GetByIdAsync`, `GetByIdsAsync`, `AddAsync`, `DeleteAsync`, `SaveChangesAsync` | `GetByIdsAsync` is the batch-load path `CartService.RestoreAsync` uses to re-hydrate a localStorage-persisted cart into live `Package` entities on reconnect |
 | `IPackageTypeRepository` / `PackageTypeRepository` | `GetAllAsync` | Read-only lookup |
 | `IReviewRepository` / `ReviewRepository` | `GetAllAsync`, `GetByBusinessIdAsync`, `GetByBusinessIdsAsync`, `GetByUserAndBusinessAsync`, `AddAsync`, `SaveChangesAsync` | `GetByBusinessIdsAsync` is the batch path `Home.razor` uses to load ratings for an entire page of business cards in one query instead of one query per card |
@@ -301,16 +304,17 @@ One `CountAsync` + one `Skip/Take` `ToListAsync`. The second overload exists spe
 
 ## 5. Service Layer
 
-Every service is `Scoped`. Two services break that pattern deliberately: `PendingOrderExpiryService` is a `BackgroundService` (effectively a singleton — see §8), and `CartService`/`ClientTimeZoneService` are `Scoped` but have no backing interface or repository — they're pure in-memory, per-circuit state with a JS-interop side door (documented in `FRONTEND_ARCHITECTURE.md` since they're really frontend concerns that happen to live in `Services/` alongside everything else).
+Every service is `Scoped`. A few break that pattern deliberately: `OrderLifecycleSweepService` is a `BackgroundService` (effectively a singleton — see §8); `CartService`/`ClientTimeZoneService` are `Scoped` but have no backing interface or repository — they're pure in-memory, per-circuit state with a JS-interop side door (documented in `FRONTEND_ARCHITECTURE.md` since they're really frontend concerns that happen to live in `Services/` alongside everything else); `SmtpEmailSender` (`IAppEmailSender`) is stateless and could be `Singleton` but is registered `Scoped` for consistency with everything else.
 
 | Service Interface | Implementation | Responsibilities |
 |---|---|---|
-| `IAuthService` | `AuthService` | Thin wrapper over ASP.NET Identity's `SignInManager`/`UserManager` — `LoginAsync`, `RegisterAsync` (self-registration always lands in the `Customer` role; only an admin can promote from there), `LogoutAsync` |
+| `IAuthService` | `AuthService` | Thin wrapper over ASP.NET Identity's `SignInManager`/`UserManager` — `LoginAsync`, `RegisterAsync` (self-registration always lands in the `Customer` role; only an admin can promote from there), `LogoutAsync`, plus `ConfirmEmailAsync`/`RequestPasswordResetAsync`/`ResetPasswordAsync` for the email-confirmation and password-reset flows `Identity:RequireConfirmedAccount` unlocks (see §7/§10). Builds absolute links for those emails off `App:BaseUrl`, since neither a background sweep nor (reliably) a Blazor circuit has an `HttpContext` to derive one from |
+| `IAppEmailSender` | `SmtpEmailSender` | One method, `SendEmailAsync(toEmail, subject, htmlBody)`, over `System.Net.Mail.SmtpClient`. Deliberately **not** ASP.NET Identity's `IEmailSender<TUser>` — this app has no Identity Razor Pages UI to trigger that interface, and order-lifecycle/back-in-stock emails aren't Identity's concern anyway. Reads `Email:Smtp:*`/`Email:From*` straight off `IConfiguration` (same style as `SeedAdmin:*`); when `Email:Smtp:Host` isn't set, it logs the email instead of sending — the same "optional infra, degrade gracefully" pattern `DbSeeder` uses for `SeedAdmin` |
 | `IBusinessService` | `BusinessService` | CRUD (create/delete admin-only, update admin-or-own-manager) + `AssignManagerAsync` (admin-only; unassigns the manager from wherever they were previously assigned, then assigns them here, inside one `SaveChangesAsync` — a `DbUpdateException` from the unique `ManagerId` index racing a concurrent assignment is caught and reported as "already assigned elsewhere") |
 | `IBusinessTypeService` / `IPackageTypeService` | `BusinessTypeService` / `PackageTypeService` | Thin pass-throughs — lookup data has no business rules to enforce |
 | `IFavoriteService` | `FavoriteService` | Customer-only, always scoped to the signed-in user — no "favorite on behalf of" path exists. `ToggleFavoriteAsync` returns the new state so the caller doesn't need a second read |
 | `INotificationService` | `NotificationService` | Scoped to the signed-in user for every read method; `CreateAsync(userId, message, url?)` is the one exception — other services call it to notify *someone else* (e.g. `OrderService` notifying a business's manager about a new order) |
-| `IPackageService` | `PackageService` | CRUD, admin-or-own-business-manager on writes (`EnsureCanManageBusinessAsync`); `GetByIdsAsync` is the batch path `CartService` uses on reconnect |
+| `IPackageService` | `PackageService` | CRUD, admin-or-own-business-manager on writes (`EnsureCanManageBusinessAsync`); `GetByIdsAsync` is the batch path `CartService` uses on reconnect. `AddAsync`/`UpdateAsync` also notify (bell + email) every customer who's favorited the package's business when it's created in stock or restocked from `0` — see §3 Package |
 | `IReviewService` | `ReviewService` | `GetContextAsync(businessId)` → `ReviewContext(CanReview, MyReview)` — `CanReview` is true once the customer has a completed order with the business; `SubmitAsync` updates an existing review in place if one exists, otherwise inserts |
 | `IUserService` | `UserService` | Admin-only (`EnsureAdminAsync` on every method — enforced via `CurrentUserAccessor`, not an `[Authorize]` HTTP filter, since this is only ever called in-process; see §6). `UpdateRoleAsync` refuses to demote the platform's last remaining admin, and auto-releases whatever business a user managed if they're moved away from `BusinessManager` |
 | `IOrderService` | `OrderService` | The biggest service — see the deep dive below |
@@ -328,7 +332,7 @@ Not behind an interface — it's a small, concrete helper every other service ta
 
 ### OrderService — deep dive
 
-`OrderService` owns every rule around placing, confirming, completing, cancelling, and reporting on orders. Its constructor pulls in `IOrderRepository`, `IPackageRepository`, `IBusinessService`, `INotificationService`, the raw `EcoMealDbContext` (for ad-hoc queries that don't warrant a repository method), and `CurrentUserAccessor`.
+`OrderService` owns every rule around placing, confirming, completing, cancelling, marking-no-show, and reporting on orders. Its constructor pulls in `IOrderRepository`, `IPackageRepository`, `IBusinessService`, `INotificationService`, `IAppEmailSender`, the raw `EcoMealDbContext` (for ad-hoc queries that don't warrant a repository method), and `CurrentUserAccessor`.
 
 **`PlaceOrderAsync(businessId, lines)`** — customer-only:
 1. Resolves the caller via `CurrentUserAccessor`; throws `UnauthorizedAccessException` if not signed in or not a `Customer`.
@@ -352,14 +356,20 @@ var allowedTransition = (currentStatusName, statusName) switch
     (Pending, Cancelled)   => true,
     (Confirmed, Completed) => true,
     (Confirmed, Cancelled) => true,
+    (Confirmed, NoShow)    => true,
     _ => false,
 };
 ```
 - **Pending → Confirmed**: re-checks every line's requested quantity against the package's *current* `Quantity` (not the pending-reservation snapshot from placement — stock may have moved since), then decrements it. A concurrent confirm of the same package by another manager races on the `xmin` row-version and surfaces as "Stock for this order just changed — please refresh and try again" (`DbUpdateConcurrencyException` → `InvalidOperationException`).
-- **Confirmed → Cancelled**: restores each line's quantity back onto the package (the reverse of the confirm-time decrement). Pending → Cancelled needs **no** stock restoration, since a Pending order never touched `Package.Quantity` in the first place — it only ever affected the `pendingElsewhere` reservation math above.
-- Every successful transition fires a customer-facing notification (`Confirmed` → "show your QR code at pickup" linking to the pickup pass; `Completed` → thank-you; `Cancelled` → plain cancellation notice).
+- **Confirmed → Cancelled / Confirmed → NoShow**: both restore each line's quantity back onto the package (the reverse of the confirm-time decrement) — the reservation is being released either way, whether the manager cancelled it or the pickup window just closed unclaimed. Pending → Cancelled needs **no** stock restoration, since a Pending order never touched `Package.Quantity` in the first place — it only ever affected the `pendingElsewhere` reservation math above.
+- Every successful transition fires a customer-facing notification (`Confirmed` → "show your QR code at pickup" linking to the pickup pass; `Completed` → thank-you; `Cancelled` → plain cancellation notice; `NoShow` → missed-pickup notice), each also best-effort emailed via `IAppEmailSender` (`SendCustomerEmailAsync`, wrapped so a failed/unconfigured send never breaks the transition itself).
+- `NoShow` is reachable two ways: a manager marking it by hand from `/orders/manage` (this transition), or automatically once the pickup window fully closes — see `ExpireNoShowOrdersAsync` below.
 
-**`ExpireStalePendingOrdersAsync()`** — no current-user check (it's a system-triggered call from `PendingOrderExpiryService`, not something a Razor page invokes). Cancels any `Pending` order whose `CreatedAt` is older than `OrderExpiry.PendingTimeout` (30 min) **or** whose earliest package's `PickupEnd` has already passed, notifying the customer either way. No stock restoration needed, for the same reason as the Pending→Cancelled case above.
+**`ExpireStalePendingOrdersAsync()`** — no current-user check (it's a system-triggered call from `OrderLifecycleSweepService`, not something a Razor page invokes). Cancels any `Pending` order whose `CreatedAt` is older than `OrderExpiry.PendingTimeout` (30 min) **or** whose earliest package's `PickupEnd` has already passed, notifying (bell + email) the customer either way. No stock restoration needed, for the same reason as the Pending→Cancelled case above.
+
+**`ExpireNoShowOrdersAsync()`** — also system-triggered. Finds `Confirmed` orders where *every* line's `Package.PickupEnd` has passed (`IOrderRepository.GetOverduePickupOrdersAsync`) and moves them to `NoShow`, restoring stock exactly like a manual `Confirmed → NoShow` would. A single stale line isn't enough — an order spanning packages with different windows only counts once the last one closes.
+
+**`SendPickupRemindersAsync()`** — also system-triggered. Finds `Confirmed` orders whose latest-closing line falls within `OrderExpiry.PickupReminderLeadTime` (30 min) of closing, that haven't already been reminded (`Order.PickupReminderSentAt is null`) and haven't fully closed yet (`IOrderRepository.GetPickupReminderCandidatesAsync`), notifies (bell + email) the customer, and stamps `PickupReminderSentAt` so the next sweep tick doesn't remind them again.
 
 **`GetOrdersInRangeAsync(from?, to?, businessId?)`** — unpaginated, date-bounded, scoped the same way `GetOrdersForManagementPagedAsync` is: admins see everything (optionally filtered to one business via `businessId`), managers are always pinned to their own business regardless of what `businessId` they pass. Backs both the CSV export and the dashboard trend chart — see §6 for why the CSV export controller can't call this method directly despite it living on the same interface.
 
@@ -403,7 +413,7 @@ Two controllers genuinely are HTTP endpoints, and both are structured differentl
 
 | Controller | Route | Why it's real HTTP |
 |---|---|---|
-| `AuthController` | `[Route("api/[controller]")]` — `[ManualValidateAntiforgeryToken]` on `LoginAsync`/`RegisterAsync` only, **not** `LogoutAsync` (see §7) | Login/Register/Logout are plain `<form method="post">` submissions from `Login.razor`/`Register.razor`/the logout button — a real page navigation is required so the ASP.NET Identity auth cookie actually gets set on the response. `[ManualValidateAntiforgeryTokenAttribute]` (see §7) validates the antiforgery token these forms carry, since this API-only project doesn't register the MVC view-engine services `[AutoValidateAntiforgeryToken]` needs |
+| `AuthController` | `[Route("api/[controller]")]` — `[ManualValidateAntiforgeryToken]` on `LoginAsync`/`RegisterAsync` only, **not** `LogoutAsync` (see §7) | Login/Register/Logout are plain `<form method="post">` submissions from `Login.razor`/`Register.razor`/the logout button — a real page navigation is required so the ASP.NET Identity auth cookie actually gets set on the response. `[ManualValidateAntiforgeryTokenAttribute]` (see §7) validates the antiforgery token these forms carry, since this API-only project doesn't register the MVC view-engine services `[AutoValidateAntiforgeryToken]` needs. `AuthController` also carries three plain in-process methods with no HTTP attribute at all — `ConfirmEmailAsync`, `RequestPasswordResetAsync`, `ResetPasswordAsync` — injected directly into `ConfirmEmail.razor`/`ForgotPassword.razor`/`ResetPassword.razor` the same way `OrderController` etc. are injected everywhere else, since none of those three touch the auth cookie and so don't need the real-HTTP round trip |
 | `OrderExportController` | `[Route("api/orders")]`, `[HttpGet("export")]` | The CSV download link (`OrderManagement.razor`) is a plain `<a href="/api/orders/export">` — the browser needs to treat the response as a file, which only works over a genuine HTTP GET |
 
 `OrderExportController` can't use `IOrderService` the way every in-process controller does, because there's no Blazor circuit backing a standalone HTTP GET request — and `IOrderService`'s authorization checks all go through `CurrentUserAccessor`, which needs one (see the `CurrentUserAccessor` note in §5). Instead, it resolves identity straight from `HttpContext.User` (available on any real HTTP request via `[Authorize]`) and talks to `IOrderRepository`/`IBusinessService` directly:
@@ -448,7 +458,7 @@ Note `IBusinessService.GetByManagerIdAsync` is safe to call here — it's a pure
 | `FavoriteController` | `GetMyFavoriteBusinessIdsAsync`, `ToggleFavoriteAsync` |
 | `NotificationController` | `GetMyNotificationsAsync`, `GetMyUnreadCountAsync`, `MarkAsReadAsync`, `MarkAllAsReadAsync` |
 | `UserController` | `GetAllAsync`, `GetByRoleAsync`, `GetPagedAsync`, `UpdateRoleAsync` |
-| `AuthController` *(real HTTP)* | `POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/logout` — all `LocalRedirect` responses, never JSON |
+| `AuthController` *(real HTTP)* | `POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/logout` — all `LocalRedirect` responses, never JSON. Plus the three in-process-only methods noted above |
 | `OrderExportController` *(real HTTP)* | `GET /api/orders/export?from=&to=&businessId=` → CSV file download |
 
 ---
@@ -460,7 +470,7 @@ Note `IBusinessService.GetByManagerIdAsync` is safe to call here — it's a pure
 ```csharp
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
-    options.SignIn.RequireConfirmedAccount = false;
+    options.SignIn.RequireConfirmedAccount = builder.Configuration.GetValue("Identity:RequireConfirmedAccount", false);
     options.Password.RequiredLength = 8;
 }).AddEntityFrameworkStores<EcoMealDbContext>().AddDefaultTokenProviders();
 
@@ -470,7 +480,7 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.AccessDeniedPath = "/account/access-denied";
 });
 ```
-Cookie-based auth, not JWT — a natural fit for Blazor Server, where the same persistent SignalR connection serves the whole session rather than a stateless token per request. `RequireConfirmedAccount = false` — there's no email confirmation flow at all in this app (no `IEmailSender` is registered); accounts are usable immediately on registration, with `EmailConfirmed = true` hardcoded at creation time in both `AuthService.RegisterAsync` and `DbSeeder`'s admin seeding purely to satisfy Identity's internal bookkeeping, not because a real confirmation step ran.
+Cookie-based auth, not JWT — a natural fit for Blazor Server, where the same persistent SignalR connection serves the whole session rather than a stateless token per request. `RequireConfirmedAccount` defaults to `false` (a bare `dotnet run` works with no SMTP set up at all — `AuthService.RegisterAsync` sets `EmailConfirmed = true` at creation time in that case, same as before). Flip `Identity:RequireConfirmedAccount` to `true` (as `docker-compose.test.yml` does, paired with the bundled Mailpit container — see §9/§10) and self-registration instead emails a confirmation link (`AuthService.SendConfirmationEmailAsync` → `ConfirmEmail.razor`) before `PasswordSignInAsync` will succeed. `ForgotPassword.razor`/`ResetPassword.razor` (`AuthService.RequestPasswordResetAsync`/`ResetPasswordAsync`) work either way, independent of this flag — Identity's password-reset token doesn't care whether the account is confirmed.
 
 ### Roles
 
@@ -514,10 +524,10 @@ Because most authorization actually lives in the service layer (via `CurrentUser
 
 ## 8. Background Services
 
-### PendingOrderExpiryService
+### OrderLifecycleSweepService
 
 ```csharp
-public class PendingOrderExpiryService(IServiceScopeFactory scopeFactory, ILogger<PendingOrderExpiryService> logger) : BackgroundService
+public class OrderLifecycleSweepService(IServiceScopeFactory scopeFactory, ILogger<OrderLifecycleSweepService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -527,11 +537,18 @@ public class PendingOrderExpiryService(IServiceScopeFactory scopeFactory, ILogge
             using var scope = scopeFactory.CreateScope();
             var orderService = scope.ServiceProvider.GetRequiredService<IOrderService>();
             await orderService.ExpireStalePendingOrdersAsync();
+            await orderService.SendPickupRemindersAsync();
+            await orderService.ExpireNoShowOrdersAsync();
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 }
 ```
-Registered via `builder.Services.AddHostedService<PendingOrderExpiryService>()`. Runs every `OrderExpiry.SweepInterval` (5 minutes), cancelling any `Pending` order idle longer than `OrderExpiry.PendingTimeout` (30 minutes) or whose pickup window has already closed. `BackgroundService` instances are effectively singletons, so it can't hold a `Scoped` `IOrderService` directly — it creates a fresh DI scope on every tick via `IServiceScopeFactory` instead, exactly the pattern any singleton needing scoped dependencies must use. Exists to fix a real phantom-stock-lock: a `Pending` order that's never confirmed still counts against a package's availability via the `pendingElsewhere` check in `OrderService.PlaceOrderAsync` (§5) — without this sweep, an abandoned checkout could tie up stock indefinitely.
+Registered via `builder.Services.AddHostedService<OrderLifecycleSweepService>()` (renamed from `PendingOrderExpiryService` when the reminder/no-show sweeps were added — one periodic pass over every time-based order transition, rather than three separate `BackgroundService`s each paying for their own timer and DI scope). Runs every `OrderExpiry.SweepInterval` (5 minutes) and does three things in order:
+1. **Stale-Pending expiry** — cancels any `Pending` order idle longer than `OrderExpiry.PendingTimeout` (30 minutes) or whose pickup window has already closed. Exists to fix a real phantom-stock-lock: a `Pending` order that's never confirmed still counts against a package's availability via the `pendingElsewhere` check in `OrderService.PlaceOrderAsync` (§5) — without this sweep, an abandoned checkout could tie up stock indefinitely.
+2. **Pickup reminders** — emails/notifies `Confirmed` orders closing within `OrderExpiry.PickupReminderLeadTime` (30 minutes) that haven't been reminded yet.
+3. **No-show detection** — moves `Confirmed` orders whose pickup window has fully closed to `NoShow`, restoring stock.
+
+`BackgroundService` instances are effectively singletons, so it can't hold a `Scoped` `IOrderService` directly — it creates a fresh DI scope on every tick via `IServiceScopeFactory` instead, exactly the pattern any singleton needing scoped dependencies must use. The whole tick body is one `try/catch`, logged and swallowed on failure so a bad tick doesn't take the loop down — the next `PeriodicTimer` tick just tries again.
 
 ---
 
@@ -541,13 +558,13 @@ Registered via `builder.Services.AddHostedService<PendingOrderExpiryService>()`.
 
 1. **Roles** — creates any of `AppRoles.AllRoles` that don't already exist.
 2. **Seed admin** — reads `SeedAdmin:Email`/`SeedAdmin:Password` from configuration; if either is missing, logs a warning and skips (no admin account is seeded, the app still runs); if the account doesn't already exist, creates it and adds it to the `Admin` role.
-3. **Lookup tables** (`BusinessTypes`, `PackageTypes`, `Statuses`) — insert-only, skipped entirely if the table already has any rows (`AnyAsync()` guard).
+3. **Lookup tables** (`BusinessTypes`, `PackageTypes`, `Statuses`) — insert-only. `BusinessTypes`/`PackageTypes` are skipped entirely once the table has any rows (`AnyAsync()` guard). `Statuses` instead adds whichever of the five fixed names are missing, because a database that's run the old pre-`DbSeeder` migrations already has the original four `Status` rows from a hardcoded `InsertData` by the time this runs — a blanket `AnyAsync()` guard there would've silently skipped seeding `NoShow` forever (this is exactly the migration-vs-seeder class of bug `Tests/Database/DbSeederTests.cs` exists to catch — see §11).
 4. **Demo businesses & packages** — a fixed set of World-Cup-themed Timișoara businesses/packages with **hardcoded GUIDs**, reconciled against what's already in the DB rather than blindly re-inserted:
    - Missing seed rows are added.
    - An existing row's `ImageUrl` is only overwritten if it's currently blank or points at a retired placeholder host (`picsum.photos`) — `IsStalePlaceholderImage` — so an admin's own custom image is never clobbered by a re-seed.
    - A package's `PickupStart`/`PickupEnd` are only refreshed (advanced to "today") if the existing window has **already expired** — so the storefront always opens with live, orderable packages on any given day, without resetting `Quantity` (which reflects real orders placed against it) or touching a still-valid future window.
    - `WeightKg` and `DietaryTags` are **backfill-only** — only set if currently `0`/empty — since the seeder can't distinguish "never set" from "a manager deliberately cleared it," so it defaults to filling in demo data either way rather than guessing.
-5. **Demo customer/manager activity** (`SeedDemoActivityAsync`) — creates `demo.customer@ecomeal.local`/`demo.manager@ecomeal.local` (fixed passwords, not configuration-gated like the admin account, since they carry no real data), assigns the demo manager to Stadionul de Gusturi, and — **only on a genuinely fresh database** (`if (await db.Orders.AnyAsync()) return;`, unlike the reconcile-on-every-run steps above) — creates six orders spanning every status (`Pending`/`Confirmed`/`Completed`×3/`Cancelled`) across the last 14 days plus favorites, reviews, and notifications. This exists so every feature (dashboard trend chart, CSV export, reorder, the notification bell, QR pickup, reviews) has real data to look at immediately after a fresh `docker compose up`, without manually clicking through the app first. Because it's gated on "no orders exist yet" rather than reconciled like steps 3–4, it never touches orders placed by real usage afterward.
+5. **Demo customer/manager activity** (`SeedDemoActivityAsync`) — creates `demo.customer@ecomeal.local`/`demo.manager@ecomeal.local` (fixed passwords, not configuration-gated like the admin account, since they carry no real data), assigns the demo manager to Stadionul de Gusturi, and — **only on a genuinely fresh database** (`if (await db.Orders.AnyAsync()) return;`, unlike the reconcile-on-every-run steps above) — creates seven orders spanning every status (`Pending`/`Confirmed`/`Completed`×3/`Cancelled`/`NoShow`) across the last 14 days plus favorites, reviews, and notifications. This exists so every feature (dashboard trend chart, CSV export, reorder, the notification bell, QR pickup, reviews, the `NoShow` badge) has real data to look at immediately after a fresh `docker compose up`, without manually clicking through the app first. Because it's gated on "no orders exist yet" rather than reconciled like steps 3–4, it never touches orders placed by real usage afterward.
 
 This reconciliation approach — add-if-missing, refresh-if-stale, backfill-if-empty, never overwrite a live/customized value — is what lets the exact same seeder run unconditionally on every container start (see `docker-compose.test.yml`) without ever fighting real usage data.
 
@@ -559,9 +576,13 @@ This reconciliation approach — add-if-missing, refresh-if-stale, backfill-if-e
 |---|---|---|
 | `ConnectionStrings:EcoMealContext` | user-secrets (dev) / `docker-compose.test.yml` env (`ConnectionStrings__EcoMealContext`) | Npgsql connection string |
 | `SeedAdmin:Email` / `SeedAdmin:Password` | user-secrets / docker-compose env (`SeedAdmin__Email`/`SeedAdmin__Password`) | The one admin account `DbSeeder` creates if it doesn't already exist |
+| `Identity:RequireConfirmedAccount` | user-secrets / docker-compose env (`Identity__RequireConfirmedAccount`) | Defaults `false`. When `true`, self-registration requires clicking an emailed confirmation link before sign-in works (§7) |
+| `App:BaseUrl` | user-secrets / docker-compose env (`App__BaseUrl`) | Absolute origin (e.g. `http://localhost:8081`) used to build links in confirmation/reset emails — falls back to `http://localhost:8080` if unset |
+| `Email:Smtp:Host` / `Port` / `Username` / `Password` / `EnableSsl` | user-secrets / docker-compose env (double-underscore form) | SMTP settings for `SmtpEmailSender`. Leaving `Host` unset makes it log the email instead of sending — no SMTP server is required to run the app |
+| `Email:FromAddress` / `Email:FromName` | user-secrets / docker-compose env | The `From:` header on outgoing emails; defaults to `no-reply@ecomeal.local` / `Eco Meal` |
 | `Logging:LogLevel` | `appsettings.json` | Standard ASP.NET Core logging config; `Microsoft.AspNetCore` pinned to `Warning` to keep request-pipeline noise out of the console in Development |
 
-No `appsettings.Production.json` exists — the only environment-specific file is `appsettings.Development.json`, which layers in the seed-admin credentials for local dev so a fresh `dotnet run` against an empty DB has a working login without extra setup. `docker-compose.test.yml` is explicitly documented (README) as a local test/demo harness, not a production deployment (fixed DB password, HTTP only).
+No `appsettings.Production.json` exists — the only environment-specific file is `appsettings.Development.json`, which layers in the seed-admin credentials for local dev so a fresh `dotnet run` against an empty DB has a working login without extra setup. `docker-compose.test.yml` is explicitly documented (README) as a local test/demo harness, not a production deployment (fixed DB password, HTTP only) — it also bundles a `mailpit` container and points `Email:Smtp:Host` at it, so every email the app sends is visible at `http://localhost:8025` with zero real SMTP setup.
 
 `Program.cs` also sets a fixed `CultureInfo("ro-RO")` as both `DefaultThreadCurrentCulture` and `DefaultThreadCurrentUICulture` at startup — every `ToString("C")` call across the app (cart totals, package prices, order totals) formats as RON without any per-call culture handling, since the app has exactly one supported locale.
 
@@ -573,7 +594,7 @@ No `appsettings.Production.json` exists — the only environment-specific file i
 
 Two kinds of tests, deliberately using different EF Core providers for different reasons:
 
-- **`Services/OrderServiceTests.cs`** — unit tests for `OrderService`'s status-transition/stock logic (rate limiting, the pending-reservation math in `PlaceOrderAsync`, confirm/cancel stock reservation and restoration, illegal-transition rejection, manager/admin/customer authorization scoping). `IOrderRepository`/`IPackageRepository`/`IBusinessService`/`INotificationService` are mocked with Moq; `EcoMealDbContext` is real but backed by the EF Core **InMemory** provider (`Tests/TestSupport/InMemoryDb.cs`), since `OrderService` queries it directly for a few things (rate-limit counts, status lookups, pending-reservation sums) that are simple enough for InMemory to translate correctly. `CurrentUserAccessor` is also real, constructed around a `FakeAuthenticationStateProvider` test double instead of mocking the concrete class.
+- **`Services/OrderServiceTests.cs`** — unit tests for `OrderService`'s status-transition/stock logic (rate limiting, the pending-reservation math in `PlaceOrderAsync`, confirm/cancel/no-show stock reservation and restoration, illegal-transition rejection, manager/admin/customer authorization scoping, the pickup-reminder and no-show sweep methods). `IOrderRepository`/`IPackageRepository`/`IBusinessService`/`INotificationService`/`IAppEmailSender` are mocked with Moq; `EcoMealDbContext` is real but backed by the EF Core **InMemory** provider (`Tests/TestSupport/InMemoryDb.cs`), since `OrderService` queries it directly for a few things (rate-limit counts, status lookups, pending-reservation sums) that are simple enough for InMemory to translate correctly. `CurrentUserAccessor` is also real, constructed around a `FakeAuthenticationStateProvider` test double instead of mocking the concrete class.
 - **`Database/DbSeederTests.cs`** — integration tests that run `DbSeeder.SeedAsync` against a **real Postgres** container (`Testcontainers.PostgreSql`, `Tests/TestSupport/PostgresFixture.cs`), applying real EF migrations first via `MigrateAsync()` — exactly what `Program.cs` does on startup. This is deliberate, not incidental: an InMemory-provider test wouldn't replay real migration history, so it can't catch the class of bug this project has hit before (see §9 point 4's history and the old `SeedData`/`MoreSeedData` migrations vs. `DbSeeder` conflict) — only a real migration run proves the current seed data actually wins. One Postgres container is shared per test class; each test gets its own logical database on it (`CreateDatabaseAsync`) for isolation without paying container-startup cost per test. Requires Docker to be running locally.
 
 Given this split, Postgres-only query behavior (`EF.Functions.ILike` in `OrderRepository`, the `xmin` optimistic-concurrency token on `Package`, the `order_numbers` sequence) is exercised by the seeding integration tests' real Postgres round-trip, not by the InMemory-backed unit tests.

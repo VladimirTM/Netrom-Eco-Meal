@@ -1411,6 +1411,7 @@ h1:focus {
 .order-status-confirmed { background: rgba(37, 99, 235, 0.1);  color: #2563eb; }
 .order-status-completed { background: rgba(22, 163, 74, 0.1);  color: #16a34a; }
 .order-status-cancelled { background: rgba(239, 68, 68, 0.1);  color: #ef4444; }
+.order-status-noshow    { background: rgba(100, 116, 139, 0.14); color: #64748b; }
 
 .order-ticket-items {
     padding: 0.15rem 0 0.85rem;
@@ -1780,6 +1781,17 @@ h1:focus {
 .order-action-cancel:hover {
     color: #ef4444;
     background: rgba(239, 68, 68, 0.08);
+}
+
+.order-action-noshow {
+    color: #64748b;
+    border-color: rgba(100, 116, 139, 0.35);
+    background: rgba(100, 116, 139, 0.07);
+}
+.order-action-noshow:hover {
+    background: #64748b;
+    border-color: #64748b;
+    color: #fff;
 }
 
 .order-action-empty {

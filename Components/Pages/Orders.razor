@@ -145,7 +145,7 @@
                                 </button>
                             </div>
                         }
-                        else if (order.Status.Name is OrderStatuses.Completed or OrderStatuses.Cancelled)
+                        else if (order.Status.Name is OrderStatuses.Completed or OrderStatuses.Cancelled or OrderStatuses.NoShow)
                         {
                             <div class="order-ticket-actions">
                                 <button type="button" class="order-action-btn order-action-reorder" disabled="@(_reorderingOrderId == order.Id)"
@@ -200,7 +200,7 @@
 
 @code {
     // Lifecycle order for the filter chips, not alphabetical or appearance order.
-    private static readonly string[] StatusOrder = [OrderStatuses.Pending, OrderStatuses.Confirmed, OrderStatuses.Completed, OrderStatuses.Cancelled];
+    private static readonly string[] StatusOrder = [OrderStatuses.Pending, OrderStatuses.Confirmed, OrderStatuses.Completed, OrderStatuses.NoShow, OrderStatuses.Cancelled];
 
     // Loaded once, unfiltered, purely for the lifetime stats in the hero — the rendered
     // ticket list itself comes from the paginated/filtered server query below.

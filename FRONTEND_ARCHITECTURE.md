@@ -51,6 +51,7 @@ Components/
 │   ├── OrderScan.razor(.js)      # /orders/scan — manager camera scanner
 │   ├── OrderValidate.razor       # /orders/validate/{Id} — confirm-pickup landing page (scanned or typed)
 │   ├── Login.razor / Register.razor
+│   ├── ForgotPassword.razor / ResetPassword.razor / ConfirmEmail.razor
 │   ├── AccessDenied.razor / NotFound.razor / Error.razor
 │   ├── Dashboard.razor           # /dashboard — stat cards + 14-day trend chart
 │   ├── Businesses.razor / BusinessForm.razor

@@ -18,6 +18,10 @@ public interface IOrderRepository
     public Task<decimal> GetTotalWeightSavedKgAsync();
     // Pending orders past their confirm window or a closed pickup slot — feeds the expiry sweep.
     public Task<List<Order>> GetStalePendingOrdersAsync(DateTime createdBefore);
+    // Confirmed orders whose pickup window has fully closed — feeds the no-show sweep.
+    public Task<List<Order>> GetOverduePickupOrdersAsync(DateTime now);
+    // Confirmed orders whose pickup window closes within the lead time and haven't been reminded yet.
+    public Task<List<Order>> GetPickupReminderCandidatesAsync(DateTime remindBy, DateTime now);
     // Sum of Pending reservations per package — Package.Quantity alone overstates what's still bookable.
     public Task<Dictionary<Guid, int>> GetPendingQuantitiesByPackageIdsAsync(IEnumerable<Guid> packageIds);
     public Task AddAsync(Order order);

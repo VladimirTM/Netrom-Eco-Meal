@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Database;
@@ -13,6 +14,7 @@ public class OrderService(
     IPackageRepository packageRepository,
     IBusinessService businessService,
     INotificationService notificationService,
+    IAppEmailSender emailSender,
     EcoMealDbContext dbContext,
     CurrentUserAccessor currentUser) : IOrderService
 {
@@ -185,15 +187,74 @@ public class OrderService(
         foreach (var order in staleOrders)
         {
             order.StatusId = cancelledStatus.Id;
-            await notificationService.CreateAsync(order.UserId,
-                $"Order #{order.OrderNumber:000} at {order.Business.Name} was automatically cancelled because it wasn't confirmed in time.",
-                "/orders");
+            var message = $"Order #{order.OrderNumber:000} at {order.Business.Name} was automatically cancelled because it wasn't confirmed in time.";
+            await notificationService.CreateAsync(order.UserId, message, "/orders");
+            await SendCustomerEmailAsync(order, "Order cancelled", message);
         }
 
         if (staleOrders.Count > 0)
             await orderRepository.SaveChangesAsync();
 
         return staleOrders.Count;
+    }
+
+    // Confirmed orders whose pickup window fully closed without being marked Completed — restores
+    // stock the same way a Confirmed->Cancelled transition does, since the reservation is being
+    // released either way.
+    public async Task<int> ExpireNoShowOrdersAsync()
+    {
+        var noShowStatus = await dbContext.Statuses.FirstOrDefaultAsync(s => s.Name == OrderStatuses.NoShow)
+            ?? throw new InvalidOperationException("Order status configuration is missing.");
+
+        var overdueOrders = await orderRepository.GetOverduePickupOrdersAsync(DateTime.UtcNow);
+
+        foreach (var order in overdueOrders)
+        {
+            order.StatusId = noShowStatus.Id;
+            foreach (var line in order.OrderPackages)
+                line.Package.Quantity += line.Quantity;
+
+            var message = $"Order #{order.OrderNumber:000} at {order.Business.Name} was marked as a no-show — the pickup window closed without it being picked up.";
+            await notificationService.CreateAsync(order.UserId, message, "/orders");
+            await SendCustomerEmailAsync(order, "Missed pickup", message);
+        }
+
+        if (overdueOrders.Count > 0)
+            await orderRepository.SaveChangesAsync();
+
+        return overdueOrders.Count;
+    }
+
+    // Reminds a customer shortly before a Confirmed order's pickup window closes. Idempotent via
+    // PickupReminderSentAt, so the sweep can run every few minutes without double-reminding.
+    public async Task<int> SendPickupRemindersAsync()
+    {
+        var now = DateTime.UtcNow;
+        var candidates = await orderRepository.GetPickupReminderCandidatesAsync(now + OrderExpiry.PickupReminderLeadTime, now);
+
+        foreach (var order in candidates)
+        {
+            order.PickupReminderSentAt = now;
+            var message = $"Order #{order.OrderNumber:000} at {order.Business.Name} — your pickup window closes soon, don't forget to collect it.";
+            await notificationService.CreateAsync(order.UserId, message, $"/orders/pickup/{order.Id}");
+            await SendCustomerEmailAsync(order, "Pickup closes soon", message);
+        }
+
+        if (candidates.Count > 0)
+            await orderRepository.SaveChangesAsync();
+
+        return candidates.Count;
+    }
+
+    // Best-effort — a failed/unconfigured email should never break an order transition. The bell
+    // notification (already created by the caller) remains the source of truth either way.
+    private async Task SendCustomerEmailAsync(Order order, string subject, string message)
+    {
+        if (string.IsNullOrWhiteSpace(order.User.Email))
+            return;
+
+        var html = $"<p>Hi {WebUtility.HtmlEncode(order.User.Name)},</p><p>{WebUtility.HtmlEncode(message)}</p><p>— Eco Meal</p>";
+        await emailSender.SendEmailAsync(order.User.Email, $"Eco Meal — {subject}", html);
     }
 
     public async Task<Dictionary<Guid, int>> GetPendingReservedQuantitiesAsync(IEnumerable<Guid> packageIds)
@@ -233,6 +294,9 @@ public class OrderService(
             (OrderStatuses.Pending, OrderStatuses.Cancelled) => true,
             (OrderStatuses.Confirmed, OrderStatuses.Completed) => true,
             (OrderStatuses.Confirmed, OrderStatuses.Cancelled) => true,
+            // Lets a manager mark a no-show by hand at the counter, in addition to the automatic
+            // sweep once the pickup window fully closes (see ExpireNoShowOrdersAsync).
+            (OrderStatuses.Confirmed, OrderStatuses.NoShow) => true,
             _ => false,
         };
         if (!allowedTransition)
@@ -249,7 +313,7 @@ public class OrderService(
             foreach (var line in order.OrderPackages)
                 line.Package.Quantity -= line.Quantity;
         }
-        else if (statusName == OrderStatuses.Cancelled && currentStatusName == OrderStatuses.Confirmed)
+        else if (currentStatusName == OrderStatuses.Confirmed && statusName is OrderStatuses.Cancelled or OrderStatuses.NoShow)
         {
             foreach (var line in order.OrderPackages)
                 line.Package.Quantity += line.Quantity;
@@ -267,15 +331,19 @@ public class OrderService(
             throw new InvalidOperationException("Stock for this order just changed — please refresh and try again.");
         }
 
-        var (message, url) = statusName switch
+        var (message, url, emailSubject) = statusName switch
         {
-            OrderStatuses.Confirmed => ($"Order #{order.OrderNumber:000} at {order.Business.Name} was confirmed — show your QR code at pickup.", $"/orders/pickup/{order.Id}"),
-            OrderStatuses.Completed => ($"Order #{order.OrderNumber:000} at {order.Business.Name} is complete — thanks for rescuing food!", "/orders"),
-            OrderStatuses.Cancelled => ($"Order #{order.OrderNumber:000} at {order.Business.Name} was cancelled.", "/orders"),
-            _ => (null, null),
+            OrderStatuses.Confirmed => ($"Order #{order.OrderNumber:000} at {order.Business.Name} was confirmed — show your QR code at pickup.", $"/orders/pickup/{order.Id}", "Order confirmed"),
+            OrderStatuses.Completed => ($"Order #{order.OrderNumber:000} at {order.Business.Name} is complete — thanks for rescuing food!", "/orders", "Order complete"),
+            OrderStatuses.Cancelled => ($"Order #{order.OrderNumber:000} at {order.Business.Name} was cancelled.", "/orders", "Order cancelled"),
+            OrderStatuses.NoShow => ($"Order #{order.OrderNumber:000} at {order.Business.Name} was marked as a no-show — the pickup window closed without it being picked up.", "/orders", "Missed pickup"),
+            _ => (null, null, null),
         };
         if (message is not null)
+        {
             await notificationService.CreateAsync(order.UserId, message, url);
+            await SendCustomerEmailAsync(order, emailSubject!, message);
+        }
 
         return order;
     }

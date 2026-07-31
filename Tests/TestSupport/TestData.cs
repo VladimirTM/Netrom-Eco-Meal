@@ -10,6 +10,7 @@ public static class TestStatusIds
     public static readonly Guid Confirmed = new("99999999-0000-0000-0000-000000000002");
     public static readonly Guid Completed = new("99999999-0000-0000-0000-000000000003");
     public static readonly Guid Cancelled = new("99999999-0000-0000-0000-000000000004");
+    public static readonly Guid NoShow = new("99999999-0000-0000-0000-000000000005");
 
     public static IEnumerable<Status> All() =>
     [
@@ -17,6 +18,7 @@ public static class TestStatusIds
         new Status { Id = Confirmed, Name = OrderStatuses.Confirmed },
         new Status { Id = Completed, Name = OrderStatuses.Completed },
         new Status { Id = Cancelled, Name = OrderStatuses.Cancelled },
+        new Status { Id = NoShow, Name = OrderStatuses.NoShow },
     ];
 
     public static Guid ForName(string name) => name switch
@@ -25,6 +27,7 @@ public static class TestStatusIds
         OrderStatuses.Confirmed => Confirmed,
         OrderStatuses.Completed => Completed,
         OrderStatuses.Cancelled => Cancelled,
+        OrderStatuses.NoShow => NoShow,
         _ => throw new ArgumentOutOfRangeException(nameof(name)),
     };
 }

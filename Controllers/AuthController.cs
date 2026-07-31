@@ -36,14 +36,17 @@ public class AuthController(IAuthService authService) : ControllerBase
         if (!ModelState.IsValid || string.IsNullOrWhiteSpace(name))
             return LocalRedirect($"/account/register?error={Uri.EscapeDataString("Fill in your name, email, and password.")}&returnUrl={returnUrl}");
 
-        var error = await authService.RegisterAsync(request, name);
+        var outcome = await authService.RegisterAsync(request, name);
 
-        if (error is null)
-        {
-            return LocalRedirect(returnUrl ?? "/");
-        }
+        if (outcome.Error is not null)
+            return LocalRedirect($"/account/register?error={Uri.EscapeDataString(outcome.Error)}&returnUrl={returnUrl}");
 
-        return LocalRedirect($"/account/register?error={Uri.EscapeDataString(error)}&returnUrl={returnUrl}");
+        // Info set (no error) means RequireConfirmedAccount left the user signed out — show the
+        // "check your email" message on the login page instead of continuing to returnUrl.
+        if (outcome.Info is not null)
+            return LocalRedirect($"/account/login?info={Uri.EscapeDataString(outcome.Info)}");
+
+        return LocalRedirect(returnUrl ?? "/");
     }
 
     // No [ManualValidateAntiforgeryToken]: a forged logout only logs the victim out, and the header's
@@ -54,4 +57,18 @@ public class AuthController(IAuthService authService) : ControllerBase
         await authService.LogoutAsync();
         return LocalRedirect(returnUrl ?? "/account/login");
     }
+
+    // ---- In-process only below: no HTTP verb attribute, so MVC never routes to these — called
+    // directly by ConfirmEmail/ForgotPassword/ResetPassword the same way OrderController etc. are
+    // injected into other pages. They don't touch the auth cookie, so they don't need the real
+    // HTTP round trip login/register/logout require. ----
+
+    public async Task<string?> ConfirmEmailAsync(string userId, string token) =>
+        await authService.ConfirmEmailAsync(userId, token);
+
+    public async Task RequestPasswordResetAsync(string email) =>
+        await authService.RequestPasswordResetAsync(email);
+
+    public async Task<string?> ResetPasswordAsync(string email, string token, string newPassword) =>
+        await authService.ResetPasswordAsync(email, token, newPassword);
 }

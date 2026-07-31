@@ -27,6 +27,7 @@ public class OrderServiceTests
         Mock<IPackageRepository> PackageRepo,
         Mock<IBusinessService> BusinessService,
         Mock<INotificationService> NotificationService,
+        Mock<IAppEmailSender> EmailSender,
         EcoMealDbContext Db);
 
     private static Fixture Build(string? userId, params string[] roles)
@@ -36,12 +37,14 @@ public class OrderServiceTests
         var packageRepo = new Mock<IPackageRepository>();
         var businessService = new Mock<IBusinessService>();
         var notificationService = new Mock<INotificationService>();
+        var emailSender = new Mock<IAppEmailSender>();
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
 
         var service = new OrderService(
-            orderRepo.Object, packageRepo.Object, businessService.Object, notificationService.Object, db, currentUser);
+            orderRepo.Object, packageRepo.Object, businessService.Object, notificationService.Object,
+            emailSender.Object, db, currentUser);
 
-        return new Fixture(service, orderRepo, packageRepo, businessService, notificationService, db);
+        return new Fixture(service, orderRepo, packageRepo, businessService, notificationService, emailSender, db);
     }
 
     // ---- PlaceOrderAsync ---------------------------------------------------
@@ -272,6 +275,23 @@ public class OrderServiceTests
         Assert.Equal(5, package.Quantity);
     }
 
+    [Fact]
+    public async Task UpdateStatusAsync_ConfirmedToNoShow_RestoresStock()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 3);
+        var order = TestData.Order(user, businessId, OrderStatuses.Confirmed, (package, 2));
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        var result = await f.Service.UpdateStatusAsync(order.Id, OrderStatuses.NoShow);
+
+        Assert.Equal(TestStatusIds.NoShow, result.StatusId);
+        Assert.Equal(5, package.Quantity);
+        f.NotificationService.Verify(n => n.CreateAsync(user.Id, It.Is<string>(m => m.Contains("no-show")), It.IsAny<string>()), Times.Once);
+    }
+
     [Theory]
     [InlineData(OrderStatuses.Pending, OrderStatuses.Completed)]
     [InlineData(OrderStatuses.Completed, OrderStatuses.Confirmed)]
@@ -403,5 +423,70 @@ public class OrderServiceTests
         Assert.Equal(0, count);
         f.OrderRepo.Verify(r => r.SaveChangesAsync(), Times.Never);
         f.NotificationService.Verify(n => n.CreateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    // ---- ExpireNoShowOrdersAsync --------------------------------------------
+
+    [Fact]
+    public async Task ExpireNoShowOrdersAsync_MarksOverdueOrdersAndRestoresStock()
+    {
+        var f = Build(null);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 3);
+        var overdue = TestData.Order(user, businessId, OrderStatuses.Confirmed, (package, 2));
+        f.OrderRepo.Setup(r => r.GetOverduePickupOrdersAsync(It.IsAny<DateTime>())).ReturnsAsync([overdue]);
+
+        var count = await f.Service.ExpireNoShowOrdersAsync();
+
+        Assert.Equal(1, count);
+        Assert.Equal(TestStatusIds.NoShow, overdue.StatusId);
+        Assert.Equal(5, package.Quantity);
+        f.OrderRepo.Verify(r => r.SaveChangesAsync(), Times.Once);
+        f.NotificationService.Verify(n => n.CreateAsync(user.Id, It.Is<string>(m => m.Contains("no-show")), It.IsAny<string>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExpireNoShowOrdersAsync_NoOverdueOrders_DoesNotSave()
+    {
+        var f = Build(null);
+        f.OrderRepo.Setup(r => r.GetOverduePickupOrdersAsync(It.IsAny<DateTime>())).ReturnsAsync([]);
+
+        var count = await f.Service.ExpireNoShowOrdersAsync();
+
+        Assert.Equal(0, count);
+        f.OrderRepo.Verify(r => r.SaveChangesAsync(), Times.Never);
+    }
+
+    // ---- SendPickupRemindersAsync -------------------------------------------
+
+    [Fact]
+    public async Task SendPickupRemindersAsync_MarksSentAndNotifiesEach()
+    {
+        var f = Build(null);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        var order = TestData.Order(user, businessId, OrderStatuses.Confirmed, (package, 1));
+        f.OrderRepo.Setup(r => r.GetPickupReminderCandidatesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>())).ReturnsAsync([order]);
+
+        var count = await f.Service.SendPickupRemindersAsync();
+
+        Assert.Equal(1, count);
+        Assert.NotNull(order.PickupReminderSentAt);
+        f.OrderRepo.Verify(r => r.SaveChangesAsync(), Times.Once);
+        f.NotificationService.Verify(n => n.CreateAsync(user.Id, It.Is<string>(m => m.Contains("closes soon")), It.IsAny<string>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendPickupRemindersAsync_NoCandidates_DoesNotSave()
+    {
+        var f = Build(null);
+        f.OrderRepo.Setup(r => r.GetPickupReminderCandidatesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>())).ReturnsAsync([]);
+
+        var count = await f.Service.SendPickupRemindersAsync();
+
+        Assert.Equal(0, count);
+        f.OrderRepo.Verify(r => r.SaveChangesAsync(), Times.Never);
     }
 }

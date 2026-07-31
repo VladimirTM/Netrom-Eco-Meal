@@ -108,16 +108,26 @@ public static class DbSeeder
         await db.SaveChangesAsync();
     }
 
+    // Adds any status row that's missing rather than bailing out when the table is non-empty — an
+    // old migration (pre-DbSeeder) hardcoded InsertData for the original four statuses, so a fresh
+    // database already has those by the time this runs, and a blanket "if (Any) return" would
+    // silently skip NoShow forever. See BACKEND_ARCHITECTURE.md §9 for the migration-vs-seeder history.
     private static async Task SeedStatusesAsync(EcoMealDbContext db)
     {
-        if (await db.Statuses.AnyAsync()) return;
+        var allStatuses = new List<Status>
+        {
+            new() { Id = new Guid("33333333-0000-0000-0000-000000000001"), Name = OrderStatuses.Pending },
+            new() { Id = new Guid("33333333-0000-0000-0000-000000000002"), Name = OrderStatuses.Confirmed },
+            new() { Id = new Guid("33333333-0000-0000-0000-000000000003"), Name = OrderStatuses.Completed },
+            new() { Id = new Guid("33333333-0000-0000-0000-000000000004"), Name = OrderStatuses.Cancelled },
+            new() { Id = new Guid("33333333-0000-0000-0000-000000000005"), Name = OrderStatuses.NoShow },
+        };
 
-        db.Statuses.AddRange(
-            new Status { Id = new Guid("33333333-0000-0000-0000-000000000001"), Name = OrderStatuses.Pending },
-            new Status { Id = new Guid("33333333-0000-0000-0000-000000000002"), Name = OrderStatuses.Confirmed },
-            new Status { Id = new Guid("33333333-0000-0000-0000-000000000003"), Name = OrderStatuses.Completed },
-            new Status { Id = new Guid("33333333-0000-0000-0000-000000000004"), Name = OrderStatuses.Cancelled }
-        );
+        var existingNames = await db.Statuses.Select(s => s.Name).ToListAsync();
+        var missing = allStatuses.Where(s => !existingNames.Contains(s.Name)).ToList();
+        if (missing.Count == 0) return;
+
+        db.Statuses.AddRange(missing);
         await db.SaveChangesAsync();
     }
 
@@ -323,10 +333,11 @@ public static class DbSeeder
         var midCompleted = MakeOrder(b3, new Guid("55555555-0000-0000-0000-000000000005"), 1, OrderStatuses.Completed, now.AddDays(-9));
         var recentCompleted = MakeOrder(b1, new Guid("55555555-0000-0000-0000-000000000001"), 1, OrderStatuses.Completed, now.AddDays(-6));
         var cancelled = MakeOrder(b9, new Guid("55555555-0000-0000-0000-000000000017"), 1, OrderStatuses.Cancelled, now.AddDays(-3));
+        var noShow = MakeOrder(b3, new Guid("55555555-0000-0000-0000-000000000006"), 1, OrderStatuses.NoShow, now.AddDays(-4));
         var confirmed = MakeOrder(b2, new Guid("55555555-0000-0000-0000-000000000004"), 1, OrderStatuses.Confirmed, now.AddDays(-1));
         var pending = MakeOrder(b1, new Guid("55555555-0000-0000-0000-000000000008"), 1, OrderStatuses.Pending, now.AddMinutes(-20));
 
-        db.Orders.AddRange(oldCompleted, midCompleted, recentCompleted, cancelled, confirmed, pending);
+        db.Orders.AddRange(oldCompleted, midCompleted, recentCompleted, cancelled, noShow, confirmed, pending);
 
         db.Favorites.AddRange(
             new Favorite { Id = Guid.NewGuid(), UserId = demoCustomer.Id, BusinessId = b1, CreatedAt = now },
@@ -346,6 +357,7 @@ public static class DbSeeder
         db.Notifications.AddRange(
             new Notification { Id = Guid.NewGuid(), UserId = demoCustomer.Id, Message = $"Order #{recentCompleted.OrderNumber:000} at Stadionul de Gusturi is complete — thanks for rescuing food!", Url = "/orders", IsRead = true, CreatedAt = now.AddDays(-6) },
             new Notification { Id = Guid.NewGuid(), UserId = demoCustomer.Id, Message = $"Order #{cancelled.OrderNumber:000} at Fault Fresh Market was cancelled.", Url = "/orders", IsRead = true, CreatedAt = now.AddDays(-3) },
+            new Notification { Id = Guid.NewGuid(), UserId = demoCustomer.Id, Message = $"Order #{noShow.OrderNumber:000} at Derby Deli was marked as a no-show — the pickup window closed without it being picked up.", Url = "/orders", IsRead = true, CreatedAt = now.AddDays(-4) },
             new Notification { Id = Guid.NewGuid(), UserId = demoCustomer.Id, Message = $"Order #{confirmed.OrderNumber:000} at VAR Bistro was confirmed — show your QR code at pickup.", Url = $"/orders/pickup/{confirmed.Id}", IsRead = false, CreatedAt = now.AddDays(-1) },
             new Notification { Id = Guid.NewGuid(), UserId = demoManagerId, Message = $"New order #{pending.OrderNumber:000} from {demoCustomer.Name} at Stadionul de Gusturi needs confirmation.", Url = "/orders/manage", IsRead = false, CreatedAt = now.AddMinutes(-20) }
         );

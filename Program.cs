@@ -8,6 +8,7 @@ using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Repositories;
 using Netrom_Eco_Meal.Repositories.Interfaces;
 using Netrom_Eco_Meal.Services;
+using Netrom_Eco_Meal.Services.Email;
 using Netrom_Eco_Meal.Services.Interfaces;
 
 // Single-locale app: prices are always RON, so every ToString("C") call site (cart,
@@ -30,7 +31,9 @@ builder.Services.AddScoped<EcoMealDbContext>(sp => sp.GetRequiredService<IDbCont
 
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
-    options.SignIn.RequireConfirmedAccount = false;
+    // Off by default so a bare `dotnet run`/demo works without SMTP configured — see
+    // Email:Smtp:* / SmtpEmailSender for what turning this on requires.
+    options.SignIn.RequireConfirmedAccount = builder.Configuration.GetValue("Identity:RequireConfirmedAccount", false);
     options.Password.RequiredLength = 8;
 }).AddEntityFrameworkStores<EcoMealDbContext>().AddDefaultTokenProviders();
 
@@ -58,6 +61,7 @@ builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IFavoriteRepository, FavoriteRepository>();
 builder.Services.AddScoped<IFavoriteService, FavoriteService>();
+builder.Services.AddScoped<IAppEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<CurrentUserAccessor>();
 builder.Services.AddScoped<CartService>();
 builder.Services.AddScoped<ClientTimeZoneService>();
@@ -69,7 +73,10 @@ builder.Services.AddScoped<OrderController>();
 builder.Services.AddScoped<ReviewController>();
 builder.Services.AddScoped<NotificationController>();
 builder.Services.AddScoped<FavoriteController>();
-builder.Services.AddHostedService<PendingOrderExpiryService>();
+// Real HTTP endpoint for Login/Register/Logout (see AuthController), but also registered here so
+// ConfirmEmail/ForgotPassword/ResetPassword can inject it in-process like every other controller.
+builder.Services.AddScoped<AuthController>();
+builder.Services.AddHostedService<OrderLifecycleSweepService>();
 
 var app = builder.Build();
 

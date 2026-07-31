@@ -177,6 +177,9 @@
                                         <button type="button" class="order-action-btn order-action-complete" @onclick="() => ChangeStatusAsync(order, OrderStatuses.Completed)">
                                             <i class="bi bi-check2-all"></i> Complete
                                         </button>
+                                        <button type="button" class="order-action-btn order-action-noshow" @onclick="() => ChangeStatusAsync(order, OrderStatuses.NoShow)">
+                                            No-show
+                                        </button>
                                         <button type="button" class="order-action-btn order-action-cancel" @onclick="() => ChangeStatusAsync(order, OrderStatuses.Cancelled)">
                                             Cancel
                                         </button>
@@ -200,7 +203,7 @@
 <OrderDetailModal Order="_selectedOrder" PickupLabel="@(_selectedOrder is null ? "" : PickupWindow(_selectedOrder))" OnClose="() => _selectedOrder = null"/>
 
 @code {
-    private static readonly string[] StatusOrder = [OrderStatuses.Pending, OrderStatuses.Confirmed, OrderStatuses.Completed, OrderStatuses.Cancelled];
+    private static readonly string[] StatusOrder = [OrderStatuses.Pending, OrderStatuses.Confirmed, OrderStatuses.Completed, OrderStatuses.NoShow, OrderStatuses.Cancelled];
 
     private PaginatedList<Order>? _paged;
     private List<Business> _allBusinesses = [];
