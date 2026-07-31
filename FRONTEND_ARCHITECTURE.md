@@ -200,9 +200,9 @@ Blazor Server has no React-style Context API, but two `Scoped` services fill the
 ```csharp
 public class CartItem { public required Package Package; public int Quantity; }
 
-public class CartService(IJSRuntime jsRuntime, IPackageService packageService)
+public class CartService(IJSRuntime jsRuntime, IDbContextFactory<EcoMealDbContext> contextFactory, CurrentUserAccessor currentUserAccessor)
 {
-    public const string StorageKey = "ecomeal.cart";
+    public string StorageKey => _userId is null ? BaseStorageKey : $"{BaseStorageKey}.{_userId}";  // set once in RestoreAsync
     public Guid? BusinessId { get; private set; }       // a basket holds items from exactly one business
     public IReadOnlyList<CartItem> Items => _items;
     public event Action? OnChange;
@@ -210,15 +210,16 @@ public class CartService(IJSRuntime jsRuntime, IPackageService packageService)
     public bool WouldReplaceCart(Package package) => BusinessId is not null && BusinessId != package.BusinessId;
     public int AvailableQuantity(Package package, int reservedElsewhere = 0) =>
         Math.Max(0, package.Quantity - reservedElsewhere - InCartQuantity(package.Id));
-    public async Task RestoreAsync() { /* localStorage → JSON → GetByIdsAsync → live CartItems */ }
+    public async Task RestoreAsync() { /* resolve _userId, then localStorage → JSON → own short-lived DbContext → live CartItems */ }
     public async Task AddAsync(Package package, int quantity = 1) { /* clamps to package.Quantity, clears cart on cross-business add */ }
 }
 ```
 - **Single-business invariant**: `AddInternal` clears every existing item the moment a package from a *different* business is added — `WouldReplaceCart` lets a caller (`BusinessDetail.razor`, `Orders.razor`'s reorder) detect this ahead of time and show a `ConfirmDialog` ("Start a new basket?") instead of silently wiping the customer's basket.
 - **`AvailableQuantity`'s `reservedElsewhere` parameter**: purely local math — `package.Quantity` minus whatever's in *this browser's* cart — can't see Pending reservations sitting in the database, whether from other customers or the viewer's own just-placed order (Pending orders don't touch `Package.Quantity`; see `BACKEND_ARCHITECTURE.md` §5). Callers that need an accurate live count pass in a per-package reserved total fetched from `OrderController.GetPendingReservedQuantitiesAsync` (see §6, §7, §15); callers that don't (or can't cheaply) just omit it and get the old cart-only behavior, since the parameter defaults to `0`.
 - **Persistence**: every mutation calls `PersistAsync`, which serializes `{PackageId, Quantity}` pairs to JSON and calls `EcoMeal.cart.save(key, json)` (see §14) — wrapped in a swallowed `try/catch` since `localStorage` can throw (private browsing, quota). The in-memory state stays authoritative even if the write silently fails.
-- **Restore is lossy by design**: `RestoreAsync` re-fetches the packages by ID via `IPackageService.GetByIdsAsync` — any package deleted since the cart was saved just doesn't come back; there's no "this item is no longer available" reconciliation UI, it's simply absent.
-- **Logout clears it**: both layouts' logout `<button>` carries `onclick="EcoMeal.cart.clear('@CartService.StorageKey')"` — plain inline JS, fired client-side *before* the form's `POST /api/auth/logout` navigates away, so a shared/public computer doesn't leak the next visitor's basket into the previous session's.
+- **Own `DbContext`, not the shared one**: `RestoreAsync` used to re-hydrate packages through `IPackageService` (the circuit-scoped `EcoMealDbContext` also used by whatever the routed page was loading), which could race that page's own first-render query on the same context and crash the circuit with `InvalidOperationException: A second operation was started on this context instance...`. It now opens its own short-lived context via `IDbContextFactory<EcoMealDbContext>` — same fix as `NotificationRepository`'s polling bell (`BACKEND_ARCHITECTURE.md` §4). Restore is still lossy by design: any package deleted since the cart was saved just doesn't come back, no "this item is no longer available" reconciliation UI.
+- **Namespaced per signed-in user**: `StorageKey` resolves to `ecomeal.cart.{userId}` once `RestoreAsync` sets `_userId` (falling back to the bare `ecomeal.cart` before a user is known, or on `MainLayout`, which never restores a cart). Without this, a basket left over from a session that ended without an explicit Sign Out — closed tab, expired cookie, not just a shared computer — could be picked up by a different account signing in later on the same browser, since `localStorage` isn't otherwise scoped to who's authenticated.
+- **Logout also clears it**: both layouts' logout `<button>` carries `onclick="EcoMeal.cart.clear('@CartService.StorageKey')"` — plain inline JS, fired client-side *before* the form's `POST /api/auth/logout` navigates away. Belt-and-braces on top of the per-user namespacing above, not the only thing preventing a leak.
 
 ### ClientTimeZoneService
 

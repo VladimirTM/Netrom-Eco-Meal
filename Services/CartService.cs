@@ -1,7 +1,8 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.JSInterop;
+using Netrom_Eco_Meal.Database;
 using Netrom_Eco_Meal.Entities;
-using Netrom_Eco_Meal.Services.Interfaces;
 
 namespace Netrom_Eco_Meal.Services;
 
@@ -11,12 +12,21 @@ public class CartItem
     public int Quantity { get; set; }
 }
 
-public class CartService(IJSRuntime jsRuntime, IPackageService packageService)
+// Restores via its own short-lived DbContext (IDbContextFactory), not the shared per-circuit one —
+// a first-render restore used to race the routed page's own query on that context and crash the
+// circuit. Same fix as NotificationRepository's polling bell.
+public class CartService(IJSRuntime jsRuntime, IDbContextFactory<EcoMealDbContext> contextFactory, CurrentUserAccessor currentUserAccessor)
 {
-    public const string StorageKey = "ecomeal.cart";
+    private const string BaseStorageKey = "ecomeal.cart";
 
     private readonly List<CartItem> _items = [];
     private bool _restored;
+    private string? _userId;
+
+    // Namespaced per signed-in user (set once in RestoreAsync) so a basket left over from a session
+    // that ended without an explicit Sign Out can't be picked up by a different account. Falls back
+    // to the bare key before a user is resolved, or on the admin/manager layout, which never carts.
+    public string StorageKey => _userId is null ? BaseStorageKey : $"{BaseStorageKey}.{_userId}";
 
     public Guid? BusinessId { get; private set; }
     public string? BusinessName { get; private set; }
@@ -40,6 +50,8 @@ public class CartService(IJSRuntime jsRuntime, IPackageService packageService)
             return;
         _restored = true;
 
+        (_, _userId) = await currentUserAccessor.GetCurrentUserAsync();
+
         List<StoredCartItem>? stored;
         try
         {
@@ -57,7 +69,13 @@ public class CartService(IJSRuntime jsRuntime, IPackageService packageService)
         if (stored is null || stored.Count == 0)
             return;
 
-        var packages = await packageService.GetByIdsAsync(stored.Select(s => s.PackageId));
+        var ids = stored.Select(s => s.PackageId).ToList();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var packages = await context.Packages
+            .Include(p => p.PackageType)
+            .Include(p => p.Business)
+            .Where(p => ids.Contains(p.Id))
+            .ToListAsync();
         foreach (var entry in stored)
         {
             var package = packages.FirstOrDefault(p => p.Id == entry.PackageId);

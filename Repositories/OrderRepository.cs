@@ -48,8 +48,13 @@ public class OrderRepository(EcoMealDbContext context) : IOrderRepository
         if (!string.IsNullOrWhiteSpace(search))
         {
             // Substring-match the plain order number — Npgsql can't translate the zero-padded
-            // ToString("000") overload — and strip a leading "#" so "#011" still matches.
-            var numberSearch = search.TrimStart('#');
+            // ToString("000") overload. Strips a leading "#" and any leading zeros left after
+            // that, since the UI shows padded numbers ("#008") the plain ToString() never has;
+            // falls back to "0" for an all-zero search.
+            var afterHash = search.TrimStart('#');
+            var numberSearch = afterHash.TrimStart('0');
+            if (numberSearch.Length == 0 && afterHash.Length > 0)
+                numberSearch = "0";
             query = query.Where(o =>
                 EF.Functions.ILike(o.OrderNumber.ToString(), $"%{numberSearch}%") ||
                 EF.Functions.ILike(o.User.Name, $"%{search}%"));
