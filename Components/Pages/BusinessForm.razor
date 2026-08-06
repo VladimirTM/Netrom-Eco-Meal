@@ -13,6 +13,7 @@
 @inject IBusinessTypeService BusinessTypeService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
 @attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
 
 <PageTitle>@(IsEdit ? "Edit Business" : "Create Business") — Eco Meal</PageTitle>
@@ -79,6 +80,35 @@
                         </label>
                         <InputText id="imageUrl" class="form-control" placeholder="https://..." @bind-Value="_model.ImageUrl"/>
                     </div>
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">
+                            Location <span class="text-muted fw-normal">(optional — powers "near me" sort and the map view)</span>
+                        </label>
+                        <div class="row g-3">
+                            <div class="col-sm-5">
+                                <InputNumber class="form-control" placeholder="Latitude" @bind-Value="_model.Latitude"/>
+                            </div>
+                            <div class="col-sm-5">
+                                <InputNumber class="form-control" placeholder="Longitude" @bind-Value="_model.Longitude"/>
+                            </div>
+                            <div class="col-sm-2">
+                                <button type="button" class="btn btn-outline-secondary w-100" @onclick="UseCurrentLocationAsync" disabled="@_locating">
+                                    @if (_locating)
+                                    {
+                                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-geo-alt"></i>
+                                    }
+                                </button>
+                            </div>
+                        </div>
+                        @if (_locationError is not null)
+                        {
+                            <div class="text-danger small mt-1">@_locationError</div>
+                        }
+                    </div>
                     <button type="submit" class="btn btn-primary w-100 py-2">
                         <i class="bi bi-check-lg me-1"></i> @(IsEdit ? "Save Changes" : "Create Business")
                     </button>
@@ -97,6 +127,8 @@
     private List<BusinessType> _businessTypes = [];
     private bool _forbidden;
     private bool _notFound;
+    private bool _locating;
+    private string? _locationError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -134,6 +166,8 @@
             _model.Description = existing.Description;
             _model.Address = existing.Address;
             _model.ImageUrl = existing.ImageUrl;
+            _model.Latitude = existing.Latitude;
+            _model.Longitude = existing.Longitude;
             _model.BusinessTypeId = existing.BusinessTypeId;
         }
         else if (_businessTypes.Count > 0)
@@ -155,6 +189,8 @@
                 Description = _model.Description!,
                 Address = _model.Address!,
                 ImageUrl = _model.ImageUrl,
+                Latitude = _model.Latitude,
+                Longitude = _model.Longitude,
                 BusinessTypeId = _model.BusinessTypeId
             };
             await BusinessController.UpdateAsync(business);
@@ -167,12 +203,46 @@
                 Description = _model.Description!,
                 Address = _model.Address!,
                 ImageUrl = _model.ImageUrl,
+                Latitude = _model.Latitude,
+                Longitude = _model.Longitude,
                 BusinessTypeId = _model.BusinessTypeId
             };
             await BusinessController.AddAsync(business);
         }
 
         NavigationManager.NavigateTo("/businesses");
+    }
+
+    private async Task UseCurrentLocationAsync()
+    {
+        _locationError = null;
+        _locating = true;
+        try
+        {
+            var position = await JSRuntime.InvokeAsync<GeoPosition?>("EcoMeal.geo.getPosition");
+            if (position is null)
+            {
+                _locationError = "Couldn't get your location — check your browser's location permission.";
+                return;
+            }
+
+            _model.Latitude = position.Lat;
+            _model.Longitude = position.Lng;
+        }
+        catch
+        {
+            _locationError = "Couldn't get your location — check your browser's location permission.";
+        }
+        finally
+        {
+            _locating = false;
+        }
+    }
+
+    private class GeoPosition
+    {
+        public double Lat { get; set; }
+        public double Lng { get; set; }
     }
 
     private class BusinessFormModel
@@ -187,6 +257,8 @@
         public string? Address { get; set; }
 
         public string? ImageUrl { get; set; }
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
         public Guid BusinessTypeId { get; set; }
     }
 }

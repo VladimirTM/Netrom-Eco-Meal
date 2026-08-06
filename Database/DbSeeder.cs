@@ -53,6 +53,7 @@ public static class DbSeeder
         await SeedStatusesAsync(db);
         await SeedBusinessesAsync(db);
         await SeedPackagesAsync(db);
+        await SeedPackageTemplateAsync(db);
 
         if (demoCustomer is not null && demoManager is not null)
             await SeedDemoActivityAsync(db, demoCustomer, demoManager.Id);
@@ -139,21 +140,22 @@ public static class DbSeeder
         var grocery    = new Guid("11111111-0000-0000-0000-000000000004");
         var foodTruck  = new Guid("11111111-0000-0000-0000-000000000005");
 
-        // World Cup–themed businesses, all based in Timișoara.
+        // World Cup–themed businesses, all based in Timișoara. Coordinates are approximate
+        // street/square estimates — good enough to demo distance sort and the map view.
         var seedBusinesses = new List<Business>
         {
-            new Business { Id = new Guid("44444444-0000-0000-0000-000000000001"), Name = "Stadionul de Gusturi", Description = "Matchday feasts inspired by World Cup host cities, made from the day's surplus.",       Address = "Bulevardul Revoluției 1989 10, Timișoara", BusinessTypeId = restaurant, ImageUrl = "https://loremflickr.com/640/400/soccer,stadium/all?lock=201" },
-            new Business { Id = new Guid("44444444-0000-0000-0000-000000000002"), Name = "VAR Bistro",           Description = "Reviewing yesterday's dishes so nothing goes offside — or to waste.",                    Address = "Bulevardul Take Ionescu 56, Timișoara",    BusinessTypeId = restaurant, ImageUrl = "https://loremflickr.com/640/400/football,referee/all?lock=202" },
-            new Business { Id = new Guid("44444444-0000-0000-0000-000000000003"), Name = "Derby Deli",           Description = "Home-cooked rivalries: hearty plates from Timișoara's derby-day kitchens.",              Address = "Strada Coriolan Brediceanu 3, Timișoara",  BusinessTypeId = restaurant, ImageUrl = "https://loremflickr.com/640/400/football,derby/all?lock=203" },
-            new Business { Id = new Guid("44444444-0000-0000-0000-000000000004"), Name = "Poarta de Aur Bakery", Description = "Golden-goal bread and pastries fresh off the bench every morning.",                      Address = "Piața Unirii 4, Timișoara",                 BusinessTypeId = bakery,     ImageUrl = "https://loremflickr.com/640/400/football,goal/all?lock=204" },
-            new Business { Id = new Guid("44444444-0000-0000-0000-000000000005"), Name = "Hat-Trick Bakery",     Description = "Three fresh batches a day: bread, pastries, and match-day pretzels.",                    Address = "Strada Vasile Alecsandri 14, Timișoara",   BusinessTypeId = bakery,     ImageUrl = "https://loremflickr.com/640/400/football,trophy/all?lock=205" },
-            new Business { Id = new Guid("44444444-0000-0000-0000-000000000006"), Name = "Fotbal & Focaccia",    Description = "Bakery-cafe hybrid baking focaccia and finalist-worthy pastries.",                       Address = "Piața Libertății 7, Timișoara",             BusinessTypeId = bakery,     ImageUrl = "https://loremflickr.com/640/400/football,worldcup/all?lock=206" },
-            new Business { Id = new Guid("44444444-0000-0000-0000-000000000007"), Name = "Extra Time Café",      Description = "Coffee and snacks for those who go into overtime.",                                       Address = "Strada Alba Iulia 22, Timișoara",           BusinessTypeId = cafe,       ImageUrl = "https://loremflickr.com/640/400/football,fans/all?lock=207" },
-            new Business { Id = new Guid("44444444-0000-0000-0000-000000000008"), Name = "Cartonaș Galben Café", Description = "Coffee strong enough to earn a caution.",                                                 Address = "Piața Victoriei 2, Timișoara",              BusinessTypeId = cafe,       ImageUrl = "https://loremflickr.com/640/400/football,jersey/all?lock=208" },
-            new Business { Id = new Guid("44444444-0000-0000-0000-000000000009"), Name = "Fault Fresh Market",   Description = "Produce nearing its final whistle — still match-fit.",                                   Address = "Calea Aradului 33, Timișoara",              BusinessTypeId = grocery,    ImageUrl = "https://loremflickr.com/640/400/soccer,ball/all?lock=209" },
-            new Business { Id = new Guid("44444444-0000-0000-0000-000000000010"), Name = "Penalty Pantry",      Description = "Surplus groceries saved before they're sent off.",                                        Address = "Calea Șagului 88, Timișoara",               BusinessTypeId = grocery,    ImageUrl = "https://loremflickr.com/640/400/football,penalty/all?lock=210" },
-            new Business { Id = new Guid("44444444-0000-0000-0000-000000000011"), Name = "Food Truck Mundial",  Description = "Street food from every World Cup host nation, one truck at a time.",                      Address = "Parcul Rozelor, Timișoara",                 BusinessTypeId = foodTruck,  ImageUrl = "https://loremflickr.com/640/400/worldcup,streetfood/all?lock=211" },
-            new Business { Id = new Guid("44444444-0000-0000-0000-000000000012"), Name = "Fan Zone Grill",      Description = "Grilled street food straight from the fan zone.",                                          Address = "Bulevardul Republicii 5, Timișoara",        BusinessTypeId = foodTruck,  ImageUrl = "https://loremflickr.com/640/400/football,grill/all?lock=212" },
+            new Business { Id = new Guid("44444444-0000-0000-0000-000000000001"), Name = "Stadionul de Gusturi", Description = "Matchday feasts inspired by World Cup host cities, made from the day's surplus.",       Address = "Bulevardul Revoluției 1989 10, Timișoara", BusinessTypeId = restaurant, ImageUrl = "https://loremflickr.com/640/400/soccer,stadium/all?lock=201", Latitude = 45.7556, Longitude = 21.2280 },
+            new Business { Id = new Guid("44444444-0000-0000-0000-000000000002"), Name = "VAR Bistro",           Description = "Reviewing yesterday's dishes so nothing goes offside — or to waste.",                    Address = "Bulevardul Take Ionescu 56, Timișoara",    BusinessTypeId = restaurant, ImageUrl = "https://loremflickr.com/640/400/football,referee/all?lock=202", Latitude = 45.7531, Longitude = 21.2352 },
+            new Business { Id = new Guid("44444444-0000-0000-0000-000000000003"), Name = "Derby Deli",           Description = "Home-cooked rivalries: hearty plates from Timișoara's derby-day kitchens.",              Address = "Strada Coriolan Brediceanu 3, Timișoara",  BusinessTypeId = restaurant, ImageUrl = "https://loremflickr.com/640/400/football,derby/all?lock=203", Latitude = 45.7492, Longitude = 21.2231 },
+            new Business { Id = new Guid("44444444-0000-0000-0000-000000000004"), Name = "Poarta de Aur Bakery", Description = "Golden-goal bread and pastries fresh off the bench every morning.",                      Address = "Piața Unirii 4, Timișoara",                 BusinessTypeId = bakery,     ImageUrl = "https://loremflickr.com/640/400/football,goal/all?lock=204", Latitude = 45.7579, Longitude = 21.2233 },
+            new Business { Id = new Guid("44444444-0000-0000-0000-000000000005"), Name = "Hat-Trick Bakery",     Description = "Three fresh batches a day: bread, pastries, and match-day pretzels.",                    Address = "Strada Vasile Alecsandri 14, Timișoara",   BusinessTypeId = bakery,     ImageUrl = "https://loremflickr.com/640/400/football,trophy/all?lock=205", Latitude = 45.7512, Longitude = 21.2202 },
+            new Business { Id = new Guid("44444444-0000-0000-0000-000000000006"), Name = "Fotbal & Focaccia",    Description = "Bakery-cafe hybrid baking focaccia and finalist-worthy pastries.",                       Address = "Piața Libertății 7, Timișoara",             BusinessTypeId = bakery,     ImageUrl = "https://loremflickr.com/640/400/football,worldcup/all?lock=206", Latitude = 45.7557, Longitude = 21.2247 },
+            new Business { Id = new Guid("44444444-0000-0000-0000-000000000007"), Name = "Extra Time Café",      Description = "Coffee and snacks for those who go into overtime.",                                       Address = "Strada Alba Iulia 22, Timișoara",           BusinessTypeId = cafe,       ImageUrl = "https://loremflickr.com/640/400/football,fans/all?lock=207", Latitude = 45.7462, Longitude = 21.2282 },
+            new Business { Id = new Guid("44444444-0000-0000-0000-000000000008"), Name = "Cartonaș Galben Café", Description = "Coffee strong enough to earn a caution.",                                                 Address = "Piața Victoriei 2, Timișoara",              BusinessTypeId = cafe,       ImageUrl = "https://loremflickr.com/640/400/football,jersey/all?lock=208", Latitude = 45.7539, Longitude = 21.2258 },
+            new Business { Id = new Guid("44444444-0000-0000-0000-000000000009"), Name = "Fault Fresh Market",   Description = "Produce nearing its final whistle — still match-fit.",                                   Address = "Calea Aradului 33, Timișoara",              BusinessTypeId = grocery,    ImageUrl = "https://loremflickr.com/640/400/soccer,ball/all?lock=209", Latitude = 45.7682, Longitude = 21.2012 },
+            new Business { Id = new Guid("44444444-0000-0000-0000-000000000010"), Name = "Penalty Pantry",      Description = "Surplus groceries saved before they're sent off.",                                        Address = "Calea Șagului 88, Timișoara",               BusinessTypeId = grocery,    ImageUrl = "https://loremflickr.com/640/400/football,penalty/all?lock=210", Latitude = 45.7282, Longitude = 21.1952 },
+            new Business { Id = new Guid("44444444-0000-0000-0000-000000000011"), Name = "Food Truck Mundial",  Description = "Street food from every World Cup host nation, one truck at a time.",                      Address = "Parcul Rozelor, Timișoara",                 BusinessTypeId = foodTruck,  ImageUrl = "https://loremflickr.com/640/400/worldcup,streetfood/all?lock=211", Latitude = 45.7461, Longitude = 21.2352 },
+            new Business { Id = new Guid("44444444-0000-0000-0000-000000000012"), Name = "Fan Zone Grill",      Description = "Grilled street food straight from the fan zone.",                                          Address = "Bulevardul Republicii 5, Timișoara",        BusinessTypeId = foodTruck,  ImageUrl = "https://loremflickr.com/640/400/football,grill/all?lock=212", Latitude = 45.7472, Longitude = 21.2152 },
         };
 
         // Add missing seed rows and refresh stale placeholder images, without touching an
@@ -168,10 +170,20 @@ public static class DbSeeder
             if (!existingById.TryGetValue(seed.Id, out var existing))
             {
                 db.Businesses.Add(seed);
+                continue;
             }
-            else if (IsStalePlaceholderImage(existing.ImageUrl))
+
+            if (IsStalePlaceholderImage(existing.ImageUrl))
             {
                 existing.ImageUrl = seed.ImageUrl;
+            }
+
+            // Backfill only — Latitude/Longitude are new columns, so a database seeded before this
+            // feature shipped has them null. Don't clobber an admin-set location once it's there.
+            if (existing.Latitude is null && existing.Longitude is null)
+            {
+                existing.Latitude = seed.Latitude;
+                existing.Longitude = seed.Longitude;
             }
         }
 
@@ -258,7 +270,9 @@ public static class DbSeeder
                 continue;
             }
 
-            if (existing.PickupEnd < DateTime.UtcNow)
+            // Once a template owns this package, PackageTemplateGenerationService is responsible
+            // for its future instances — let this one expire naturally instead of fighting it.
+            if (existing.PickupEnd < DateTime.UtcNow && existing.TemplateId is null)
             {
                 existing.PickupStart = seed.PickupStart;
                 existing.PickupEnd = seed.PickupEnd;
@@ -282,6 +296,38 @@ public static class DbSeeder
                 existing.DietaryTags = seed.DietaryTags;
             }
         }
+
+        await db.SaveChangesAsync();
+    }
+
+    // Turns the demo business's "Golden Boot Surprise Bag" into a recurring template, so a fresh
+    // docker compose up already shows the 🔁 Daily badge and something on /packages/templates.
+    // Only runs once — the generation service owns this package's future instances after that.
+    private static async Task SeedPackageTemplateAsync(EcoMealDbContext db)
+    {
+        var templateId = new Guid("66666666-0000-0000-0000-000000000001");
+        if (await db.PackageTemplates.AnyAsync(t => t.Id == templateId)) return;
+
+        var linkedPackage = await db.Packages.FindAsync(new Guid("55555555-0000-0000-0000-000000000001"));
+        if (linkedPackage is null || linkedPackage.TemplateId is not null) return;
+
+        db.PackageTemplates.Add(new PackageTemplate
+        {
+            Id = templateId,
+            BusinessId = linkedPackage.BusinessId,
+            PackageTypeId = linkedPackage.PackageTypeId,
+            Name = linkedPackage.Name,
+            Description = linkedPackage.Description,
+            Price = linkedPackage.Price,
+            Quantity = linkedPackage.Quantity,
+            WeightKg = linkedPackage.WeightKg,
+            DietaryTags = [..linkedPackage.DietaryTags],
+            PickupStartTimeUtc = linkedPackage.PickupStart.TimeOfDay,
+            PickupEndTimeUtc = linkedPackage.PickupEnd.TimeOfDay,
+            ImageUrl = linkedPackage.ImageUrl,
+            LastGeneratedDate = DateOnly.FromDateTime(linkedPackage.PickupStart),
+        });
+        linkedPackage.TemplateId = templateId;
 
         await db.SaveChangesAsync();
     }

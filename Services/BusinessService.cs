@@ -13,7 +13,7 @@ public class BusinessService(IBusinessRepository businessRepository, CurrentUser
         return await businessRepository.GetAllAsync();
     }
 
-    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null, string? sortBy = null, bool favoritesOnly = false)
+    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null, string? sortBy = null, bool favoritesOnly = false, double? customerLat = null, double? customerLng = null)
     {
         string? favoritedByUserId = null;
         if (favoritesOnly)
@@ -23,7 +23,7 @@ public class BusinessService(IBusinessRepository businessRepository, CurrentUser
             favoritedByUserId = userId ?? "";
         }
 
-        return await businessRepository.GetPagedAsync(pageIndex, pageSize, search, businessTypeId, managerId, sortBy, favoritedByUserId);
+        return await businessRepository.GetPagedAsync(pageIndex, pageSize, search, businessTypeId, managerId, sortBy, favoritedByUserId, customerLat, customerLng);
     }
 
     public async Task<Business?> GetByIdAsync(Guid id)
@@ -108,6 +108,8 @@ public class BusinessService(IBusinessRepository businessRepository, CurrentUser
         businessToUpdate.Description = business.Description;
         businessToUpdate.Address = business.Address;
         businessToUpdate.ImageUrl = business.ImageUrl;
+        businessToUpdate.Latitude = business.Latitude;
+        businessToUpdate.Longitude = business.Longitude;
         businessToUpdate.BusinessTypeId = business.BusinessTypeId;
     }
 }

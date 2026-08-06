@@ -16,6 +16,7 @@
 @inject IBusinessTypeService BusinessTypeService
 @inject CartService CartService
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Eco Meal — rescue surplus food near you</PageTitle>
 
@@ -73,7 +74,28 @@
             <select class="form-select home-business-filter" @bind="_sortBy" @bind:after="FilterChangedAsync">
                 <option value="@BusinessSortOptions.Name">Name (A–Z)</option>
                 <option value="@BusinessSortOptions.ClosingSoon">Closing soon</option>
+                @if (_customerLat.HasValue)
+                {
+                    <option value="@BusinessSortOptions.Distance">Nearest</option>
+                }
             </select>
+
+            <button type="button" class="home-fav-toggle @(_sortBy == BusinessSortOptions.Distance ? "home-fav-toggle-active" : "")"
+                    @onclick="ToggleNearMeAsync" disabled="@_locatingNearMe">
+                @if (_locatingNearMe)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status"></span>
+                }
+                else
+                {
+                    <i class="bi bi-geo-alt-fill"></i>
+                }
+                Near me
+            </button>
+
+            <button type="button" class="home-fav-toggle @(_showMap ? "home-fav-toggle-active" : "")" @onclick="ToggleMapAsync">
+                <i class="bi @(_showMap ? "bi-list-ul" : "bi-map")"></i> @(_showMap ? "List view" : "Map view")
+            </button>
 
             <AuthorizeView Roles="@AppRoles.Customer">
                 <Authorized>
@@ -91,12 +113,41 @@
             }
         </div>
 
+        @if (_locationError is not null)
+        {
+            <div class="text-danger small mb-2">@_locationError</div>
+        }
+
         <div class="home-results-row">
             <span class="text-muted small">@_paged.TotalCount kitchen@(_paged.TotalCount == 1 ? "" : "s") found</span>
         </div>
     }
 
-    @if (_paged is null)
+    @if (_showMap)
+    {
+        <div class="home-map-wrap card border-0 shadow-sm mb-4">
+            @if (_mapBusinesses is null)
+            {
+                <div class="d-flex justify-content-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            }
+            else if (_mapBusinesses.Count == 0)
+            {
+                <div class="text-center py-5">
+                    <i class="bi bi-map fs-1 text-muted d-block mb-3"></i>
+                    <p class="text-muted mb-0">No kitchens have a saved location yet.</p>
+                </div>
+            }
+            else
+            {
+                <div id="home-map" class="home-map"></div>
+            }
+        </div>
+    }
+    else if (_paged is null)
     {
         <div class="d-flex justify-content-center py-5">
             <div class="spinner-border text-primary" role="status">
@@ -145,6 +196,10 @@
                         <span class="biz-card-type">@business.BusinessType.Name</span>
                         <h2 class="biz-card-name">@business.Name</h2>
                         <div class="biz-card-address"><i class="bi bi-geo-alt-fill"></i>@business.Address</div>
+                        @if (DistanceLabel(business) is { } distance)
+                        {
+                            <div class="biz-card-distance"><i class="bi bi-signpost-2-fill"></i>@distance</div>
+                        }
                         <p class="biz-card-desc">@business.Description</p>
                         <div class="biz-card-footer">
                             @if (live.Count > 0)
@@ -186,6 +241,15 @@
     private const int PageSize = 9;
     private readonly Debouncer _reloadGate = new();
 
+    private double? _customerLat;
+    private double? _customerLng;
+    private bool _locatingNearMe;
+    private string? _locationError;
+
+    private bool _showMap;
+    private List<Business>? _mapBusinesses;
+    private bool _mapNeedsRender;
+
     private bool HasActiveFilters => _search != "" || _businessTypeFilter != "" || _sortBy != BusinessSortOptions.Name || _favoritesOnly;
 
     protected override async Task OnInitializedAsync()
@@ -208,7 +272,7 @@
     private async Task LoadPageAsync()
     {
         Guid? typeId = Guid.TryParse(_businessTypeFilter, out var id) ? id : null;
-        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId, sortBy: _sortBy, favoritesOnly: _favoritesOnly)).Value;
+        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId, sortBy: _sortBy, favoritesOnly: _favoritesOnly, customerLat: _customerLat, customerLng: _customerLng)).Value;
 
         // Only fetch reviews for the businesses actually shown on this page, not the whole table.
         var businessIds = _paged?.Items.Select(b => b.Id).ToList() ?? [];
@@ -249,6 +313,83 @@
     {
         _favoritesOnly = !_favoritesOnly;
         return FilterChangedAsync();
+    }
+
+    private async Task ToggleNearMeAsync()
+    {
+        // A second click while already sorted by distance turns it back off.
+        if (_sortBy == BusinessSortOptions.Distance)
+        {
+            _sortBy = BusinessSortOptions.Name;
+            await FilterChangedAsync();
+            return;
+        }
+
+        _locationError = null;
+        _locatingNearMe = true;
+
+        try
+        {
+            var position = await JSRuntime.InvokeAsync<GeoPosition?>("EcoMeal.geo.getPosition");
+            if (position is null)
+            {
+                _locationError = "Couldn't get your location — check your browser's location permission.";
+                return;
+            }
+
+            _customerLat = position.Lat;
+            _customerLng = position.Lng;
+            _sortBy = BusinessSortOptions.Distance;
+            await FilterChangedAsync();
+        }
+        catch
+        {
+            _locationError = "Couldn't get your location — check your browser's location permission.";
+        }
+        finally
+        {
+            _locatingNearMe = false;
+        }
+    }
+
+    private async Task ToggleMapAsync()
+    {
+        _showMap = !_showMap;
+        if (!_showMap)
+            return;
+
+        if (_mapBusinesses is null)
+        {
+            var all = (await BusinessController.GetAllAsync()).Value ?? [];
+            _mapBusinesses = all.Where(b => b.Latitude.HasValue && b.Longitude.HasValue).ToList();
+        }
+
+        _mapNeedsRender = _mapBusinesses.Count > 0;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_mapNeedsRender || _mapBusinesses is null)
+            return;
+
+        _mapNeedsRender = false;
+        var markers = _mapBusinesses.Select(b => new { id = b.Id, name = b.Name, lat = b.Latitude, lng = b.Longitude });
+        await JSRuntime.InvokeVoidAsync("EcoMeal.map.render", "home-map", markers);
+    }
+
+    private string? DistanceLabel(Business business)
+    {
+        if (!_customerLat.HasValue || !_customerLng.HasValue || !business.Latitude.HasValue || !business.Longitude.HasValue)
+            return null;
+
+        var km = GeoDistance.Km(_customerLat.Value, _customerLng.Value, business.Latitude.Value, business.Longitude.Value);
+        return km < 1 ? $"{km * 1000:0} m away" : $"{km:0.#} km away";
+    }
+
+    private class GeoPosition
+    {
+        public double Lat { get; set; }
+        public double Lng { get; set; }
     }
 
     private async Task ToggleFavoriteAsync(Guid businessId)

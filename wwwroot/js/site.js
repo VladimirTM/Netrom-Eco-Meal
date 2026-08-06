@@ -33,6 +33,72 @@ window.EcoMeal = {
         }
     },
 
+    // Browser geolocation for "near me" sort and the location picker on BusinessForm. Resolves to
+    // null (never rejects) on denial/timeout/unsupported, so callers don't need a try/catch.
+    geo: {
+        getPosition: function () {
+            return new Promise(function (resolve) {
+                if (!navigator.geolocation) {
+                    resolve(null);
+                    return;
+                }
+                navigator.geolocation.getCurrentPosition(
+                    function (pos) { resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
+                    function () { resolve(null); },
+                    { timeout: 8000 }
+                );
+            });
+        }
+    },
+
+    // Renders/updates a Leaflet map of business pins — see Home.razor's map view toggle. Leaflet
+    // is loaded via CDN in App.razor, no build step or API key required (OpenStreetMap tiles).
+    map: {
+        _instances: {},
+        render: function (elementId, markers) {
+            var el = document.getElementById(elementId);
+            if (!el || typeof L === "undefined") return;
+
+            if (this._instances[elementId]) {
+                this._instances[elementId].remove();
+                delete this._instances[elementId];
+            }
+
+            var map = L.map(elementId);
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                attribution: "&copy; OpenStreetMap contributors",
+                maxZoom: 19
+            }).addTo(map);
+
+            var bounds = [];
+            markers.forEach(function (m) {
+                var marker = L.marker([m.lat, m.lng]).addTo(map);
+                marker.bindPopup("<strong>" + escapeHtml(m.name) + "</strong><br/><a href=\"/businesses/" + m.id + "\">View kitchen</a>");
+                bounds.push([m.lat, m.lng]);
+            });
+
+            if (bounds.length > 0) {
+                map.fitBounds(bounds, { padding: [30, 30] });
+            } else {
+                map.setView([45.7489, 21.2087], 12); // Timișoara — falls back to the seed data's city.
+            }
+
+            this._instances[elementId] = map;
+
+            function escapeHtml(s) {
+                return s.replace(/[&<>"']/g, function (c) {
+                    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c];
+                });
+            }
+        },
+        destroy: function (elementId) {
+            if (this._instances[elementId]) {
+                this._instances[elementId].remove();
+                delete this._instances[elementId];
+            }
+        }
+    },
+
     // Survives reloads — CartService is per-circuit and would otherwise reset.
     cart: {
         save: function (key, json) {

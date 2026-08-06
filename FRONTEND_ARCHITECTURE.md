@@ -56,6 +56,7 @@ Components/
 │   ├── Dashboard.razor           # /dashboard — stat cards + 14-day trend chart
 │   ├── Businesses.razor / BusinessForm.razor
 │   ├── Packages.razor / PackageForm.razor
+│   ├── PackageTemplates.razor    # /packages/templates — recurring "repeat daily" template management
 │   ├── OrderManagement.razor     # /orders/manage — confirm/complete/cancel + CSV export
 │   └── Users.razor               # /users — role + business-manager assignment
 │
@@ -69,11 +70,12 @@ Components/
     ├── StarRating.razor         # Read-only fractional-fill display + editable 1-5 picker, same component
     └── CartPanel.razor          # Slide-in basket + checkout
 
-Constants/  Models/               # Debouncer, PaginatedList<T> — see below and BACKEND_ARCHITECTURE.md
+Constants/  Models/               # Debouncer, PaginatedList<T>, GeoDistance — see below and BACKEND_ARCHITECTURE.md
 wwwroot/
 ├── app.css                       # ~3100 lines, one file, no preprocessor — see §13
 ├── js/site.js                    # window.EcoMeal namespace — see §14
-└── lib/{bootstrap, jsqr}/        # Vendored, checked-in dependencies (no package.json)
+└── lib/{bootstrap, jsqr}/        # Vendored, checked-in dependencies (no package.json) — Leaflet is the one
+                                   # exception, loaded from a CDN instead (§2), since it's used on one page
 ```
 
 ---
@@ -87,6 +89,7 @@ wwwroot/
     ...
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]"/>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-..." crossorigin=""/>
     <link rel="stylesheet" href="@Assets["app.css"]"/>
     <link rel="stylesheet" href="@Assets["Netrom-Eco-Meal.styles.css"]"/>  <!-- CSS-isolation bundle -->
     <ImportMap/>
@@ -96,11 +99,14 @@ wwwroot/
 <Routes @rendermode="InteractiveServer"/>
 <ReconnectModal/>
 <script src="@Assets["_framework/blazor.web.js"]"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-..." crossorigin=""></script>
 <script src="js/site.js"></script>
 </body>
 ```
 
 `@rendermode="InteractiveServer"` on `<Routes>` is what turns the *entire* app interactive over one persistent SignalR circuit — every `@page` in this project also carries its own explicit `@rendermode InteractiveServer`, which is redundant given the ancestor already set it, but keeps each page's rendering mode visible and self-documenting at the point of use rather than requiring a reader to know it's inherited from `App.razor`. `Netrom-Eco-Meal.styles.css` is the auto-generated bundle of every `*.razor.css` CSS-isolation file in the project (currently just `MainLayout.razor.css`, `NavMenu.razor.css`, `ReconnectModal.razor.css`) — everything else styles through the single global `app.css`, deliberately, so the visual language stays in one place instead of fragmenting across dozens of scoped stylesheets (see §13).
+
+Leaflet is the one third-party JS dependency in the whole app, loaded the same way `bootstrap-icons` already was — a plain CDN `<link>`/`<script>` pair with a real `integrity` hash (SRI), no npm install, no bundler step. It's only ever exercised by `Home.razor`'s map view toggle (§6), so pulling it in via `wwwroot/lib/` like Bootstrap/jsQR would mean vendoring a dependency the rest of the app never touches for no real benefit.
 
 **`<HeadOutlet>` needs its own `@rendermode`, matching `<Routes>`'s.** `<Routes @rendermode="InteractiveServer">` only makes the `<Routes>` subtree interactive — `<HeadOutlet>` lives in `<head>`, outside that subtree, as a *separate* render tree that `<PageTitle>`/`<HeadContent>` write into. Without its own render mode it stays static, rendered once from the initial prerender and never again: the tab title (and anything else pushed through `<PageTitle>`) would freeze at whatever the very first page loaded, silently going stale on every subsequent in-app navigation. Both call sites need to agree on the render mode for the header to stay live.
 
@@ -253,6 +259,44 @@ The storefront. Loads `_livePackages` (all packages with `PickupEnd > now`, for 
 - The hero's "portions to save" stat sums `CartService.AvailableQuantity(p, reservedByPackage.GetValueOrDefault(p.Id))` across `_livePackages`, where `_reservedByPackage` comes from one bulk `OrderController.GetPendingReservedQuantitiesAsync` call alongside the live-package fetch — without it the stat over-counted stock already tied up in other customers' Pending orders (see §15).
 - Clicking a card calls `NavigationManager.NavigateTo($"/businesses/{id}")` — cards are rendered as `<button>` elements (not `<a>`) specifically so the per-card favorite-heart button can `@onclick:stopPropagation="true"` without fighting an anchor's default navigation.
 
+### "Near me" distance sort
+
+```csharp
+private async Task ToggleNearMeAsync()
+{
+    if (_sortBy == BusinessSortOptions.Distance) { _sortBy = BusinessSortOptions.Name; await FilterChangedAsync(); return; }
+
+    _locatingNearMe = true;
+    var position = await JSRuntime.InvokeAsync<GeoPosition?>("EcoMeal.geo.getPosition");
+    if (position is null) { _locationError = "Couldn't get your location — check your browser's location permission."; return; }
+
+    (_customerLat, _customerLng) = (position.Lat, position.Lng);
+    _sortBy = BusinessSortOptions.Distance;
+    await FilterChangedAsync();
+}
+```
+A toggle button, not a plain sort-dropdown option — selecting "distance" needs a customer coordinate the server doesn't have, so clicking it first requests browser geolocation (`EcoMeal.geo.getPosition`, §14) and only switches `_sortBy` once a position actually comes back. `EcoMeal.geo.getPosition` resolves to `null` rather than throwing on denial/timeout/unsupported (§14), so the failure path here is an ordinary `if`, not a `try/catch` — the sort dropdown itself only shows a "Nearest" `<option>` once `_customerLat` is set, so there's no way to select a sort mode the page can't yet fulfill. `_customerLat`/`_customerLng` are passed straight through to `BusinessController.GetPagedAsync` on every subsequent reload while this sort is active — see `BusinessRepository.GetPagedAsync`'s in-memory Haversine branch in `BACKEND_ARCHITECTURE.md` §4. Each business card also shows its own "X km away"/"X m away" badge (`GeoDistance.Km`, computed client-side against `_customerLat`/`_customerLng` purely for display) whenever both the customer's position and that business's `Latitude`/`Longitude` are known — independent of which sort mode is active, so the badge can show up even while sorted by name.
+
+### Map view
+
+```csharp
+private async Task ToggleMapAsync()
+{
+    _showMap = !_showMap;
+    if (!_showMap) return;
+    _mapBusinesses ??= (await BusinessController.GetAllAsync()).Value?.Where(b => b.Latitude.HasValue && b.Longitude.HasValue).ToList() ?? [];
+    _mapNeedsRender = _mapBusinesses.Count > 0;
+}
+
+protected override async Task OnAfterRenderAsync(bool firstRender)
+{
+    if (!_mapNeedsRender || _mapBusinesses is null) return;
+    _mapNeedsRender = false;
+    await JSRuntime.InvokeVoidAsync("EcoMeal.map.render", "home-map", _mapBusinesses.Select(b => new { id = b.Id, name = b.Name, lat = b.Latitude, lng = b.Longitude }));
+}
+```
+A second view mode alongside the card grid, not a filter — toggling it on swaps the entire results section for a Leaflet map (`EcoMeal.map.render`, §14) and swaps back on toggle-off, rather than showing both at once. Deliberately plots **every** business with a saved location, ignoring the current search/type/favorites filters — a map is an overview tool, and a map that silently drops pins whenever a filter happens to be active would be more confusing than one that's always complete; it's fetched once (`_mapBusinesses ??= ...`) and cached for the rest of the page's lifetime rather than re-fetched per filter change like the card grid is. `OnAfterRenderAsync`'s `_mapNeedsRender` flag exists because the `<div id="home-map">` the JS call targets doesn't exist in the DOM until *after* the component re-renders with `_showMap = true` — calling the JS interop directly from `ToggleMapAsync` would run before that element is there. Each pin's popup is a plain `<a href="/businesses/{id}">` link (rendered by the JS side, §14) rather than a Blazor-circuit callback, since there's no benefit to routing a simple navigation back through C# just because the click originated inside a Leaflet-rendered marker.
+
 ---
 
 ## 7. Business Detail Page
@@ -273,7 +317,7 @@ Three independent concerns on one page: the business's live packages, its review
 
 **File:** `Components/Shared/CartPanel.razor`
 
-A slide-in `<aside>` rendered by `PublicLayout`, controlled by a two-way-bound `IsOpen` parameter (`@bind-IsOpen="_cartOpen"` in the layout, toggled by the header's basket button). Three states in one component: empty basket, active basket (line items with `+`/`-`/remove, running total, "Place order"), and a post-order confirmation screen (order number + kg-saved impact stat) shown in place of the basket until the customer taps "Done."
+A slide-in `<aside>` rendered by `PublicLayout`, controlled by a two-way-bound `IsOpen` parameter (`@bind-IsOpen="_cartOpen"` in the layout, toggled by the header's basket button). Three states in one component: empty basket, active basket (line items with `+`/`-`/remove, running total, "Place order"), and a post-order confirmation screen (order number + kg-saved impact stat) shown in place of the basket. `Close()` — wired to "Done," the X icon, *and* the backdrop click — always clears the three `_placed*` confirmation fields before closing, not just on "Done": leaving them set after an X/backdrop dismiss meant reopening the panel later (even with a fresh, non-empty cart) re-rendered the *old* confirmation instead of the live basket, since the confirmation branch is checked first in the render tree. One method now, not two (`CloseAndReset()` was folded into `Close()` — there was never a real reason for the two dismiss paths to behave differently).
 
 ```csharp
 private async Task PlaceOrderAsync()
@@ -444,12 +488,33 @@ Reuses the exact same `OrderController.GetOrdersInRangeAsync` call the CSV expor
 
 `Businesses.razor` is the admin/manager list — admins see every business and can create new ones and reassign managers inline via an `AnchoredDropdown` (flagging when picking a manager would displace them from another business they currently run: `elsewhere = businesses.FirstOrDefault(b => b.ManagerId == manager.Id && b.Id != business.Id)`); a `BusinessManager` sees only their own row and can edit it. `BusinessForm.razor` serves both `/businesses/create` (admin-only) and `/businesses/edit/{id}` (admin or the business's own manager) behind one component, branching on whether `Id` was supplied (`IsEdit`).
 
-### Packages / PackageForm
+`BusinessForm.razor`'s optional Location fields (`Latitude`/`Longitude`, both plain `InputNumber`) can be typed in by hand or filled by a "use my location" button next to them:
+```csharp
+private async Task UseCurrentLocationAsync()
+{
+    _locating = true;
+    var position = await JSRuntime.InvokeAsync<GeoPosition?>("EcoMeal.geo.getPosition");
+    if (position is null) { _locationError = "Couldn't get your location — check your browser's location permission."; return; }
+    (_model.Latitude, _model.Longitude) = (position.Lat, position.Lng);
+}
+```
+Same `EcoMeal.geo.getPosition` interop `Home.razor`'s "near me" toggle uses (§6, §14) — resolves to `null` rather than throwing, so a denied/unsupported browser just shows the inline error text instead of an unhandled exception. This is the one place in the form that isn't purely declarative `EditForm`/`InputXyz` binding, since geolocation has no HTML input equivalent.
+
+### Packages / PackageForm / PackageTemplates
 
 Same list/form split as Businesses, plus:
 - Managers are scoped to their own business via a **sentinel `Guid.Empty`** fallback (`_myBusinessId ?? Guid.Empty`) when they have no business assigned yet — passing `null` there would instead show *every* business's packages, which is the opposite of the intended scoping.
 - `PackageForm.razor`'s dietary-tag picker is a checkbox grid over `Constants.DietaryTags.All`, toggling membership in `_model.DietaryTags` (a plain `List<string>`, no multi-select `InputSelect` involved).
 - Cross-field pickup-window validation lives on the private `PackageFormModel : IValidatableObject` (pickup end must be after pickup start **and** in the future) — compared against `NowLocal`, a field the parent component keeps in sync with `ClientTimeZoneService`'s resolved local time, specifically so the "must be in the future" check uses the *viewer's* clock rather than the server's.
+- `Packages.razor` shows a 🔁 "Daily" badge next to any package whose `TemplateId` is set (`BACKEND_ARCHITECTURE.md` §3), plus a "Recurring templates" link to `/packages/templates` alongside the existing "Add Package" button.
+
+**Recurring templates** — a "Repeat this every day" checkbox, shown only on **create** (not edit, since a template is derived from one specific package's fields at creation time):
+```csharp
+await PackageController.AddAsync(package);
+if (_model.RepeatDaily)
+    await PackageTemplateController.CreateFromPackageAsync(package.Id, pickupStart.TimeOfDay, pickupEnd.TimeOfDay);
+```
+The package is created first (same as the non-recurring path), then the template is derived from it in a second call — `package.Id` is already populated at that point because EF Core client-generates `Guid` primary keys when an entity enters the `Added` state, not deferred until `SaveChangesAsync` (see `BACKEND_ARCHITECTURE.md` §3 PackageTemplate). `PackageTemplates.razor` (`/packages/templates`) is the standalone management page for existing templates — a flat table (name, daily window converted through `ClientTimeZoneService` the same way `Packages.razor` does, qty/day, last-generated date, active/paused status) with Pause/Resume (`SetActiveAsync`) and a `ConfirmDialog`-gated "stop repeating" (`DeleteAsync`) per row. No create form of its own — a template can only be created by ticking the checkbox while creating a package, never edited or created standalone, since it's meant to always start from a real package's current values.
 
 ### OrderManagement (+ CSV export)
 
@@ -551,10 +616,17 @@ Three distinct patterns, escalating in complexity:
 window.EcoMeal = {
     positionDropdown(anchorEl, dropdownEl) { /* fixed-position math, flips upward if not enough room below */ },
     timeZone() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; } },
+    geo: { getPosition() { /* navigator.geolocation → {lat, lng} Promise; resolves null, never rejects */ } },
+    map: {
+        render(elementId, markers) { /* creates/replaces a Leaflet map in #elementId, one pin per marker */ },
+        destroy(elementId) { /* removes a previously rendered map instance, if any */ }
+    },
     cart: { save(key, json), load(key), clear(key) }   // thin localStorage wrapper, every call swallows exceptions
 };
 ```
-Called via plain `IJSRuntime.InvokeAsync("EcoMeal.xyz", ...)` from C# (`AnchoredDropdown`, `ClientTimeZoneService`) or inline `onclick="EcoMeal.cart.clear(...)"` HTML attributes (both layouts' logout buttons). No JS module isolation here — it's genuinely global, loaded once via a plain `<script>` tag, because every consumer needs it available synchronously from inline HTML attributes as well as from C#.
+Called via plain `IJSRuntime.InvokeAsync("EcoMeal.xyz", ...)` from C# (`AnchoredDropdown`, `ClientTimeZoneService`, `Home.razor`'s "near me"/map view, `BusinessForm.razor`'s "use my location") or inline `onclick="EcoMeal.cart.clear(...)"` HTML attributes (both layouts' logout buttons). No JS module isolation here — it's genuinely global, loaded once via a plain `<script>` tag, because every consumer needs it available synchronously from inline HTML attributes as well as from C#.
+
+`geo.getPosition` wraps `navigator.geolocation.getCurrentPosition` in a `Promise` that always **resolves** (`null` on denial, timeout, or an unsupported browser) rather than ever rejecting — every C# caller (§6, §11) can `await` it and branch on a plain `null` check instead of wrapping the call in `try/catch`, and the UI degrades to an inline error message on any failure path instead of an unhandled exception. `map.render` lazily creates a `L.map(...)` the first time it's called for a given element ID and removes any previous instance first (`_instances[elementId]`), so repeatedly toggling `Home.razor`'s map view on/off doesn't leak Leaflet instances or double-initialize the same `<div>`. Each marker's popup HTML is built with a small hand-rolled `escapeHtml` — business names come from the database, not user input, but nothing stops an admin from typing HTML-significant characters into one, so the popup still escapes them rather than trusting the value.
 
 ### 14.2 Stock framework template — `ReconnectModal.razor.js`
 
@@ -602,13 +674,19 @@ Every paginated list page in the app (`Home`, `Orders`, `Businesses`, `Packages`
 
 Covered in depth in §10 — worth restating here as a general principle: any code path that turns *untrusted decoded input* (a QR code's payload) into a navigation target must validate both origin and exact path shape before navigating, never just "looks like a URL." `OrderScan.razor.js`'s `tryNavigate` is the concrete instance of this in the codebase.
 
-### Reorder needed no new backend surface
+### Reorder needed (almost) no new backend surface
 
-Worth calling out as a general lesson: because `CartService.AddAsync` already clamped quantity to live stock, and `Order.OrderPackages` was already eagerly loaded everywhere an `Order` is fetched, the entire "Order again" feature (§9) shipped as pure frontend orchestration over existing primitives — no new `OrderService` method, no new repository query. Not every feature needs a symmetric backend addition; check what already exists before assuming a new endpoint is required.
+Worth calling out as a general lesson: because `CartService.AddAsync` already clamped quantity to live stock, and `Order.OrderPackages` was already eagerly loaded everywhere an `Order` is fetched, the "Order again" feature (§9) shipped almost entirely as frontend orchestration over existing primitives — no new `OrderService` method. Not every feature needs a symmetric backend addition; check what already exists before assuming a new endpoint is required.
+
+That said, "eagerly loaded" turned out to have a gap: `OrderRepository.OrdersWithIncludes()` (`BACKEND_ARCHITECTURE.md` §4) included `OrderPackages.Package` but not `Package.Business`, so `CartService.AddInternal`'s `package.Business.Name` read could `NullReferenceException` on reorder — intermittently, since EF's change tracker sometimes backfilled it anyway from the same query's `Order.Business` include. The lesson generalizes: "this data is already loaded" is a claim about the top-level query, not proof that every nested navigation property a *different* consumer (`CartService`, written with `BusinessDetail.razor`'s fully-loaded `Package` in mind) expects is actually populated. Fixed with one added `.ThenInclude(p => p.Business)`, not a new query.
 
 ### CSV export had to bypass the in-process controller pattern
 
 The one place in the whole app where the frontend can't just `@inject` a controller and call a method directly — `OrderManagement.razor`'s export link has to be a real `<a href>` to a real HTTP `GET`, because file downloads are a browser/HTTP-level concept with no in-process equivalent. See `BACKEND_ARCHITECTURE.md` §6 for the backend-side consequence (a controller that resolves identity from `HttpContext.User` instead of the usual `CurrentUserAccessor`).
+
+### Geolocation always degrades, never blocks
+
+`EcoMeal.geo.getPosition` resolving to `null` instead of rejecting (§14) is a deliberate contract, not an implementation shortcut: browser geolocation can fail for reasons entirely outside the app's control (permission denied, no hardware, a slow/absent GPS fix, a corporate policy blocking it outright), and none of those should be able to break the page it's called from. Both call sites (`Home.razor`'s "near me" toggle, `BusinessForm.razor`'s "use my location") treat a `null` result identically — show an inline error string, leave everything else exactly as it was before the click. Contrast with a typical SPA pattern of a rejected promise bubbling into an error boundary; here there's no boundary to catch it; the JS side absorbs the failure so the C# side never has to.
 
 ### "Available" quantity needed a live/local split, not just a local calculation
 

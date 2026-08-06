@@ -33,7 +33,7 @@
                 {
                     <p class="cart-confirmation-impact"><i class="bi bi-leaf"></i> ~@_placedKgSaved.Value.ToString("0.#") kg of food saved from waste</p>
                 }
-                <button type="button" class="btn btn-primary w-100" @onclick="CloseAndReset">Done</button>
+                <button type="button" class="btn btn-primary w-100" @onclick="Close">Done</button>
             </div>
         }
         else if (CartService.Items.Count == 0)
@@ -109,13 +109,14 @@
 
     private void HandleCartChanged() => InvokeAsync(StateHasChanged);
 
-    private async Task Close() => await IsOpenChanged.InvokeAsync(false);
-
-    private async Task CloseAndReset()
+    // Always clears the post-order confirmation state, not just on the "Done" button — otherwise
+    // dismissing it via the X icon or backdrop leaves it showing stale on the next basket open.
+    private async Task Close()
     {
         _placedOrderNumber = null;
+        _placedBusinessName = null;
         _placedKgSaved = null;
-        await Close();
+        await IsOpenChanged.InvokeAsync(false);
     }
 
     private async Task PlaceOrderAsync()

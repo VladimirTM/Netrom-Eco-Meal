@@ -40,4 +40,14 @@ public class PaginatedList<T>
 
         return new PaginatedList<T>(items.Select(map).ToList(), totalCount, pageIndex, pageSize);
     }
+
+    // For sorts EF/SQL can't express at all (e.g. Haversine distance to a runtime point) — the
+    // caller materializes and orders the whole filtered set in memory, then pages it here.
+    public static PaginatedList<T> Create(List<T> orderedSource, int pageIndex, int pageSize)
+    {
+        pageIndex = Math.Max(1, pageIndex);
+        var items = orderedSource.Skip((pageIndex - 1) * pageSize).Take(pageSize).ToList();
+
+        return new PaginatedList<T>(items, orderedSource.Count, pageIndex, pageSize);
+    }
 }

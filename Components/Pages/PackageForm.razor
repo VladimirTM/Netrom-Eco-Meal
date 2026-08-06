@@ -12,6 +12,7 @@
 @rendermode InteractiveServer
 @implements IDisposable
 @inject PackageController PackageController
+@inject PackageTemplateController PackageTemplateController
 @inject IPackageTypeService PackageTypeService
 @inject IBusinessService BusinessService
 @inject AuthenticationStateProvider AuthStateProvider
@@ -134,6 +135,18 @@
                         </label>
                         <InputText id="imageUrl" class="form-control" placeholder="https://..." @bind-Value="_model.ImageUrl"/>
                     </div>
+                    @if (!IsEdit)
+                    {
+                        <div class="mb-4 form-check">
+                            <input type="checkbox" class="form-check-input" id="repeatDaily" @bind="_model.RepeatDaily"/>
+                            <label class="form-check-label" for="repeatDaily">
+                                <i class="bi bi-arrow-repeat me-1"></i>Repeat this every day
+                            </label>
+                            <div class="form-text">
+                                A fresh package with this same name, price, and pickup window (@_model.PickupStart.ToString("HH:mm")–@_model.PickupEnd.ToString("HH:mm")) is created automatically each day.
+                            </div>
+                        </div>
+                    }
                     <button type="submit" class="btn btn-primary w-100 py-2">
                         <i class="bi bi-check-lg me-1"></i> @(IsEdit ? "Save Changes" : "Create Package")
                     </button>
@@ -312,6 +325,9 @@
                 PackageTypeId = _model.PackageTypeId
             };
             await PackageController.AddAsync(package);
+
+            if (_model.RepeatDaily)
+                await PackageTemplateController.CreateFromPackageAsync(package.Id, pickupStart.TimeOfDay, pickupEnd.TimeOfDay);
         }
 
         NavigationManager.NavigateTo("/packages");
@@ -341,6 +357,7 @@
         public string? ImageUrl { get; set; }
         public Guid BusinessId { get; set; }
         public Guid PackageTypeId { get; set; }
+        public bool RepeatDaily { get; set; }
 
         // Kept in sync with the viewer's local time by the parent component — comparing PickupEnd
         // against DateTime.Now here would use the server's timezone instead of the viewer's.

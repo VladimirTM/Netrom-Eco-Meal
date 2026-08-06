@@ -5,4 +5,6 @@ public static class BusinessSortOptions
 {
     public const string Name = "name";
     public const string ClosingSoon = "closingSoon";
+    // Requires the customerLat/customerLng pair — see BusinessRepository.GetPagedAsync.
+    public const string Distance = "distance";
 }

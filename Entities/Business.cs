@@ -9,6 +9,9 @@ public class Business
     public required string Description { get; set; }
     public required string Address { get; set; }
     public string? ImageUrl { get; set; }
+    // Optional — powers "near me" distance sort and the map view. Null skips both.
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
     public Guid BusinessTypeId { get; set; }
     [ForeignKey(nameof(BusinessTypeId))]
     public BusinessType BusinessType { get; set; } = null!;

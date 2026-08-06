@@ -1,0 +1,191 @@
+@page "/packages/templates"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services
+@using Netrom_Eco_Meal.Services.Interfaces
+@rendermode InteractiveServer
+@implements IDisposable
+@inject PackageTemplateController TemplateController
+@inject IBusinessService BusinessService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ClientTimeZoneService ClientTimeZoneService
+@attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
+
+<PageTitle>Recurring Templates — Eco Meal</PageTitle>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="h3 fw-bold mb-1">Recurring Templates</h1>
+        <p class="text-muted small mb-0">Packages tagged "Repeat this every day" auto-generate a fresh instance every day at the same pickup window.</p>
+    </div>
+    <a href="/packages" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back
+    </a>
+</div>
+
+@if (_forbidden)
+{
+    <ForbiddenPanel Message="You don't manage a business yet, so you have no recurring templates." BackHref="/packages" BackLabel="Back to packages"/>
+    return;
+}
+
+<div class="card border-0 shadow-sm">
+    @if (_templates is null)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (_templates.Count == 0)
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-arrow-repeat fs-1 text-muted d-block mb-3"></i>
+            <p class="text-muted mb-3">No recurring templates yet.</p>
+            <p class="text-muted small mb-0">Tick "Repeat this every day" while creating a package to turn it into one.</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead>
+                <tr class="border-bottom">
+                    <th class="px-4 py-3 text-uppercase text-muted small fw-semibold">Name</th>
+                    @if (_isAdmin)
+                    {
+                        <th class="py-3 text-uppercase text-muted small fw-semibold">Business</th>
+                    }
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Daily window</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Qty/day</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Last generated</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Status</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var template in _templates)
+                {
+                    <tr>
+                        <td class="px-4">
+                            <div class="fw-semibold">@template.Name</div>
+                            <div class="text-muted small">@template.Description</div>
+                        </td>
+                        @if (_isAdmin)
+                        {
+                            <td>@template.Business.Name</td>
+                        }
+                        <td class="text-muted small">@WindowLabel(template)</td>
+                        <td>@template.Quantity</td>
+                        <td class="text-muted small">@(template.LastGeneratedDate?.ToString("MMM d") ?? "—")</td>
+                        <td>
+                            @if (template.IsActive)
+                            {
+                                <span class="badge rounded-pill text-bg-success">Active</span>
+                            }
+                            else
+                            {
+                                <span class="badge rounded-pill text-bg-secondary">Paused</span>
+                            }
+                        </td>
+                        <td>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ToggleActiveAsync(template)">
+                                    @(template.IsActive ? "Pause" : "Resume")
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => RequestDelete(template)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<ConfirmDialog IsOpen="@(_pendingDelete is not null)"
+               Title="Stop repeating?"
+               Message="@(_pendingDelete is null ? "" : $"\"{_pendingDelete.Name}\" will stop generating new daily packages. Instances already created stay as they are.")"
+               ConfirmLabel="Stop repeating"
+               Busy="@_deleting"
+               OnConfirm="ConfirmDeleteAsync"
+               OnCancel="() => _pendingDelete = null"/>
+
+@code {
+    private List<PackageTemplate>? _templates;
+    private bool _isAdmin;
+    private Guid? _myBusinessId;
+    private bool _forbidden;
+    private PackageTemplate? _pendingDelete;
+    private bool _deleting;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _isAdmin = authState.User.IsInRole(AppRoles.Admin);
+        var currentUserId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (!_isAdmin && currentUserId is not null)
+            _myBusinessId = (await BusinessService.GetByManagerIdAsync(currentUserId))?.Id;
+
+        if (!_isAdmin && _myBusinessId is null)
+        {
+            _forbidden = true;
+            return;
+        }
+
+        await LoadAsync();
+
+        ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
+    }
+
+    private async Task LoadAsync()
+    {
+        _templates = _isAdmin
+            ? (await TemplateController.GetAllAsync()).Value
+            : (await TemplateController.GetByBusinessIdAsync(_myBusinessId!.Value)).Value;
+    }
+
+    private string WindowLabel(PackageTemplate template)
+    {
+        var today = DateTime.UtcNow.Date;
+        var start = ClientTimeZoneService.ToLocal(today + template.PickupStartTimeUtc);
+        var end = ClientTimeZoneService.ToLocal(today + template.PickupEndTimeUtc);
+        return $"{start:HH:mm} – {end:HH:mm}";
+    }
+
+    private async Task ToggleActiveAsync(PackageTemplate template)
+    {
+        await TemplateController.SetActiveAsync(template.Id, !template.IsActive);
+        await LoadAsync();
+    }
+
+    private void RequestDelete(PackageTemplate template) => _pendingDelete = template;
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_pendingDelete is null)
+            return;
+
+        _deleting = true;
+        await TemplateController.DeleteAsync(_pendingDelete.Id);
+        await LoadAsync();
+        _deleting = false;
+        _pendingDelete = null;
+    }
+
+    private void HandleTimeZoneChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        ClientTimeZoneService.OnChange -= HandleTimeZoneChanged;
+    }
+}

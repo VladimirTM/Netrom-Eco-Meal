@@ -15,7 +15,7 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
         return await context.Businesses.Include(b => b.BusinessType).Include(b => b.Manager).ToListAsync();
     }
 
-    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null, string? sortBy = null, string? favoritedByUserId = null)
+    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null, string? sortBy = null, string? favoritedByUserId = null, double? customerLat = null, double? customerLng = null)
     {
         var query = context.Businesses.Include(b => b.BusinessType).Include(b => b.Manager).AsQueryable();
 
@@ -36,6 +36,20 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
 
         if (favoritedByUserId is not null)
             query = query.Where(b => b.Favorites.Any(f => f.UserId == favoritedByUserId));
+
+        // Haversine distance to a runtime point isn't something Npgsql translates to SQL, and the
+        // dataset is small — materialize the filtered set and order/page it in memory instead.
+        if (sortBy == BusinessSortOptions.Distance && customerLat.HasValue && customerLng.HasValue)
+        {
+            var all = await query.ToListAsync();
+            var ordered = all
+                .OrderBy(b => b.Latitude.HasValue && b.Longitude.HasValue
+                    ? GeoDistance.Km(customerLat.Value, customerLng.Value, b.Latitude.Value, b.Longitude.Value)
+                    : double.MaxValue)
+                .ToList();
+
+            return PaginatedList<Business>.Create(ordered, pageIndex, pageSize);
+        }
 
         // Businesses with nothing live sort to the end regardless of sort mode.
         query = sortBy == BusinessSortOptions.ClosingSoon

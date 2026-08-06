@@ -40,7 +40,7 @@ Netrom-Eco-Meal/
 │   └── *.cs                      # Business logic, DI-registered Scoped (2 are BackgroundService/plain classes — see §5)
 ├── Controllers/                 # ApiController classes — mostly in-process façades, see §6
 ├── Constants/                   # Fixed string values, enums-as-strings, small pure helpers
-├── Models/                      # PaginatedList<T>, Debouncer (frontend-facing, see FRONTEND_ARCHITECTURE.md)
+├── Models/                      # PaginatedList<T>, Debouncer, GeoDistance (Debouncer is frontend-facing, see FRONTEND_ARCHITECTURE.md)
 ├── Migrations/                  # EF-generated migration history
 ├── Components/                  # Blazor UI — see FRONTEND_ARCHITECTURE.md
 ├── wwwroot/                     # Static assets — see FRONTEND_ARCHITECTURE.md
@@ -61,9 +61,9 @@ Plain EF Core entity classes, no DTOs anywhere in the app — Razor components b
 
 | File | Role |
 |------|------|
-| `EcoMealDbContext.cs` | `IdentityDbContext<ApplicationUser>` — `DbSet<T>` for `Business`, `BusinessType`, `Order`, `OrderPackage`, `Package`, `PackageType`, `Status`, `Review`, `Notification`, `Favorite`; all Fluent API config lives inline in `OnModelCreating` (no separate `Configurations/` folder — the model is small enough that splitting it out would be pure ceremony) |
+| `EcoMealDbContext.cs` | `IdentityDbContext<ApplicationUser>` — `DbSet<T>` for `Business`, `BusinessType`, `Order`, `OrderPackage`, `Package`, `PackageType`, `Status`, `Review`, `Notification`, `Favorite`, `PackageTemplate`; all Fluent API config lives inline in `OnModelCreating` (no separate `Configurations/` folder — the model is small enough that splitting it out would be pure ceremony) |
 | `DbSeeder.cs` | Static `SeedAsync(services, configuration)` called once from `Program.cs` after `MigrateAsync()` — see [§9](#9-database-seeding) |
-| `Migrations/` | Notable ones: `AddOrderNumberSequenceAndPackageConcurrency` (the `order_numbers` DB sequence + `xmin` row-version column), `RemoveStalePackageSeedData` / `RemoveStaleBusinessSeedData` (cleaned up seed rows from an earlier, cruder seeding approach before `DbSeeder` existed), `AddPackageWeightKg`, `AddNotificationsFavoritesOrderCreatedAtPackageDietaryTags` (one migration bundling four Phase 2 features together) |
+| `Migrations/` | Notable ones: `AddOrderNumberSequenceAndPackageConcurrency` (the `order_numbers` DB sequence + `xmin` row-version column), `RemoveStalePackageSeedData` / `RemoveStaleBusinessSeedData` (cleaned up seed rows from an earlier, cruder seeding approach before `DbSeeder` existed), `AddPackageWeightKg`, `AddNotificationsFavoritesOrderCreatedAtPackageDietaryTags` (one migration bundling four Phase 2 features together), `AddGeolocationAndPackageTemplates` (`Business.Latitude`/`Longitude`, the `PackageTemplates` table, `Package.TemplateId`) |
 
 ### 2.3 Repositories
 
@@ -89,6 +89,9 @@ ApplicationUser (IdentityUser)
   ├──< Order >──── Business ──── BusinessType
   │      │             │
   │      └──< OrderPackage >──── Package ──── PackageType
+  │                                  │
+  │                                  └──── PackageTemplate  (0..1, TemplateId — the template that
+  │                                                           generated this instance, if any)
   │
   ├──< Favorite >──── Business        (one per (UserId, BusinessId), unique index)
   ├──< Review >────── Business        (one per (BusinessId, UserId), unique index)
@@ -96,6 +99,7 @@ ApplicationUser (IdentityUser)
   └──── Business                      (Manager — 0..1, unique index on ManagerId)
 
 Order ──── Status                     (Pending | Confirmed | Completed | Cancelled | NoShow)
+PackageTemplate ──< Package           (0..N generated instances, one per calendar day)
 ```
 
 ### Entities
@@ -119,6 +123,8 @@ public class Business
     public required string Description { get; set; }
     public required string Address { get; set; }
     public string? ImageUrl { get; set; }
+    public double? Latitude { get; set; }          // optional: powers "near me" sort and the map view
+    public double? Longitude { get; set; }
     public Guid BusinessTypeId { get; set; }
     public BusinessType BusinessType { get; set; } = null!;
     public string? ManagerId { get; set; }         // nullable/unique: a manager oversees at most one business
@@ -130,6 +136,8 @@ public class Business
 }
 ```
 `ManagerId` has a **unique index** (`EcoMealDbContext.OnModelCreating`) — enforced at the DB level so two concurrent "assign this manager" admin actions can't both succeed and leave one manager running two businesses. `OnDelete(DeleteBehavior.SetNull)` means deleting a manager's user account un-assigns them rather than failing the delete or cascading.
+
+`Latitude`/`Longitude` are both nullable — set by hand or via a browser-geolocation "use my location" button on `BusinessForm.razor`, read by `BusinessRepository.GetPagedAsync`'s `BusinessSortOptions.Distance` sort and `Home.razor`'s map view (see the Pagination Helper note in §4).
 
 #### BusinessType / PackageType / Status
 ```csharp
@@ -155,14 +163,45 @@ public class Package
     public required DateTime PickupStart { get; set; }
     public required DateTime PickupEnd { get; set; }
     public string? ImageUrl { get; set; }
+    public Guid? TemplateId { get; set; }           // set when a recurring template generated this instance
     public Business Business { get; set; } = null!;
     public PackageType PackageType { get; set; } = null!;
+    public PackageTemplate? Template { get; set; }
     public ICollection<OrderPackage> OrderPackages { get; set; } = [];
 }
 ```
 Restocking a package from `0` to a positive `Quantity` (or publishing a brand-new one) notifies everyone who's favorited that business — see `PackageService` in §5; there's no per-package "notify me" subscription, so Favorites doubles as the closest proxy.
 
 `Quantity` carries an EF Core **shadow property row-version** — `modelBuilder.Entity<Package>().Property<uint>("xmin").IsRowVersion()` maps Postgres's native `xmin` system column as an optimistic-concurrency token, with zero extra columns to migrate. Two managers confirming orders against the same package's last unit at the same time get a `DbUpdateConcurrencyException` on the loser, translated by `OrderService` into "Stock for this order just changed — please refresh and try again" instead of silently overselling. `DietaryTags` is stored as a plain `List<string>` — EF Core 8+ maps this to a Postgres `text[]` column with no extra configuration needed.
+
+`TemplateId` is nullable and `OnDelete(DeleteBehavior.SetNull)` — deleting the owning `PackageTemplate` (via `/packages/templates`' "stop repeating") unlinks any instances it already generated instead of deleting them, since they're real packages that may already have orders against them. `Packages.razor` shows a 🔁 "Daily" badge on any row with `TemplateId` set.
+
+#### PackageTemplate
+```csharp
+public class PackageTemplate
+{
+    public Guid Id { get; set; }
+    public required Guid BusinessId { get; set; }
+    public required Guid PackageTypeId { get; set; }
+    public required string Name { get; set; }
+    public required string Description { get; set; }
+    public required decimal Price { get; set; }
+    public required int Quantity { get; set; }       // restocked to this amount on every generated instance
+    public required decimal WeightKg { get; set; }
+    public List<string> DietaryTags { get; set; } = [];
+    public required TimeSpan PickupStartTimeUtc { get; set; }  // daily window as UTC time-of-day
+    public required TimeSpan PickupEndTimeUtc { get; set; }
+    public string? ImageUrl { get; set; }
+    public bool IsActive { get; set; } = true;
+    public DateOnly? LastGeneratedDate { get; set; } // guards one generation per calendar day
+    public Business Business { get; set; } = null!;
+    public PackageType PackageType { get; set; } = null!;
+    public ICollection<Package> GeneratedPackages { get; set; } = [];
+}
+```
+Backs the "repeat this every day" checkbox on `PackageForm.razor` — ticking it when creating a package (create-only, not available on edit) calls `PackageTemplateService.CreateFromPackageAsync`, which copies the just-created package's fields into a new template, derives `PickupStartTimeUtc`/`PickupEndTimeUtc` from that package's `PickupStart`/`PickupEnd` time-of-day, and links the two via `Package.TemplateId`. `PickupEndTimeUtc <= PickupStartTimeUtc` means the window crosses midnight (end falls the next day) — handled by `PackageTemplateService.GenerateDueInstancesAsync` (§8) when combining the stored time-of-day with a calendar date.
+
+`LastGeneratedDate` is what makes generation idempotent regardless of the background sweep's cadence — a template only ever produces one `Package` per UTC calendar day, tracked here rather than derived by querying for an existing instance. `IsActive` is the pause/resume toggle on `/packages/templates`; a paused template stops generating but its already-created instances are untouched. Managed with the same admin-or-own-business-manager authorization as `Package` itself (`PackageTemplateService.EnsureCanManageBusinessAsync`, identical shape to `PackageService`'s).
 
 #### Order / OrderPackage
 ```csharp
@@ -257,7 +296,8 @@ No generic base — each interface is purpose-built. All "write" repositories fo
 
 | Repository | Key methods | Notes |
 |---|---|---|
-| `IBusinessRepository` / `BusinessRepository` | `GetAllAsync`, `GetPagedAsync(search, businessTypeId, managerId?, sortBy?, favoritedByUserId?)`, `GetByIdAsync`, `GetByManagerIdAsync`, `AddAsync`, `DeleteAsync`, `SaveChangesAsync` | `GetPagedAsync`'s search also matches **live packages'** name/description (`b.Packages.Any(p => p.PickupEnd > now && ...)`), so searching "bread" surfaces a bakery even if its own name/description doesn't mention bread. `sortBy: "closingSoon"` orders by each business's nearest live `PickupEnd` (`?? DateTime.MaxValue` so businesses with nothing live sort last regardless of mode) |
+| `IBusinessRepository` / `BusinessRepository` | `GetAllAsync`, `GetPagedAsync(search, businessTypeId, managerId?, sortBy?, favoritedByUserId?, customerLat?, customerLng?)`, `GetByIdAsync`, `GetByManagerIdAsync`, `AddAsync`, `DeleteAsync`, `SaveChangesAsync` | `GetPagedAsync`'s search also matches **live packages'** name/description (`b.Packages.Any(p => p.PickupEnd > now && ...)`), so searching "bread" surfaces a bakery even if its own name/description doesn't mention bread. `sortBy: "closingSoon"` orders by each business's nearest live `PickupEnd` (`?? DateTime.MaxValue` so businesses with nothing live sort last regardless of mode). `sortBy: "distance"` (`BusinessSortOptions.Distance`) is the one mode EF/SQL can't express — see the Pagination Helper note below |
+| `IPackageTemplateRepository` / `PackageTemplateRepository` | `GetAllAsync`, `GetByBusinessIdAsync`, `GetActiveAsync`, `GetByIdAsync`, `AddAsync`, `DeleteAsync`, `SaveChangesAsync` | `GetActiveAsync` is the one method with no navigation-property includes — it's the batch load `PackageTemplateGenerationService` (§8) uses every sweep tick, where `Business`/`PackageType` details aren't needed |
 | `IBusinessTypeRepository` / `BusinessTypeRepository` | `GetAllAsync` | Read-only lookup, no writes anywhere in the app |
 | `IFavoriteRepository` / `FavoriteRepository` | `GetFavoriteBusinessIdsAsync`, `IsFavoriteAsync`, `AddAsync`, `RemoveAsync`, `GetFavoritingUsersAsync` | `AddAsync`/`RemoveAsync` persist immediately — the one repository that breaks the stage-then-save convention (see §3 Favorite). `GetFavoritingUsersAsync` feeds `PackageService`'s back-in-stock notifications |
 | `INotificationRepository` / `NotificationRepository` | `GetRecentByUserIdAsync`, `GetUnreadCountAsync`, `MarkAsReadAsync`, `MarkAllAsReadAsync`, `CreateAsync` | Takes `IDbContextFactory<EcoMealDbContext>`, not the circuit-scoped `EcoMealDbContext` — every method opens and disposes its own short-lived context. This is what lets `NotificationBell`'s 30-second background poll (see FRONTEND_ARCHITECTURE.md) query the DB without racing whatever query the routed page is running against the shared per-circuit context at the same moment. `MarkAsReadAsync`/`MarkAllAsReadAsync` use `ExecuteUpdateAsync` — a single `UPDATE ... WHERE` round-trip, no load-then-save |
@@ -273,6 +313,7 @@ builder.Services.AddScoped<IBusinessRepository, BusinessRepository>();
 builder.Services.AddScoped<IBusinessTypeRepository, BusinessTypeRepository>();
 builder.Services.AddScoped<IPackageRepository, PackageRepository>();
 builder.Services.AddScoped<IPackageTypeRepository, PackageTypeRepository>();
+builder.Services.AddScoped<IPackageTemplateRepository, PackageTemplateRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
 builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
@@ -296,15 +337,20 @@ public class PaginatedList<T>
     // order/page an intermediate shape, then map to T after materializing.
     public static async Task<PaginatedList<T>> CreateAsync<TSource>(
         IQueryable<TSource> source, Func<TSource, T> map, int pageIndex, int pageSize);
+
+    // Synchronous — for sorts EF/SQL can't express at all, not just ones that need a different shape.
+    public static PaginatedList<T> Create(List<T> orderedSource, int pageIndex, int pageSize);
 }
 ```
 One `CountAsync` + one `Skip/Take` `ToListAsync`. The second overload exists specifically for `UserService.GetPagedAsync` — its query is a `join` producing an anonymous type (EF can't `OrderBy` a query already projected through a `record` constructor), so it orders/pages the anonymous shape and maps to `UserWithRole` only after materializing.
+
+The third, synchronous `Create` overload backs `BusinessRepository.GetPagedAsync`'s `BusinessSortOptions.Distance` sort — Haversine distance to a runtime (customer) point isn't something Npgsql translates to SQL, so that one sort mode materializes the filtered-but-unsorted `IQueryable` in full, orders it in memory via `Models.GeoDistance.Km` (plain lat/lng trig, no external dependency), then hands the already-ordered `List<Business>` to this method for the same `Skip/Take` page-slicing every other sort gets. Fine at this dataset's size; would need revisiting (e.g. a PostGIS extension) at real scale.
 
 ---
 
 ## 5. Service Layer
 
-Every service is `Scoped`. A few break that pattern deliberately: `OrderLifecycleSweepService` is a `BackgroundService` (effectively a singleton — see §8); `CartService`/`ClientTimeZoneService` are `Scoped` but have no backing interface or repository — they're pure in-memory, per-circuit state with a JS-interop side door (documented in `FRONTEND_ARCHITECTURE.md` since they're really frontend concerns that happen to live in `Services/` alongside everything else); `SmtpEmailSender` (`IAppEmailSender`) is stateless and could be `Singleton` but is registered `Scoped` for consistency with everything else.
+Every service is `Scoped`. A few break that pattern deliberately: `OrderLifecycleSweepService` and `PackageTemplateGenerationService` are `BackgroundService`s (effectively singletons — see §8); `CartService`/`ClientTimeZoneService` are `Scoped` but have no backing interface or repository — they're pure in-memory, per-circuit state with a JS-interop side door (documented in `FRONTEND_ARCHITECTURE.md` since they're really frontend concerns that happen to live in `Services/` alongside everything else); `SmtpEmailSender` (`IAppEmailSender`) is stateless and could be `Singleton` but is registered `Scoped` for consistency with everything else.
 
 | Service Interface | Implementation | Responsibilities |
 |---|---|---|
@@ -315,6 +361,7 @@ Every service is `Scoped`. A few break that pattern deliberately: `OrderLifecycl
 | `IFavoriteService` | `FavoriteService` | Customer-only, always scoped to the signed-in user — no "favorite on behalf of" path exists. `ToggleFavoriteAsync` returns the new state so the caller doesn't need a second read |
 | `INotificationService` | `NotificationService` | Scoped to the signed-in user for every read method; `CreateAsync(userId, message, url?)` is the one exception — other services call it to notify *someone else* (e.g. `OrderService` notifying a business's manager about a new order) |
 | `IPackageService` | `PackageService` | CRUD, admin-or-own-business-manager on writes (`EnsureCanManageBusinessAsync`). `AddAsync`/`UpdateAsync` also notify (bell + email) every customer who's favorited the package's business when it's created in stock or restocked from `0` — see §3 Package |
+| `IPackageTemplateService` | `PackageTemplateService` | Same admin-or-own-business-manager authorization shape as `IPackageService`. `CreateFromPackageAsync`, `SetActiveAsync`, `DeleteAsync` are the manager-facing CRUD; `GenerateDueInstancesAsync` is the one method with **no** current-user check — system-triggered by `PackageTemplateGenerationService` (§8), same pattern as `OrderService`'s sweep methods |
 | `IReviewService` | `ReviewService` | `GetContextAsync(businessId)` → `ReviewContext(CanReview, MyReview)` — `CanReview` is true once the customer has a completed order with the business; `SubmitAsync` updates an existing review in place if one exists, otherwise inserts |
 | `IUserService` | `UserService` | Admin-only (`EnsureAdminAsync` on every method — enforced via `CurrentUserAccessor`, not an `[Authorize]` HTTP filter, since this is only ever called in-process; see §6). `UpdateRoleAsync` refuses to demote the platform's last remaining admin, and auto-releases whatever business a user managed if they're moved away from `BusinessManager` |
 | `IOrderService` | `OrderService` | The biggest service — see the deep dive below |
@@ -377,7 +424,9 @@ var allowedTransition = (currentStatusName, statusName) switch
 
 ### Reorder note
 
-Re-adding a past order's items to the cart (`Orders.razor`'s "Order again") is implemented entirely in the **frontend** — it iterates the already-loaded `Order.OrderPackages`, skips any package that's no longer live or in stock, and calls the existing `CartService.AddAsync` per line (which itself clamps quantity to what's actually available). There's no `OrderService.ReorderAsync` — the feature needed no new backend surface, just client-side orchestration over methods that already existed. See `FRONTEND_ARCHITECTURE.md` for the full flow.
+Re-adding a past order's items to the cart (`Orders.razor`'s "Order again") is implemented almost entirely in the **frontend** — it iterates the already-loaded `Order.OrderPackages`, skips any package that's no longer live or in stock, and calls the existing `CartService.AddAsync` per line (which itself clamps quantity to what's actually available). There's no `OrderService.ReorderAsync` — no new service method was needed, just client-side orchestration over methods that already existed. See `FRONTEND_ARCHITECTURE.md` for the full flow.
+
+The one backend piece it did need: `OrdersWithIncludes()` (§4) originally included `OrderPackages.Package` but not `Package.Business`, so `CartService.AddInternal`'s `package.Business.Name` read (§5 CartService) could `NullReferenceException` on reorder — masked in ad-hoc testing because EF's change-tracker sometimes backfills `Package.Business` incidentally from the same query's `Order.Business` include, so it didn't reproduce every time. Fixed by adding `.ThenInclude(p => p.Business)` to the chain. Worth remembering: "no new backend surface" doesn't mean "the existing includes are definitely sufficient" — check what a reused entity's *nested* navigation properties actually need, not just whether the top-level query already exists.
 
 ---
 
@@ -389,6 +438,7 @@ This is the single most distinctive architectural choice in the backend. Every c
 builder.Services.AddControllers();
 builder.Services.AddScoped<BusinessController>();
 builder.Services.AddScoped<PackageController>();
+builder.Services.AddScoped<PackageTemplateController>();
 builder.Services.AddScoped<UserController>();
 builder.Services.AddScoped<OrderController>();
 builder.Services.AddScoped<ReviewController>();
@@ -453,6 +503,7 @@ Note `IBusinessService.GetByManagerIdAsync` is safe to call here — it's a pure
 |---|---|
 | `BusinessController` | `GetAllAsync`, `GetPagedAsync`, `GetByIdAsync`, `AddAsync` → `Created()`, `UpdateAsync` → `NoContent()`, `DeleteAsync` → `NoContent()`, `AssignManagerAsync` → `NoContent()`/`Conflict()` |
 | `PackageController` | `GetAllAsync`, `GetPagedAsync`, `GetByIdAsync`, `AddAsync`, `UpdateAsync`, `DeleteAsync` |
+| `PackageTemplateController` | `GetAllAsync`, `GetByBusinessIdAsync`, `CreateFromPackageAsync`, `SetActiveAsync`, `DeleteAsync` |
 | `OrderController` | `PlaceOrderAsync`, `GetMyOrdersAsync`, `GetOrdersForManagementAsync`, `GetMyOrdersPagedAsync`, `GetOrdersForManagementPagedAsync`, `GetOrdersInRangeAsync`, `UpdateOrderStatusAsync`, `CancelMyOrderAsync`, `GetTotalKgSavedAsync`, `GetMyOrderAsync`, `GetOrderForManagementAsync`, `GetPendingReservedQuantitiesAsync` — every mutating/ownership-sensitive method wraps the service call in `try/catch (UnauthorizedAccessException or InvalidOperationException) → Conflict(ex.Message)`, or `Unauthorized()`/`NotFound()` for the read-only ownership checks. `GetPendingReservedQuantitiesAsync` is the one method with no auth check at all — same public audience as package browsing (see §5) |
 | `ReviewController` | `GetAllAsync`, `GetByBusinessAsync`, `GetByBusinessesAsync`, `GetContextAsync`, `SubmitAsync` |
 | `FavoriteController` | `GetMyFavoriteBusinessIdsAsync`, `ToggleFavoriteAsync` |
@@ -550,6 +601,15 @@ Registered via `builder.Services.AddHostedService<OrderLifecycleSweepService>()`
 
 `BackgroundService` instances are effectively singletons, so it can't hold a `Scoped` `IOrderService` directly — it creates a fresh DI scope on every tick via `IServiceScopeFactory` instead, exactly the pattern any singleton needing scoped dependencies must use. The whole tick body is one `try/catch`, logged and swallowed on failure so a bad tick doesn't take the loop down — the next `PeriodicTimer` tick just tries again.
 
+### PackageTemplateGenerationService
+
+Same shape as `OrderLifecycleSweepService` above — `IServiceScopeFactory` + `PeriodicTimer`, one `try/catch`-wrapped tick body, registered via `AddHostedService<PackageTemplateGenerationService>()`. Runs every `PackageTemplateGeneration.SweepInterval` (15 minutes) and calls the one system-triggered method on `IPackageTemplateService`:
+
+```csharp
+var generated = await templateService.GenerateDueInstancesAsync();
+```
+`GenerateDueInstancesAsync` loads every active template (`IPackageTemplateRepository.GetActiveAsync`) and, for any whose `LastGeneratedDate` isn't today (UTC), combines its `PickupStartTimeUtc`/`PickupEndTimeUtc` with today's date into a new `Package` — copying every other field straight from the template — and stamps `LastGeneratedDate`. If the combined window has already closed by the time a delayed sweep catches it (app downtime, etc.), it stamps the date without generating a dead-on-arrival package instead. Idempotent by construction: however often the sweep ticks, a template produces at most one instance per UTC calendar day.
+
 ---
 
 ## 9. Database Seeding
@@ -562,9 +622,10 @@ Registered via `builder.Services.AddHostedService<OrderLifecycleSweepService>()`
 4. **Demo businesses & packages** — a fixed set of World-Cup-themed Timișoara businesses/packages with **hardcoded GUIDs**, reconciled against what's already in the DB rather than blindly re-inserted:
    - Missing seed rows are added.
    - An existing row's `ImageUrl` is only overwritten if it's currently blank or points at a retired placeholder host (`picsum.photos`) — `IsStalePlaceholderImage` — so an admin's own custom image is never clobbered by a re-seed.
-   - A package's `PickupStart`/`PickupEnd` are only refreshed (advanced to "today") if the existing window has **already expired** — so the storefront always opens with live, orderable packages on any given day, without resetting `Quantity` (which reflects real orders placed against it) or touching a still-valid future window.
-   - `WeightKg` and `DietaryTags` are **backfill-only** — only set if currently `0`/empty — since the seeder can't distinguish "never set" from "a manager deliberately cleared it," so it defaults to filling in demo data either way rather than guessing.
-5. **Demo customer/manager activity** (`SeedDemoActivityAsync`) — creates `demo.customer@ecomeal.local`/`demo.manager@ecomeal.local` (fixed passwords, not configuration-gated like the admin account, since they carry no real data), assigns the demo manager to Stadionul de Gusturi, and — **only on a genuinely fresh database** (`if (await db.Orders.AnyAsync()) return;`, unlike the reconcile-on-every-run steps above) — creates seven orders spanning every status (`Pending`/`Confirmed`/`Completed`×3/`Cancelled`/`NoShow`) across the last 14 days plus favorites, reviews, and notifications. This exists so every feature (dashboard trend chart, CSV export, reorder, the notification bell, QR pickup, reviews, the `NoShow` badge) has real data to look at immediately after a fresh `docker compose up`, without manually clicking through the app first. Because it's gated on "no orders exist yet" rather than reconciled like steps 3–4, it never touches orders placed by real usage afterward.
+   - A package's `PickupStart`/`PickupEnd` are only refreshed (advanced to "today") if the existing window has **already expired** — so the storefront always opens with live, orderable packages on any given day, without resetting `Quantity` (which reflects real orders placed against it) or touching a still-valid future window. Skipped entirely once `TemplateId` is set (see point 5) — a template-owned package is left to expire naturally rather than fought over by two refresh mechanisms.
+   - `WeightKg`, `DietaryTags`, and `Business.Latitude`/`Longitude` are **backfill-only** — only set if currently `0`/empty/`null` — since the seeder can't distinguish "never set" from "an admin/manager deliberately cleared it," so it defaults to filling in demo data either way rather than guessing.
+5. **Demo recurring template** (`SeedPackageTemplateAsync`) — turns the demo-managed business's "Golden Boot Surprise Bag" package into a `PackageTemplate` (fixed GUID, same idempotency check as the lookup tables) so `/packages/templates` and the 🔁 "Daily" badge aren't empty on a fresh database. Runs once; `PackageTemplateGenerationService` (§8) owns that package's future daily instances from there.
+6. **Demo customer/manager activity** (`SeedDemoActivityAsync`) — creates `demo.customer@ecomeal.local`/`demo.manager@ecomeal.local` (fixed passwords, not configuration-gated like the admin account, since they carry no real data), assigns the demo manager to Stadionul de Gusturi, and — **only on a genuinely fresh database** (`if (await db.Orders.AnyAsync()) return;`, unlike the reconcile-on-every-run steps above) — creates seven orders spanning every status (`Pending`/`Confirmed`/`Completed`×3/`Cancelled`/`NoShow`) across the last 14 days plus favorites, reviews, and notifications. This exists so every feature (dashboard trend chart, CSV export, reorder, the notification bell, QR pickup, reviews, the `NoShow` badge) has real data to look at immediately after a fresh `docker compose up`, without manually clicking through the app first. Because it's gated on "no orders exist yet" rather than reconciled like steps 3–4, it never touches orders placed by real usage afterward.
 
 This reconciliation approach — add-if-missing, refresh-if-stale, backfill-if-empty, never overwrite a live/customized value — is what lets the exact same seeder run unconditionally on every container start (see `docker-compose.test.yml`) without ever fighting real usage data.
 

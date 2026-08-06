@@ -51,6 +51,8 @@ builder.Services.AddScoped<IPackageRepository, PackageRepository>();
 builder.Services.AddScoped<IPackageTypeRepository, PackageTypeRepository>();
 builder.Services.AddScoped<IPackageService, PackageService>();
 builder.Services.AddScoped<IPackageTypeService, PackageTypeService>();
+builder.Services.AddScoped<IPackageTemplateRepository, PackageTemplateRepository>();
+builder.Services.AddScoped<IPackageTemplateService, PackageTemplateService>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
@@ -68,6 +70,7 @@ builder.Services.AddScoped<ClientTimeZoneService>();
 builder.Services.AddControllers();
 builder.Services.AddScoped<BusinessController>();
 builder.Services.AddScoped<PackageController>();
+builder.Services.AddScoped<PackageTemplateController>();
 builder.Services.AddScoped<UserController>();
 builder.Services.AddScoped<OrderController>();
 builder.Services.AddScoped<ReviewController>();
@@ -77,6 +80,7 @@ builder.Services.AddScoped<FavoriteController>();
 // ConfirmEmail/ForgotPassword/ResetPassword can inject it in-process like every other controller.
 builder.Services.AddScoped<AuthController>();
 builder.Services.AddHostedService<OrderLifecycleSweepService>();
+builder.Services.AddHostedService<PackageTemplateGenerationService>();
 
 var app = builder.Build();
 

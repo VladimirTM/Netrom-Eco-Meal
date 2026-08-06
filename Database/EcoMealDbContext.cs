@@ -21,6 +21,7 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Review> Reviews { get; set; }
     public DbSet<Notification> Notifications { get; set; }
     public DbSet<Favorite> Favorites { get; set; }
+    public DbSet<PackageTemplate> PackageTemplates { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +67,13 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
         modelBuilder.Entity<Package>()
             .Property<uint>("xmin")
             .IsRowVersion();
+
+        // Deleting a template stops future generation but leaves already-generated packages intact.
+        modelBuilder.Entity<Package>()
+            .HasOne(p => p.Template)
+            .WithMany(t => t.GeneratedPackages)
+            .HasForeignKey(p => p.TemplateId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         // Npgsql rejects Kind=Unspecified for timestamptz columns; tag as UTC rather than convert,
         // since the app has no timezone handling of its own.

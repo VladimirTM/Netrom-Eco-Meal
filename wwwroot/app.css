@@ -716,6 +716,15 @@ h1:focus {
     padding: 4rem 1rem;
 }
 
+.home-map-wrap {
+    overflow: hidden;
+}
+
+.home-map {
+    height: 480px;
+    width: 100%;
+}
+
 /* ── Package grid ── */
 .home-grid {
     display: grid;
@@ -2054,6 +2063,16 @@ h1:focus {
     gap: 0.3rem;
     font-size: 0.78rem;
     color: var(--em-muted);
+    margin-bottom: 0.5rem;
+}
+
+.biz-card-distance {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--em-leaf-dark);
     margin-bottom: 0.5rem;
 }
 

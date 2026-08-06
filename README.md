@@ -12,7 +12,9 @@ their business's packages and orders) and **Admin** (manages businesses, types a
 
 **Customer** — what you get on self-registration:
 
-- Browse, search and filter businesses on the home page
+- Browse, search and filter businesses on the home page, sorted by name, "closing soon",
+  or "near me" (browser geolocation) — with an optional map view of every kitchen that has
+  a saved location
 - View a business's live packages and add them to a basket
 - Check out and track past orders with pickup windows on `/orders`
 - Show a QR pickup pass for a confirmed order, scanned by the business at collection
@@ -20,15 +22,17 @@ their business's packages and orders) and **Admin** (manages businesses, types a
 
 **BusinessManager** — assigned to one business by an Admin, scoped to it everywhere:
 
-- Manage their business's packages on `/packages`
+- Manage their business's packages on `/packages`, including "repeat this every day"
+  recurring templates managed on `/packages/templates`
 - Confirm, complete or cancel orders placed at their business on `/orders/manage`
 - Scan a customer's pickup QR code on `/orders/scan` to confirm pickup
 - See business-scoped stats on `/dashboard`
 
 **Admin** — full access, plus the only role that can create businesses:
 
-- Create and edit any business on `/businesses`, including assigning it a manager
-- Manage packages for any business on `/packages`
+- Create and edit any business on `/businesses`, including assigning it a manager and an
+  optional lat/lng location
+- Manage packages (and recurring templates) for any business on `/packages`
 - Review and manage orders across every business on `/orders/manage`
 - Promote or demote users between Customer, BusinessManager and Admin on `/users`
 - See store-wide stats on `/dashboard`
@@ -39,6 +43,7 @@ their business's packages and orders) and **Admin** (manages businesses, types a
 - EF Core + PostgreSQL (Npgsql)
 - ASP.NET Identity for auth/roles
 - QRCoder for server-side pickup QR generation, jsQR (vendored) for client-side camera scanning
+- Leaflet + OpenStreetMap tiles (CDN, no API key) for the home page's map view
 
 ## Running locally
 
@@ -134,9 +139,15 @@ on a phone) — that needs a real HTTPS deployment.
 
 On first run (and on every subsequent startup) `DbSeeder` makes sure the reference data
 (roles, business types, package types, order statuses) and a set of World Cup–themed demo
-businesses/packages in Timișoara exist. It's safe to re-run: it only fills in what's
+businesses/packages in Timișoara exist, each with an approximate lat/lng so "near me" sort
+and the map view have real data to show. It's safe to re-run: it only fills in what's
 missing and refreshes expired pickup windows or stale placeholder images, it never
 touches data you've added or customized through the app.
+
+It also turns one of the demo-managed business's packages into a recurring template, so
+`/packages/templates` and the 🔁 "Daily" badge on `/packages` aren't empty on a fresh
+database — `PackageTemplateGenerationService` takes over generating that package's future
+daily instances from there.
 
 It also creates two demo accounts, so every feature has real data to look at right away
 instead of an empty app:
