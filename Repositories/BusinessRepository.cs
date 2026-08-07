@@ -12,12 +12,12 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
 {
      public async Task<List<Business>> GetAllAsync()
     {
-        return await context.Businesses.Include(b => b.BusinessType).Include(b => b.Manager).ToListAsync();
+        return await context.Businesses.Include(b => b.BusinessType).Include(b => b.Staff).ThenInclude(s => s.User).ToListAsync();
     }
 
-    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null, string? sortBy = null, string? favoritedByUserId = null, double? customerLat = null, double? customerLng = null)
+    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, string? favoritedByUserId = null, double? customerLat = null, double? customerLng = null)
     {
-        var query = context.Businesses.Include(b => b.BusinessType).Include(b => b.Manager).AsQueryable();
+        var query = context.Businesses.Include(b => b.BusinessType).Include(b => b.Staff).ThenInclude(s => s.User).AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(b =>
@@ -31,8 +31,8 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
         if (businessTypeId.HasValue)
             query = query.Where(b => b.BusinessTypeId == businessTypeId);
 
-        if (managerId is not null)
-            query = query.Where(b => b.ManagerId == managerId);
+        if (staffUserId is not null)
+            query = query.Where(b => b.Staff.Any(s => s.UserId == staffUserId));
 
         if (favoritedByUserId is not null)
             query = query.Where(b => b.Favorites.Any(f => f.UserId == favoritedByUserId));
@@ -61,12 +61,56 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
 
     public async Task<Business?> GetByIdAsync(Guid id)
     {
-        return await context.Businesses.Include(b => b.Manager).Include(b => b.BusinessType).FirstOrDefaultAsync(o => o.Id == id);
+        return await context.Businesses.Include(b => b.Staff).ThenInclude(s => s.User).Include(b => b.BusinessType).FirstOrDefaultAsync(o => o.Id == id);
     }
 
-    public async Task<Business?> GetByManagerIdAsync(string managerId)
+    public async Task<List<Business>> GetByStaffUserIdAsync(string userId)
     {
-        return await context.Businesses.Include(b => b.BusinessType).FirstOrDefaultAsync(b => b.ManagerId == managerId);
+        return await context.Businesses.Include(b => b.BusinessType)
+            .Where(b => b.Staff.Any(s => s.UserId == userId))
+            .OrderBy(b => b.Name)
+            .ToListAsync();
+    }
+
+    public async Task<List<ApplicationUser>> GetStaffAsync(Guid businessId)
+    {
+        return await context.BusinessStaff
+            .Where(s => s.BusinessId == businessId)
+            .OrderBy(s => s.User.Name)
+            .Select(s => s.User)
+            .ToListAsync();
+    }
+
+    public async Task<bool> IsStaffAsync(Guid businessId, string userId)
+    {
+        return await context.BusinessStaff.AnyAsync(s => s.BusinessId == businessId && s.UserId == userId);
+    }
+
+    public async Task<bool> AddStaffAsync(Guid businessId, string userId)
+    {
+        if (await IsStaffAsync(businessId, userId))
+            return false;
+
+        context.BusinessStaff.Add(new BusinessStaff
+        {
+            Id = Guid.NewGuid(),
+            BusinessId = businessId,
+            UserId = userId,
+            AssignedAt = DateTime.UtcNow,
+        });
+        await context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RemoveStaffAsync(Guid businessId, string userId)
+    {
+        var staff = await context.BusinessStaff.FirstOrDefaultAsync(s => s.BusinessId == businessId && s.UserId == userId);
+        if (staff is null)
+            return false;
+
+        context.BusinessStaff.Remove(staff);
+        await context.SaveChangesAsync();
+        return true;
     }
 
     public async Task AddAsync(Business business)

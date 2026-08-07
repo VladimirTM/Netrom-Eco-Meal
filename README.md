@@ -6,7 +6,8 @@ at a discount, and customers browse, order and pick them up before they'd otherw
 to waste.
 
 Three roles: **Customer** (browses, orders, leaves reviews), **BusinessManager** (manages
-their business's packages and orders) and **Admin** (manages businesses, types and users).
+packages and orders for whichever business or businesses they're staff of) and **Admin**
+(manages businesses, staff, types and users).
 
 ## What each role can do
 
@@ -20,18 +21,22 @@ their business's packages and orders) and **Admin** (manages businesses, types a
 - Show a QR pickup pass for a confirmed order, scanned by the business at collection
 - Leave a star rating and comment on a business once you've ordered from it
 
-**BusinessManager** — assigned to one business by an Admin, scoped to it everywhere:
+**BusinessManager** — staff of one or more businesses (assigned by an Admin), scoped to
+whichever one they pick in the sidebar switcher:
 
-- Manage their business's packages on `/packages`, including "repeat this every day"
-  recurring templates managed on `/packages/templates`
-- Confirm, complete or cancel orders placed at their business on `/orders/manage`
+- Manage packages on `/packages` for the currently selected business, including "repeat
+  this every day" recurring templates managed on `/packages/templates`
+- Confirm, complete or cancel orders placed at the currently selected business on
+  `/orders/manage`
 - Scan a customer's pickup QR code on `/orders/scan` to confirm pickup
-- See business-scoped stats on `/dashboard`
+- See stats scoped to the currently selected business on `/dashboard`
+- Staffing more than one business surfaces a switcher in the sidebar to pick which one is
+  "current" for every page above — staffing just one skips the switcher entirely
 
 **Admin** — full access, plus the only role that can create businesses:
 
-- Create and edit any business on `/businesses`, including assigning it a manager and an
-  optional lat/lng location
+- Create and edit any business on `/businesses`, including assigning staff (any number of
+  managers, and a manager can staff more than one business) and an optional lat/lng location
 - Manage packages (and recurring templates) for any business on `/packages`
 - Review and manage orders across every business on `/orders/manage`
 - Promote or demote users between Customer, BusinessManager and Admin on `/users`
@@ -118,7 +123,7 @@ A seeded admin account is created automatically:
 - **Password:** Admin123!
 
 Change `SeedAdmin__Email` / `SeedAdmin__Password` in `docker-compose.test.yml` before
-running if you don't want the default admin credentials. Two demo accounts (see
+running if you don't want the default admin credentials. Three demo accounts (see
 [Seed data](#seed-data) below) are also created regardless of that setting, so you can log
 in as a customer or business manager and see the app already in use.
 
@@ -149,15 +154,20 @@ It also turns one of the demo-managed business's packages into a recurring templ
 database — `PackageTemplateGenerationService` takes over generating that package's future
 daily instances from there.
 
-It also creates two demo accounts, so every feature has real data to look at right away
+It also creates three demo accounts, so every feature has real data to look at right away
 instead of an empty app:
 
 - **Customer** — demo.customer@ecomeal.local / Demo123! — has past orders in every status
   (completed, confirmed, cancelled, no-show, pending) across several businesses, so
   `/orders`, reorder, the QR pickup pass, favorites and reviews all show something real.
-- **BusinessManager** — demo.manager@ecomeal.local / Demo123! — assigned to Stadionul de
-  Gusturi, with a pending order waiting to be confirmed on `/orders/manage` and enough
-  order history for `/dashboard`'s trend chart and CSV export to be worth looking at.
+- **BusinessManager** — demo.manager@ecomeal.local / Demo123! — staffs both Stadionul de
+  Gusturi and VAR Bistro, so the sidebar's business switcher has something to switch
+  between out of the box. Has a pending order waiting to be confirmed on `/orders/manage`
+  and enough order history for `/dashboard`'s trend chart and CSV export to be worth
+  looking at.
+- **BusinessManager** — demo.manager2@ecomeal.local / Demo123! — staffs Stadionul de
+  Gusturi alongside the first demo manager, demonstrating the other direction of the
+  many-to-many (several staff, one business).
 
 This activity is only ever seeded once, the first time the app starts against a genuinely
 empty database — unlike the reference/demo-catalog data above, it won't touch orders

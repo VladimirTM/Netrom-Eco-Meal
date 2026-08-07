@@ -76,7 +76,7 @@
             <tr class="border-bottom">
                 <th class="px-4 py-3 text-uppercase text-muted small fw-semibold">User</th>
                 <th class="py-3 text-uppercase text-muted small fw-semibold">Role</th>
-                <th class="py-3 text-uppercase text-muted small fw-semibold">Business</th>
+                <th class="py-3 text-uppercase text-muted small fw-semibold">Businesses</th>
             </tr>
             </thead>
             <tbody>
@@ -136,46 +136,43 @@
                         }
                         else
                         {
-                            var assigned = AssignedBusiness(user.Id);
-                            <AnchoredDropdown TriggerClass="@($"role-badge {(assigned is null ? "role-badge-unassigned" : "role-badge-businessmanager")}")"
-                                              IsOpen="@(_openBusinessDropdownUserId == user.Id)"
-                                              OnToggle="@(() => ToggleBusinessDropdown(user.Id))"
-                                              OnClose="CloseBusinessDropdown">
-                                <Trigger>
-                                    @(assigned?.Name ?? "Unassigned")
-                                    <i class="bi bi-chevron-down" style="font-size:0.65rem;"></i>
-                                </Trigger>
-                                <Content>
-                                    <button type="button" class="role-option" @onclick="() => AssignBusinessAsync(user, null)">
-                                        <span class="role-option-dot" style="background-color:#6b7280"></span>
-                                        Unassigned
-                                        @if (assigned is null)
-                                        {
-                                            <i class="bi bi-check-lg ms-auto text-muted"></i>
+                            var assigned = AssignedBusinesses(user.Id);
+                            <div class="d-flex flex-wrap align-items-center gap-1">
+                                @foreach (var business in assigned)
+                                {
+                                    <span class="badge rounded-pill px-2 py-1 role-badge role-badge-businessmanager d-inline-flex align-items-center gap-1">
+                                        @business.Name
+                                        <button type="button" class="btn-close" style="font-size:0.55rem;" title="Remove"
+                                                @onclick="() => RemoveBusinessAsync(user, business.Id)"></button>
+                                    </span>
+                                }
+                                <AnchoredDropdown TriggerClass="role-badge role-badge-unassigned"
+                                                  Title="Add business"
+                                                  IsOpen="@(_openBusinessDropdownUserId == user.Id)"
+                                                  OnToggle="@(() => ToggleBusinessDropdown(user.Id))"
+                                                  OnClose="CloseBusinessDropdown">
+                                    <Trigger>
+                                        <i class="bi bi-plus-lg"></i>
+                                    </Trigger>
+                                    <Content>
+                                        @{
+                                            var assignedIds = assigned.Select(b => b.Id).ToHashSet();
+                                            var available = _businesses.Where(b => !assignedIds.Contains(b.Id)).ToList();
                                         }
-                                    </button>
-                                    @foreach (var business in _businesses)
-                                    {
-                                        var managedByOther = business.ManagerId is not null && business.ManagerId != user.Id
-                                            ? _businessManagers.FirstOrDefault(u => u.Id == business.ManagerId)
-                                            : null;
-                                        <button type="button" class="role-option" @onclick="() => AssignBusinessAsync(user, business.Id)">
-                                            <span class="role-option-dot" style="background-color:#2563eb"></span>
-                                            <span>
+                                        @if (available.Count == 0)
+                                        {
+                                            <div class="role-option text-muted">No more businesses to add</div>
+                                        }
+                                        @foreach (var business in available)
+                                        {
+                                            <button type="button" class="role-option" @onclick="() => AddBusinessAsync(user, business.Id)">
+                                                <span class="role-option-dot" style="background-color:#2563eb"></span>
                                                 @business.Name
-                                                @if (managedByOther is not null)
-                                                {
-                                                    <span class="text-muted fw-normal d-block" style="font-size:0.7rem;">currently: @managedByOther.Name</span>
-                                                }
-                                            </span>
-                                            @if (business.Id == assigned?.Id)
-                                            {
-                                                <i class="bi bi-check-lg ms-auto text-muted"></i>
-                                            }
-                                        </button>
-                                    }
-                                </Content>
-                            </AnchoredDropdown>
+                                            </button>
+                                        }
+                                    </Content>
+                                </AnchoredDropdown>
+                            </div>
                         }
                     </td>
                 </tr>
@@ -248,8 +245,8 @@
         return FilterChangedAsync();
     }
 
-    private Business? AssignedBusiness(string userId) =>
-        _businesses.FirstOrDefault(b => b.ManagerId == userId);
+    private List<Business> AssignedBusinesses(string userId) =>
+        _businesses.Where(b => b.Staff.Any(s => s.UserId == userId)).ToList();
 
     // Role and business dropdowns are mutually exclusive — opening one closes the other.
     private void ToggleDropdown(string userId)
@@ -298,29 +295,23 @@
         _businessManagers = (await UserController.GetByRoleAsync(AppRoles.BusinessManager)).Value ?? [];
     }
 
-    private async Task AssignBusinessAsync(UserWithRole user, Guid? businessId)
+    // Deliberately doesn't close the dropdown — an admin can add several businesses in one open.
+    private async Task AddBusinessAsync(UserWithRole user, Guid businessId)
     {
-        _openBusinessDropdownUserId = null;
         _roleError = null;
 
-        var current = AssignedBusiness(user.Id);
-        if (businessId == current?.Id)
-            return;
-
-        ActionResult? result = null;
-        if (businessId is null)
-        {
-            if (current is not null)
-                result = await BusinessController.AssignManagerAsync(current.Id, null);
-        }
-        else
-        {
-            result = await BusinessController.AssignManagerAsync(businessId.Value, user.Id);
-        }
-
-        // A concurrent assignment can beat us to it — refetch and surface the conflict.
+        var result = await BusinessController.AddStaffAsync(businessId, user.Id);
         if (result is ConflictResult)
-            _roleError = "That manager was just assigned to another business. Please try again.";
+            _roleError = "That staff assignment already exists. Please try again.";
+
+        _businesses = (await BusinessController.GetAllAsync()).Value ?? [];
+    }
+
+    private async Task RemoveBusinessAsync(UserWithRole user, Guid businessId)
+    {
+        _roleError = null;
+
+        await BusinessController.RemoveStaffAsync(businessId, user.Id);
 
         _businesses = (await BusinessController.GetAllAsync()).Value ?? [];
     }

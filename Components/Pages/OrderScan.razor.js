@@ -25,7 +25,8 @@ export async function startCamera(videoEl, canvasEl) {
     const canvasCtx = canvasEl.getContext("2d", { willReadFrequently: true });
 
     const tick = () => {
-        if (!stream) return; // stopCamera() was called while a frame was in flight
+        // stopCamera() was called while a frame was in flight.
+        if (!stream) return;
 
         if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
             canvasEl.width = videoEl.videoWidth;
@@ -38,7 +39,8 @@ export async function startCamera(videoEl, canvasEl) {
             });
 
             if (code && code.data && tryNavigate(code.data)) {
-                return; // matched — stop the loop, we're navigating away
+                // Matched — stop the loop, we're navigating away.
+                return;
             }
         }
 

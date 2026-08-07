@@ -7,9 +7,13 @@ namespace Netrom_Eco_Meal.Repositories.Interfaces;
 public interface IBusinessRepository
 {
     public Task<List<Business>> GetAllAsync();
-    public Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null, string? sortBy = null, string? favoritedByUserId = null, double? customerLat = null, double? customerLng = null);
+    public Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, string? favoritedByUserId = null, double? customerLat = null, double? customerLng = null);
     public Task<Business?> GetByIdAsync(Guid id);
-    public Task<Business?> GetByManagerIdAsync(string managerId);
+    public Task<List<Business>> GetByStaffUserIdAsync(string userId);
+    public Task<List<ApplicationUser>> GetStaffAsync(Guid businessId);
+    public Task<bool> IsStaffAsync(Guid businessId, string userId);
+    public Task<bool> AddStaffAsync(Guid businessId, string userId);
+    public Task<bool> RemoveStaffAsync(Guid businessId, string userId);
     public Task AddAsync(Business business);
     public Task DeleteAsync(Guid id);
     public Task SaveChangesAsync();

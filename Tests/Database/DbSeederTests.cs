@@ -91,14 +91,26 @@ public class DbSeederTests(PostgresFixture fixture)
 
         var customer = await userManager.FindByEmailAsync("demo.customer@ecomeal.local");
         var manager = await userManager.FindByEmailAsync("demo.manager@ecomeal.local");
+        var manager2 = await userManager.FindByEmailAsync("demo.manager2@ecomeal.local");
         Assert.NotNull(customer);
         Assert.NotNull(manager);
+        Assert.NotNull(manager2);
         Assert.Contains(AppRoles.Customer, await userManager.GetRolesAsync(customer));
         Assert.Contains(AppRoles.BusinessManager, await userManager.GetRolesAsync(manager));
+        Assert.Contains(AppRoles.BusinessManager, await userManager.GetRolesAsync(manager2));
 
-        // The demo manager should be assigned to Stadionul de Gusturi.
-        var managedBusiness = await db.Businesses.FindAsync(new Guid("44444444-0000-0000-0000-000000000001"));
-        Assert.Equal(manager.Id, managedBusiness!.ManagerId);
+        var stadionulId = new Guid("44444444-0000-0000-0000-000000000001");
+        var varBistroId = new Guid("44444444-0000-0000-0000-000000000002");
+
+        // Demonstrates both directions of the many-to-many: the first demo manager staffs two
+        // businesses, and the second demo manager joins them at Stadionul de Gusturi.
+        var staffedByManager = await db.BusinessStaff.Where(s => s.UserId == manager.Id).Select(s => s.BusinessId).ToListAsync();
+        Assert.Contains(stadionulId, staffedByManager);
+        Assert.Contains(varBistroId, staffedByManager);
+
+        var stadionulStaffIds = await db.BusinessStaff.Where(s => s.BusinessId == stadionulId).Select(s => s.UserId).ToListAsync();
+        Assert.Contains(manager.Id, stadionulStaffIds);
+        Assert.Contains(manager2.Id, stadionulStaffIds);
 
         var orders = await db.Orders.Include(o => o.Status).Where(o => o.UserId == customer.Id).ToListAsync();
         Assert.Equal(7, orders.Count);
@@ -160,6 +172,8 @@ public class DbSeederTests(PostgresFixture fixture)
         Assert.Equal(7, await finalDb.Orders.CountAsync());
         Assert.Equal(3, await finalDb.Favorites.CountAsync());
         Assert.Equal(2, await finalDb.Reviews.CountAsync());
+        // Two demo managers each staff one or two of the demo businesses — must not double-insert.
+        Assert.Equal(3, await finalDb.BusinessStaff.CountAsync());
     }
 }
 

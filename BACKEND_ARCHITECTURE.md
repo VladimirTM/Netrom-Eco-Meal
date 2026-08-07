@@ -95,9 +95,9 @@ ApplicationUser (IdentityUser)
   │
   ├──< Favorite >──── Business        (one per (UserId, BusinessId), unique index)
   ├──< Review >────── Business        (one per (BusinessId, UserId), unique index)
-  ├──< Notification
-  └──── Business                      (Manager — 0..1, unique index on ManagerId)
+  └──< Notification
 
+Business ──< BusinessStaff >── ApplicationUser  (many-to-many: staff a business, unique on (BusinessId, UserId))
 Order ──── Status                     (Pending | Confirmed | Completed | Cancelled | NoShow)
 PackageTemplate ──< Package           (0..N generated instances, one per calendar day)
 ```
@@ -127,17 +127,30 @@ public class Business
     public double? Longitude { get; set; }
     public Guid BusinessTypeId { get; set; }
     public BusinessType BusinessType { get; set; } = null!;
-    public string? ManagerId { get; set; }         // nullable/unique: a manager oversees at most one business
-    public ApplicationUser? Manager { get; set; }
+    public ICollection<BusinessStaff> Staff { get; set; } = [];
     public ICollection<Package> Packages { get; set; } = [];
     public ICollection<Order> Orders { get; set; } = [];
     public ICollection<Review> Reviews { get; set; } = [];
     public ICollection<Favorite> Favorites { get; set; } = [];
 }
 ```
-`ManagerId` has a **unique index** (`EcoMealDbContext.OnModelCreating`) — enforced at the DB level so two concurrent "assign this manager" admin actions can't both succeed and leave one manager running two businesses. `OnDelete(DeleteBehavior.SetNull)` means deleting a manager's user account un-assigns them rather than failing the delete or cascading.
+`Staff` is the many-to-many side of `BusinessStaff` (below) — a business can have several staff, and a single staff member can be staff of more than one business. There's no cap and no "primary" staffer; `IBusinessService.IsStaffAsync` is the one authorization check every write path (`BusinessService`, `PackageService`, `PackageTemplateService`, `OrderService`) uses to ask "can this user act on this business."
 
 `Latitude`/`Longitude` are both nullable — set by hand or via a browser-geolocation "use my location" button on `BusinessForm.razor`, read by `BusinessRepository.GetPagedAsync`'s `BusinessSortOptions.Distance` sort and `Home.razor`'s map view (see the Pagination Helper note in §4).
+
+#### BusinessStaff
+```csharp
+public class BusinessStaff
+{
+    public Guid Id { get; set; }
+    public Guid BusinessId { get; set; }
+    public Business Business { get; set; } = null!;
+    public string UserId { get; set; } = null!;
+    public ApplicationUser User { get; set; } = null!;
+    public DateTime AssignedAt { get; set; }
+}
+```
+The join table behind `Business.Staff` — replaced an earlier `Business.ManagerId` nullable-FK design that capped a manager at one business. Unique index on `(BusinessId, UserId)` (`EcoMealDbContext.OnModelCreating`) so the same pairing can't be added twice; both FKs cascade-delete, so removing a business or a user account cleans up their staff rows instead of leaving orphans or blocking the delete. Admin-only to add/remove (`Businesses.razor`'s and `Users.razor`'s staff chip UI, both calling `BusinessController.AddStaffAsync`/`RemoveStaffAsync` — see §11 in `FRONTEND_ARCHITECTURE.md`).
 
 #### BusinessType / PackageType / Status
 ```csharp
@@ -296,7 +309,7 @@ No generic base — each interface is purpose-built. All "write" repositories fo
 
 | Repository | Key methods | Notes |
 |---|---|---|
-| `IBusinessRepository` / `BusinessRepository` | `GetAllAsync`, `GetPagedAsync(search, businessTypeId, managerId?, sortBy?, favoritedByUserId?, customerLat?, customerLng?)`, `GetByIdAsync`, `GetByManagerIdAsync`, `AddAsync`, `DeleteAsync`, `SaveChangesAsync` | `GetPagedAsync`'s search also matches **live packages'** name/description (`b.Packages.Any(p => p.PickupEnd > now && ...)`), so searching "bread" surfaces a bakery even if its own name/description doesn't mention bread. `sortBy: "closingSoon"` orders by each business's nearest live `PickupEnd` (`?? DateTime.MaxValue` so businesses with nothing live sort last regardless of mode). `sortBy: "distance"` (`BusinessSortOptions.Distance`) is the one mode EF/SQL can't express — see the Pagination Helper note below |
+| `IBusinessRepository` / `BusinessRepository` | `GetAllAsync`, `GetPagedAsync(search, businessTypeId, staffUserId?, sortBy?, favoritedByUserId?, customerLat?, customerLng?)`, `GetByIdAsync`, `GetByStaffUserIdAsync`, `GetStaffAsync`, `IsStaffAsync`, `AddStaffAsync`, `RemoveStaffAsync`, `AddAsync`, `DeleteAsync`, `SaveChangesAsync` | `GetPagedAsync`'s search also matches **live packages'** name/description (`b.Packages.Any(p => p.PickupEnd > now && ...)`), so searching "bread" surfaces a bakery even if its own name/description doesn't mention bread. `sortBy: "closingSoon"` orders by each business's nearest live `PickupEnd` (`?? DateTime.MaxValue` so businesses with nothing live sort last regardless of mode). `sortBy: "distance"` (`BusinessSortOptions.Distance`) is the one mode EF/SQL can't express — see the Pagination Helper note below. `AddStaffAsync`/`RemoveStaffAsync` return `bool` (false on a duplicate pair or a no-op removal) instead of throwing, so the caller can turn that into a `Conflict()`/`NotFound()` without a `try/catch` |
 | `IPackageTemplateRepository` / `PackageTemplateRepository` | `GetAllAsync`, `GetByBusinessIdAsync`, `GetActiveAsync`, `GetByIdAsync`, `AddAsync`, `DeleteAsync`, `SaveChangesAsync` | `GetActiveAsync` is the one method with no navigation-property includes — it's the batch load `PackageTemplateGenerationService` (§8) uses every sweep tick, where `Business`/`PackageType` details aren't needed |
 | `IBusinessTypeRepository` / `BusinessTypeRepository` | `GetAllAsync` | Read-only lookup, no writes anywhere in the app |
 | `IFavoriteRepository` / `FavoriteRepository` | `GetFavoriteBusinessIdsAsync`, `IsFavoriteAsync`, `AddAsync`, `RemoveAsync`, `GetFavoritingUsersAsync` | `AddAsync`/`RemoveAsync` persist immediately — the one repository that breaks the stage-then-save convention (see §3 Favorite). `GetFavoritingUsersAsync` feeds `PackageService`'s back-in-stock notifications |
@@ -350,13 +363,13 @@ The third, synchronous `Create` overload backs `BusinessRepository.GetPagedAsync
 
 ## 5. Service Layer
 
-Every service is `Scoped`. A few break that pattern deliberately: `OrderLifecycleSweepService` and `PackageTemplateGenerationService` are `BackgroundService`s (effectively singletons — see §8); `CartService`/`ClientTimeZoneService` are `Scoped` but have no backing interface or repository — they're pure in-memory, per-circuit state with a JS-interop side door (documented in `FRONTEND_ARCHITECTURE.md` since they're really frontend concerns that happen to live in `Services/` alongside everything else); `SmtpEmailSender` (`IAppEmailSender`) is stateless and could be `Singleton` but is registered `Scoped` for consistency with everything else.
+Every service is `Scoped`. A few break that pattern deliberately: `OrderLifecycleSweepService` and `PackageTemplateGenerationService` are `BackgroundService`s (effectively singletons — see §8); `CartService`/`ClientTimeZoneService`/`ManagedBusinessContext` are `Scoped` but have no backing interface or repository — they're pure in-memory, per-circuit state with a JS-interop side door (documented in `FRONTEND_ARCHITECTURE.md` since they're really frontend concerns that happen to live in `Services/` alongside everything else); `SmtpEmailSender` (`IAppEmailSender`) is stateless and could be `Singleton` but is registered `Scoped` for consistency with everything else.
 
 | Service Interface | Implementation | Responsibilities |
 |---|---|---|
 | `IAuthService` | `AuthService` | Thin wrapper over ASP.NET Identity's `SignInManager`/`UserManager` — `LoginAsync`, `RegisterAsync` (self-registration always lands in the `Customer` role; only an admin can promote from there), `LogoutAsync`, plus `ConfirmEmailAsync`/`RequestPasswordResetAsync`/`ResetPasswordAsync` for the email-confirmation and password-reset flows `Identity:RequireConfirmedAccount` unlocks (see §7/§10). Builds absolute links for those emails off `App:BaseUrl`, since neither a background sweep nor (reliably) a Blazor circuit has an `HttpContext` to derive one from |
 | `IAppEmailSender` | `SmtpEmailSender` | One method, `SendEmailAsync(toEmail, subject, htmlBody)`, over `System.Net.Mail.SmtpClient`. Deliberately **not** ASP.NET Identity's `IEmailSender<TUser>` — this app has no Identity Razor Pages UI to trigger that interface, and order-lifecycle/back-in-stock emails aren't Identity's concern anyway. Reads `Email:Smtp:*`/`Email:From*` straight off `IConfiguration` (same style as `SeedAdmin:*`); when `Email:Smtp:Host` isn't set, it logs the email instead of sending — the same "optional infra, degrade gracefully" pattern `DbSeeder` uses for `SeedAdmin` |
-| `IBusinessService` | `BusinessService` | CRUD (create/delete admin-only, update admin-or-own-manager) + `AssignManagerAsync` (admin-only; unassigns the manager from wherever they were previously assigned, then assigns them here, inside one `SaveChangesAsync` — a `DbUpdateException` from the unique `ManagerId` index racing a concurrent assignment is caught and reported as "already assigned elsewhere") |
+| `IBusinessService` | `BusinessService` | CRUD (create/delete admin-only, update admin-or-own-staff, via `IsStaffAsync`) + `AddStaffAsync`/`RemoveStaffAsync` (admin-only; a `DbUpdateException` from the unique `(BusinessId, UserId)` index racing a concurrent add is caught and turned into a `false` return rather than propagating) + `GetByStaffUserIdAsync`/`GetStaffAsync`/`IsStaffAsync` (the read side other services and `ManagedBusinessContext` build on) |
 | `IBusinessTypeService` / `IPackageTypeService` | `BusinessTypeService` / `PackageTypeService` | Thin pass-throughs — lookup data has no business rules to enforce |
 | `IFavoriteService` | `FavoriteService` | Customer-only, always scoped to the signed-in user — no "favorite on behalf of" path exists. `ToggleFavoriteAsync` returns the new state so the caller doesn't need a second read |
 | `INotificationService` | `NotificationService` | Scoped to the signed-in user for every read method; `CreateAsync(userId, message, url?)` is the one exception — other services call it to notify *someone else* (e.g. `OrderService` notifying a business's manager about a new order) |
@@ -393,7 +406,9 @@ Not behind an interface — it's a small, concrete helper every other service ta
    This is the mechanism that prevents overselling **before** confirmation — `Package.Quantity` itself only drops once an order is actually confirmed (step below), so without this check two customers could both "successfully" place a Pending order for the last unit.
 
    The same reservation math is also exposed **read-only** for the storefront's "X left" display — `GetPendingReservedQuantitiesAsync(packageIds)` (`IOrderService`/`IOrderRepository`, no auth check, same public audience as browsing packages) bulk-sums Pending quantity per package for a batch of IDs. This exists because the display-side quantity used to only subtract the *viewer's own local cart* (`CartService.AvailableQuantity`), so a package correctly blocked from overselling server-side would still show its full, pre-reservation count to every other browser as soon as the reserving customer's cart cleared (e.g. right after they placed the order) — see `FRONTEND_ARCHITECTURE.md` §15.
-4. Inserts the `Order` (status `Pending`, `OrderNumber` left for the DB sequence) with its `OrderPackage` rows, and notifies the business's manager (if assigned) of a new order needing confirmation.
+4. Inserts the `Order` (status `Pending`, `OrderNumber` left for the DB sequence) with its `OrderPackage` rows, and notifies every one of the business's staff (`IBusinessService.GetStaffAsync` — zero, one, or several) of a new order needing confirmation.
+
+**Business-scoped reads/writes now take an explicit `businessId`.** Since a manager can staff more than one business (`BusinessStaff`), there's no longer a single implicit "their business" — `GetOrdersForManagementAsync`, `GetOrdersForManagementPagedAsync`, and `GetOrdersInRangeAsync` all take `Guid? businessId` from the caller. Two private helpers keep that resolution in one place: `GetOwnedOrderAsync(orderId)` (used by `UpdateStatusAsync`/`GetOrderForManagementAsync`) checks `IBusinessService.IsStaffAsync(order.BusinessId, userId)` against the order's own business; `ResolveManagerBusinessIdAsync(userId, requestedBusinessId)` (used by the three list methods above) requires the caller to pass a `businessId` and rejects it with `UnauthorizedAccessException` if the manager isn't staff there. Admins skip both checks — `businessId` is optional for them and just narrows an otherwise-unscoped read.
 
 **`ApplyStatusChangeAsync(order, statusName)`** — the single choke point shared by manager/admin status changes (`UpdateStatusAsync`) *and* customer self-cancellation (`CancelMyOrderAsync`), so the transition rules and stock adjustments can't drift out of sync between the two call paths:
 ```csharp
@@ -418,7 +433,7 @@ var allowedTransition = (currentStatusName, statusName) switch
 
 **`SendPickupRemindersAsync()`** — also system-triggered. Finds `Confirmed` orders whose latest-closing line falls within `OrderExpiry.PickupReminderLeadTime` (30 min) of closing, that haven't already been reminded (`Order.PickupReminderSentAt is null`) and haven't fully closed yet (`IOrderRepository.GetPickupReminderCandidatesAsync`), notifies (bell + email) the customer, and stamps `PickupReminderSentAt` so the next sweep tick doesn't remind them again.
 
-**`GetOrdersInRangeAsync(from?, to?, businessId?)`** — unpaginated, date-bounded, scoped the same way `GetOrdersForManagementPagedAsync` is: admins see everything (optionally filtered to one business via `businessId`), managers are always pinned to their own business regardless of what `businessId` they pass. Backs both the CSV export and the dashboard trend chart — see §6 for why the CSV export controller can't call this method directly despite it living on the same interface.
+**`GetOrdersInRangeAsync(from?, to?, businessId?)`** — unpaginated, date-bounded, scoped the same way `GetOrdersForManagementPagedAsync` is via `ResolveManagerBusinessIdAsync` above: admins see everything (optionally filtered to one business via `businessId`), a manager must pass a `businessId` they're actually staff of. Backs both the CSV export and the dashboard trend chart — see §6 for why the CSV export controller can't call this method directly despite it living on the same interface.
 
 **`GetTotalKgSavedAsync()`** — the one genuinely public read (no auth check at all): sums `Quantity * WeightKg` across every `OrderPackage` on a `Completed` order, platform-wide. Backs the anonymous home-hero stat.
 
@@ -485,9 +500,22 @@ public class OrderExportController(IOrderRepository orderRepository, IBusinessSe
         else
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var business = userId is null ? null : await businessService.GetByManagerIdAsync(userId);
-            if (business is null) return Unauthorized();
-            effectiveBusinessId = business.Id;
+            var staffBusinesses = userId is null ? [] : await businessService.GetByStaffUserIdAsync(userId);
+            if (staffBusinesses.Count == 0) return Unauthorized();
+
+            if (businessId is not null)
+            {
+                if (staffBusinesses.All(b => b.Id != businessId)) return Forbid();
+                effectiveBusinessId = businessId;
+            }
+            else if (staffBusinesses.Count == 1)
+            {
+                effectiveBusinessId = staffBusinesses[0].Id;
+            }
+            else
+            {
+                return BadRequest("You manage more than one business — specify businessId.");
+            }
         }
 
         var orders = await orderRepository.GetInRangeAsync(effectiveBusinessId, from, to);
@@ -495,13 +523,13 @@ public class OrderExportController(IOrderRepository orderRepository, IBusinessSe
     }
 }
 ```
-Note `IBusinessService.GetByManagerIdAsync` is safe to call here — it's a pure read with no `CurrentUserAccessor` dependency of its own, unlike most of `BusinessService`'s write methods.
+Note `IBusinessService.GetByStaffUserIdAsync` is safe to call here — it's a pure read with no `CurrentUserAccessor` dependency of its own, unlike most of `BusinessService`'s write methods. A manager staffing exactly one business gets it automatically; one staffing several must pass `businessId` explicitly (and can only pick one they're actually staff of) — the same shape `OrderService.ResolveManagerBusinessIdAsync` uses on the in-process side, reimplemented here rather than shared because this controller can't call into `IOrderService`/`CurrentUserAccessor` at all (see above).
 
 ### Controller surface reference
 
 | Controller | Methods |
 |---|---|
-| `BusinessController` | `GetAllAsync`, `GetPagedAsync`, `GetByIdAsync`, `AddAsync` → `Created()`, `UpdateAsync` → `NoContent()`, `DeleteAsync` → `NoContent()`, `AssignManagerAsync` → `NoContent()`/`Conflict()` |
+| `BusinessController` | `GetAllAsync`, `GetPagedAsync`, `GetByIdAsync`, `GetStaffAsync`, `AddAsync` → `Created()`, `UpdateAsync` → `NoContent()`, `DeleteAsync` → `NoContent()`, `AddStaffAsync` → `NoContent()`/`Conflict()`, `RemoveStaffAsync` → `NoContent()`/`NotFound()` |
 | `PackageController` | `GetAllAsync`, `GetPagedAsync`, `GetByIdAsync`, `AddAsync`, `UpdateAsync`, `DeleteAsync` |
 | `PackageTemplateController` | `GetAllAsync`, `GetByBusinessIdAsync`, `CreateFromPackageAsync`, `SetActiveAsync`, `DeleteAsync` |
 | `OrderController` | `PlaceOrderAsync`, `GetMyOrdersAsync`, `GetOrdersForManagementAsync`, `GetMyOrdersPagedAsync`, `GetOrdersForManagementPagedAsync`, `GetOrdersInRangeAsync`, `UpdateOrderStatusAsync`, `CancelMyOrderAsync`, `GetTotalKgSavedAsync`, `GetMyOrderAsync`, `GetOrderForManagementAsync`, `GetPendingReservedQuantitiesAsync` — every mutating/ownership-sensitive method wraps the service call in `try/catch (UnauthorizedAccessException or InvalidOperationException) → Conflict(ex.Message)`, or `Unauthorized()`/`NotFound()` for the read-only ownership checks. `GetPendingReservedQuantitiesAsync` is the one method with no auth check at all — same public audience as package browsing (see §5) |
@@ -537,7 +565,7 @@ Cookie-based auth, not JWT — a natural fit for Blazor Server, where the same p
 
 Three fixed roles in `Constants.AppRoles`: `Admin`, `Customer`, `BusinessManager`. Seeded once by `DbSeeder` (`RoleManager<IdentityRole>.CreateAsync` per role if it doesn't already exist). Self-registration (`AuthService.RegisterAsync`) always lands a new account in `Customer` — the only way to become a `BusinessManager` or `Admin` is for an existing admin to promote them via `/users` (`UserService.UpdateRoleAsync`), which additionally:
 - Refuses to demote the platform's **last remaining admin** (counts `GetUsersInRoleAsync(Admin)` before allowing a role change away from it).
-- Auto-releases whatever business a user managed (`BusinessService.AssignManagerAsync(businessId, null)`) if they're moved to any role other than `BusinessManager` — otherwise a demoted manager would keep a phantom `Business.ManagerId` pointing at an account that can no longer act on it.
+- Auto-releases every business a user staffed (`GetByStaffUserIdAsync` + `RemoveStaffAsync` per business) if they're moved to any role other than `BusinessManager` — otherwise a demoted manager would keep phantom `BusinessStaff` rows pointing at an account that can no longer act on them.
 
 ### Antiforgery
 
@@ -617,15 +645,16 @@ var generated = await templateService.GenerateDueInstancesAsync();
 `DbSeeder.SeedAsync(services, configuration)` runs once at startup, right after `dbContext.Database.MigrateAsync()` in `Program.cs`. It's designed to be **safely re-run on every single startup**, not a one-time migration-adjacent script:
 
 1. **Roles** — creates any of `AppRoles.AllRoles` that don't already exist.
-2. **Seed admin** — reads `SeedAdmin:Email`/`SeedAdmin:Password` from configuration; if either is missing, logs a warning and skips (no admin account is seeded, the app still runs); if the account doesn't already exist, creates it and adds it to the `Admin` role.
+2. **Seed admin & demo accounts** — reads `SeedAdmin:Email`/`SeedAdmin:Password` from configuration for the admin; if either is missing, logs a warning and skips (no admin account is seeded, the app still runs). Unconditionally creates `demo.customer@ecomeal.local`, `demo.manager@ecomeal.local`, and `demo.manager2@ecomeal.local` (fixed passwords, not configuration-gated like the admin account, since they carry no real data) — the second demo manager exists purely so a fresh database demonstrates both directions of the `BusinessStaff` many-to-many (point 5 below). All four use the same find-or-create-and-assign-role helper.
 3. **Lookup tables** (`BusinessTypes`, `PackageTypes`, `Statuses`) — insert-only. `BusinessTypes`/`PackageTypes` are skipped entirely once the table has any rows (`AnyAsync()` guard). `Statuses` instead adds whichever of the five fixed names are missing, because a database that's run the old pre-`DbSeeder` migrations already has the original four `Status` rows from a hardcoded `InsertData` by the time this runs — a blanket `AnyAsync()` guard there would've silently skipped seeding `NoShow` forever (this is exactly the migration-vs-seeder class of bug `Tests/Database/DbSeederTests.cs` exists to catch — see §11).
 4. **Demo businesses & packages** — a fixed set of World-Cup-themed Timișoara businesses/packages with **hardcoded GUIDs**, reconciled against what's already in the DB rather than blindly re-inserted:
    - Missing seed rows are added.
    - An existing row's `ImageUrl` is only overwritten if it's currently blank or points at a retired placeholder host (`picsum.photos`) — `IsStalePlaceholderImage` — so an admin's own custom image is never clobbered by a re-seed.
-   - A package's `PickupStart`/`PickupEnd` are only refreshed (advanced to "today") if the existing window has **already expired** — so the storefront always opens with live, orderable packages on any given day, without resetting `Quantity` (which reflects real orders placed against it) or touching a still-valid future window. Skipped entirely once `TemplateId` is set (see point 5) — a template-owned package is left to expire naturally rather than fought over by two refresh mechanisms.
+   - A package's `PickupStart`/`PickupEnd` are only refreshed (advanced to "today") if the existing window has **already expired** — so the storefront always opens with live, orderable packages on any given day, without resetting `Quantity` (which reflects real orders placed against it) or touching a still-valid future window. Skipped entirely once `TemplateId` is set (see point 6) — a template-owned package is left to expire naturally rather than fought over by two refresh mechanisms.
    - `WeightKg`, `DietaryTags`, and `Business.Latitude`/`Longitude` are **backfill-only** — only set if currently `0`/empty/`null` — since the seeder can't distinguish "never set" from "an admin/manager deliberately cleared it," so it defaults to filling in demo data either way rather than guessing.
-5. **Demo recurring template** (`SeedPackageTemplateAsync`) — turns the demo-managed business's "Golden Boot Surprise Bag" package into a `PackageTemplate` (fixed GUID, same idempotency check as the lookup tables) so `/packages/templates` and the 🔁 "Daily" badge aren't empty on a fresh database. Runs once; `PackageTemplateGenerationService` (§8) owns that package's future daily instances from there.
-6. **Demo customer/manager activity** (`SeedDemoActivityAsync`) — creates `demo.customer@ecomeal.local`/`demo.manager@ecomeal.local` (fixed passwords, not configuration-gated like the admin account, since they carry no real data), assigns the demo manager to Stadionul de Gusturi, and — **only on a genuinely fresh database** (`if (await db.Orders.AnyAsync()) return;`, unlike the reconcile-on-every-run steps above) — creates seven orders spanning every status (`Pending`/`Confirmed`/`Completed`×3/`Cancelled`/`NoShow`) across the last 14 days plus favorites, reviews, and notifications. This exists so every feature (dashboard trend chart, CSV export, reorder, the notification bell, QR pickup, reviews, the `NoShow` badge) has real data to look at immediately after a fresh `docker compose up`, without manually clicking through the app first. Because it's gated on "no orders exist yet" rather than reconciled like steps 3–4, it never touches orders placed by real usage afterward.
+5. **Demo business staff** (`SeedBusinessStaffAsync`) — staffs the demo managers across the demo businesses, reconciled by `(BusinessId, UserId)` pair like the steps above: the first demo manager staffs both Stadionul de Gusturi and VAR Bistro (one staffer, several businesses), and the second demo manager joins the first at Stadionul de Gusturi (several staff, one business) — a fresh database demonstrates both shapes of the many-to-many without an admin having to click through `/businesses` first.
+6. **Demo recurring template** (`SeedPackageTemplateAsync`) — turns the demo-staffed business's "Golden Boot Surprise Bag" package into a `PackageTemplate` (fixed GUID, same idempotency check as the lookup tables) so `/packages/templates` and the 🔁 "Daily" badge aren't empty on a fresh database. Runs once; `PackageTemplateGenerationService` (§8) owns that package's future daily instances from there.
+7. **Demo customer/manager activity** (`SeedDemoActivityAsync`) — **only on a genuinely fresh database** (`if (await db.Orders.AnyAsync()) return;`, unlike the reconcile-on-every-run steps above), creates seven orders spanning every status (`Pending`/`Confirmed`/`Completed`×3/`Cancelled`/`NoShow`) across the last 14 days for the demo customer/manager accounts from point 2, plus favorites, reviews, and notifications. This exists so every feature (dashboard trend chart, CSV export, reorder, the notification bell, QR pickup, reviews, the `NoShow` badge) has real data to look at immediately after a fresh `docker compose up`, without manually clicking through the app first. Because it's gated on "no orders exist yet" rather than reconciled like steps 3–5, it never touches orders placed by real usage afterward.
 
 This reconciliation approach — add-if-missing, refresh-if-stale, backfill-if-empty, never overwrite a live/customized value — is what lets the exact same seeder run unconditionally on every container start (see `docker-compose.test.yml`) without ever fighting real usage data.
 

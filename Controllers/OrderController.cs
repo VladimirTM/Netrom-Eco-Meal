@@ -34,11 +34,11 @@ public class OrderController(IOrderService orderService) : ControllerBase
         }
     }
 
-    public async Task<ActionResult<List<Order>>> GetOrdersForManagementAsync()
+    public async Task<ActionResult<List<Order>>> GetOrdersForManagementAsync(Guid? businessId = null)
     {
         try
         {
-            return await orderService.GetOrdersForManagementAsync();
+            return await orderService.GetOrdersForManagementAsync(businessId);
         }
         catch (UnauthorizedAccessException)
         {

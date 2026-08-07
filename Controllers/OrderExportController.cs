@@ -28,11 +28,24 @@ public class OrderExportController(IOrderRepository orderRepository, IBusinessSe
         else
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var business = userId is null ? null : await businessService.GetByManagerIdAsync(userId);
-            if (business is null)
+            var staffBusinesses = userId is null ? [] : await businessService.GetByStaffUserIdAsync(userId);
+            if (staffBusinesses.Count == 0)
                 return Unauthorized();
 
-            effectiveBusinessId = business.Id;
+            if (businessId is not null)
+            {
+                if (staffBusinesses.All(b => b.Id != businessId))
+                    return Forbid();
+                effectiveBusinessId = businessId;
+            }
+            else if (staffBusinesses.Count == 1)
+            {
+                effectiveBusinessId = staffBusinesses[0].Id;
+            }
+            else
+            {
+                return BadRequest("You manage more than one business — specify businessId.");
+            }
         }
 
         var orders = await orderRepository.GetInRangeAsync(effectiveBusinessId, from, to);

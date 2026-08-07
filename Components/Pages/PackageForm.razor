@@ -18,6 +18,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
 @inject ClientTimeZoneService ClientTimeZoneService
+@inject ManagedBusinessContext ManagedBusinessContext
 @attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
 
 <PageTitle>@(IsEdit ? "Edit Package" : "Create Package") — Eco Meal</PageTitle>
@@ -179,11 +180,10 @@
         _isAdmin = authState.User.IsInRole(AppRoles.Admin);
         var currentUserId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-        Business? myBusiness = null;
-        if (!_isAdmin && currentUserId is not null)
-            myBusiness = await BusinessService.GetByManagerIdAsync(currentUserId);
+        if (!_isAdmin)
+            await ManagedBusinessContext.EnsureLoadedAsync();
 
-        if (!_isAdmin && myBusiness is null)
+        if (!_isAdmin && ManagedBusinessContext.MyBusinesses.Count == 0)
         {
             _forbidden = true;
             _forbiddenReason = "You don't manage a business yet, so you can't add or edit packages.";
@@ -191,7 +191,7 @@
         }
 
         _packageTypes = await PackageTypeService.GetAllAsync();
-        _businesses = _isAdmin ? await BusinessService.GetAllAsync() : [myBusiness!];
+        _businesses = _isAdmin ? await BusinessService.GetAllAsync() : ManagedBusinessContext.MyBusinesses;
 
         if (IsEdit)
         {
@@ -202,7 +202,9 @@
                 return;
             }
 
-            if (!_isAdmin && existing.BusinessId != myBusiness!.Id)
+            // Checked against every business this staffer belongs to (not just the one currently
+            // selected in the switcher) so they can still edit a package elsewhere they're staff.
+            if (!_isAdmin && (currentUserId is null || !await BusinessService.IsStaffAsync(existing.BusinessId, currentUserId)))
             {
                 _forbidden = true;
                 _forbiddenReason = "You can only edit packages that belong to your business.";
@@ -232,7 +234,9 @@
             if (_packageTypes.Count > 0)
                 _model.PackageTypeId = _packageTypes[0].Id;
             if (_businesses.Count > 0)
-                _model.BusinessId = _businesses[0].Id;
+                _model.BusinessId = !_isAdmin && ManagedBusinessContext.SelectedBusinessId is { } selectedId
+                    ? selectedId
+                    : _businesses[0].Id;
 
             var localNow = ClientTimeZoneService.ToLocal(DateTime.UtcNow);
             _model.PickupStart = localNow;

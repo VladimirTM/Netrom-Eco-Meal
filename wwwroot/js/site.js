@@ -80,7 +80,8 @@ window.EcoMeal = {
             if (bounds.length > 0) {
                 map.fitBounds(bounds, { padding: [30, 30] });
             } else {
-                map.setView([45.7489, 21.2087], 12); // Timișoara — falls back to the seed data's city.
+                // Timișoara — falls back to the seed data's city.
+                map.setView([45.7489, 21.2087], 12);
             }
 
             this._instances[elementId] = map;
@@ -117,6 +118,23 @@ window.EcoMeal = {
             try {
                 localStorage.removeItem(key);
             } catch { /* storage unavailable (private browsing, quota, etc.) */ }
+        }
+    },
+
+    // Persists which business a multi-business staff member is currently managing — same
+    // survives-reload need as cart, above.
+    managedBusiness: {
+        save: function (key, businessId) {
+            try {
+                localStorage.setItem(key, businessId);
+            } catch { /* storage unavailable (private browsing, quota, etc.) */ }
+        },
+        load: function (key) {
+            try {
+                return localStorage.getItem(key);
+            } catch {
+                return null;
+            }
         }
     }
 };

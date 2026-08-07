@@ -13,7 +13,7 @@ public class BusinessService(IBusinessRepository businessRepository, CurrentUser
         return await businessRepository.GetAllAsync();
     }
 
-    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null, string? sortBy = null, bool favoritesOnly = false, double? customerLat = null, double? customerLng = null)
+    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, bool favoritesOnly = false, double? customerLat = null, double? customerLng = null)
     {
         string? favoritedByUserId = null;
         if (favoritesOnly)
@@ -23,7 +23,7 @@ public class BusinessService(IBusinessRepository businessRepository, CurrentUser
             favoritedByUserId = userId ?? "";
         }
 
-        return await businessRepository.GetPagedAsync(pageIndex, pageSize, search, businessTypeId, managerId, sortBy, favoritedByUserId, customerLat, customerLng);
+        return await businessRepository.GetPagedAsync(pageIndex, pageSize, search, businessTypeId, staffUserId, sortBy, favoritedByUserId, customerLat, customerLng);
     }
 
     public async Task<Business?> GetByIdAsync(Guid id)
@@ -31,9 +31,19 @@ public class BusinessService(IBusinessRepository businessRepository, CurrentUser
         return await businessRepository.GetByIdAsync(id);
     }
 
-    public async Task<Business?> GetByManagerIdAsync(string managerId)
+    public async Task<List<Business>> GetByStaffUserIdAsync(string userId)
     {
-        return await businessRepository.GetByManagerIdAsync(managerId);
+        return await businessRepository.GetByStaffUserIdAsync(userId);
+    }
+
+    public async Task<List<ApplicationUser>> GetStaffAsync(Guid businessId)
+    {
+        return await businessRepository.GetStaffAsync(businessId);
+    }
+
+    public async Task<bool> IsStaffAsync(Guid businessId, string userId)
+    {
+        return await businessRepository.IsStaffAsync(businessId, userId);
     }
 
     public async Task AddAsync(Business business)
@@ -53,7 +63,7 @@ public class BusinessService(IBusinessRepository businessRepository, CurrentUser
             return;
 
         var (isAdmin, userId) = await currentUser.GetCurrentUserAsync();
-        if (!isAdmin && businessFromDb.ManagerId != userId)
+        if (!isAdmin && (userId is null || !await businessRepository.IsStaffAsync(businessFromDb.Id, userId)))
             throw new UnauthorizedAccessException("You can only edit your own business.");
 
         UpdateBusiness(business, businessFromDb);
@@ -70,36 +80,30 @@ public class BusinessService(IBusinessRepository businessRepository, CurrentUser
         await businessRepository.SaveChangesAsync();
     }
 
-    public async Task<bool> AssignManagerAsync(Guid businessId, string? managerId)
+    public async Task<bool> AddStaffAsync(Guid businessId, string userId)
     {
         var (isAdmin, _) = await currentUser.GetCurrentUserAsync();
         if (!isAdmin)
-            throw new UnauthorizedAccessException("Only an admin can assign business managers.");
-
-        var business = await businessRepository.GetByIdAsync(businessId);
-        if (business is null)
-            return false;
-
-        if (managerId is not null)
-        {
-            var previouslyManaged = await businessRepository.GetByManagerIdAsync(managerId);
-            if (previouslyManaged is not null && previouslyManaged.Id != businessId)
-                previouslyManaged.ManagerId = null;
-        }
-
-        business.ManagerId = managerId;
+            throw new UnauthorizedAccessException("Only an admin can assign business staff.");
 
         try
         {
-            await businessRepository.SaveChangesAsync();
+            return await businessRepository.AddStaffAsync(businessId, userId);
         }
         catch (DbUpdateException)
         {
-            // A concurrent assignment already gave this manager a different business.
+            // A concurrent assignment already added this pair.
             return false;
         }
+    }
 
-        return true;
+    public async Task<bool> RemoveStaffAsync(Guid businessId, string userId)
+    {
+        var (isAdmin, _) = await currentUser.GetCurrentUserAsync();
+        if (!isAdmin)
+            throw new UnauthorizedAccessException("Only an admin can remove business staff.");
+
+        return await businessRepository.RemoveStaffAsync(businessId, userId);
     }
 
     private static void UpdateBusiness(Business business, Business businessToUpdate)

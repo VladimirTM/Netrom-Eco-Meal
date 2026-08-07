@@ -3,7 +3,7 @@
 **Stack:** Blazor Server (interactive server render mode) · Bootstrap 5 + Bootstrap Icons · a hand-written CSS design system (`app.css`) · vanilla JS interop (no bundler, no npm, no component library)
 **Location:** `Components/` + `wwwroot/` (same project as the backend — see `BACKEND_ARCHITECTURE.md`)
 
-There's no separate SPA here — "frontend" means the Razor component tree that runs server-side over a persistent SignalR circuit. There is no client-side state management library, no React/Vue-style virtual DOM, and no REST/GraphQL client: every page talks straight to the in-process "Controllers" documented in `BACKEND_ARCHITECTURE.md` §6. The handful of client-only concerns a SPA would put in Redux/Context (cart contents, the viewer's timezone) instead live in ordinary Blazor `Scoped` services with a C# event for change notification — see §5.
+There's no separate SPA here — "frontend" means the Razor component tree that runs server-side over a persistent SignalR circuit. There is no client-side state management library, no React/Vue-style virtual DOM, and no REST/GraphQL client: every page talks straight to the in-process "Controllers" documented in `BACKEND_ARCHITECTURE.md` §6. The handful of client-only concerns a SPA would put in Redux/Context (cart contents, the viewer's timezone, which business a multi-staff manager is currently managing) instead live in ordinary Blazor `Scoped` services with a C# event for change notification — see §5.
 
 ---
 
@@ -193,13 +193,15 @@ Both `RestoreAsync` and `InitializeAsync` are deferred to `OnAfterRenderAsync(fi
 
 ### NavMenu — role-aware sidebar
 
-Plain `<AuthorizeView Roles="@AppRoles.Admin">` gates the "User Roles" nav link; every other link (Dashboard, Businesses, Packages, Orders) is visible to both `Admin` and `BusinessManager` — the actual data scoping (a manager only sees *their* business's packages/orders) happens page-side, not by hiding nav links per role. The sidebar footer shows the signed-in user's initial-avatar, email, and a role label resolved by a local `DisplayRole` switch expression, plus the same `NotificationBell` the public header uses (`TriggerClass="sidebar-notif-btn"` swaps only the CSS class, same component).
+Plain `<AuthorizeView Roles="@AppRoles.Admin">` gates the "User Roles" nav link; every other link (Dashboard, Businesses, Packages, Orders) is visible to both `Admin` and `BusinessManager` — the actual data scoping (a manager only sees the business or businesses they're staff of) happens page-side, not by hiding nav links per role. The sidebar footer shows the signed-in user's initial-avatar, email, and a role label resolved by a local `DisplayRole` switch expression, plus the same `NotificationBell` the public header uses (`TriggerClass="sidebar-notif-btn"` swaps only the CSS class, same component).
+
+**Business switcher**: for a `BusinessManager`, `AuthorizeView Roles="@AppRoles.BusinessManager"` wraps a block driven by `ManagedBusinessContext.MyBusinesses.Count` — zero businesses renders nothing, one renders a plain "current business" label, and more than one renders an `AnchoredDropdown` (`role-badge`-styled, matching the sidebar's other pill controls) listing every business the manager staffs, with a check mark on `ManagedBusinessContext.SelectedBusinessId`. `NavMenu.OnInitializedAsync` calls `ManagedBusinessContext.EnsureLoadedAsync()` and subscribes to its `OnChange` the same way every other consumer of a cross-cutting client service does (§5) — picking a different business calls `ManagedBusinessContext.SelectAsync`, which persists the choice and fires `OnChange`, and every business-scoped page (Dashboard, Businesses, Packages, PackageForm, PackageTemplates, OrderManagement) re-renders scoped to the new selection without a page navigation.
 
 ---
 
 ## 5. Cross-Cutting Client Services
 
-Blazor Server has no React-style Context API, but two `Scoped` services fill the identical role — injected wherever needed, holding state for the circuit's lifetime, and exposing a plain C# `event Action? OnChange` that consuming components subscribe to in `OnInitialized`/unsubscribe in `Dispose` (`IDisposable`) so a mutation anywhere re-renders every interested component without prop-drilling.
+Blazor Server has no React-style Context API, but three `Scoped` services fill the identical role — injected wherever needed, holding state for the circuit's lifetime, and exposing a plain C# `event Action? OnChange` that consuming components subscribe to in `OnInitialized`/unsubscribe in `Dispose` (`IDisposable`) so a mutation anywhere re-renders every interested component without prop-drilling.
 
 ### CartService
 
@@ -243,6 +245,25 @@ public class ClientTimeZoneService(IJSRuntime jsRuntime)
 Every pickup-window display in the app (`Orders.razor`, `OrderManagement.razor`, `PackageForm.razor`, `Packages.razor`, `OrderPickupPass.razor`, `OrderValidate.razor`) goes through `ToLocal`/`ToUtc` rather than each page reading `DateTime.Now`/formatting UTC directly — this is what makes "Pickup 20:00–22:00" mean the *viewer's* local 8–10pm regardless of where the Postgres server or the Blazor host actually sit. Falls back to UTC silently (`try/catch` around `FindSystemTimeZoneById`) if the browser's Intl API is unavailable or returns an unrecognized zone ID — the app never blocks on this, it just displays UTC times labeled the same as any other time.
 
 `PackageForm.razor` is the one place `ToLocal`/`ToUtc` round-trips in both directions within the same page: pickup times are edited entirely in the viewer's local time (`InputDate Type="InputDateType.DateTimeLocal"`), and only converted back to UTC (`ClientTimeZoneService.ToUtc(_model.PickupStart)`) at submit time. Because `InitializeAsync` resolves the timezone asynchronously (after first render), the form also subscribes to `OnChange` to re-derive its date fields (from cached raw-UTC values, `_existingPickupStartUtc`/`_existingPickupEndUtc`) if the real timezone arrives after the fields were first populated with a UTC-assumed default.
+
+### ManagedBusinessContext
+
+```csharp
+public class ManagedBusinessContext(IJSRuntime jsRuntime, IDbContextFactory<EcoMealDbContext> contextFactory, CurrentUserAccessor currentUser)
+{
+    public List<Business> MyBusinesses { get; private set; } = [];
+    public Guid? SelectedBusinessId { get; private set; }
+    public event Action? OnChange;
+
+    public Task EnsureLoadedAsync() { /* cached in-flight Task, see below */ }
+    public async Task SelectAsync(Guid businessId) { /* persists to localStorage, fires OnChange */ }
+}
+```
+Tracks "which of my businesses am I managing right now" for a `BusinessManager` who may staff more than one business (`BusinessStaff` — `BACKEND_ARCHITECTURE.md` §3). Same shape as `CartService`: `localStorage`-backed (`EcoMeal.managedBusiness.save`/`load`, §14.1), namespaced per user (`ecomeal.managedBusiness.{userId}`), and read/written by `NavMenu`'s business switcher (above) plus every business-scoped admin page (Dashboard, Packages, PackageForm, PackageTemplates, OrderManagement) rather than each page resolving "my business" on its own.
+
+Two non-obvious bugs shaped this service, both worth knowing before adding another cross-cutting scoped service like it:
+- **DbContext concurrency**: `NavMenu` (the layout) and the routed page both call `EnsureLoadedAsync`/load their own data from `OnInitializedAsync`, which can run concurrently. If `LoadAsync` queried through the shared per-circuit `EcoMealDbContext` the way most services do, it would race whatever query the routed page is running on that same context and crash the circuit (`InvalidOperationException: A second operation was started...`). It instead opens its own short-lived context via `IDbContextFactory<EcoMealDbContext>` — the identical fix `CartService.RestoreAsync` and `NotificationRepository`'s polling bell already use for the same reason.
+- **Load-task caching, not a bool flag**: `EnsureLoadedAsync() => _loadTask ??= LoadAsync()` caches the in-flight `Task` itself rather than a `bool _loaded` flipped before the awaited load finishes. A bare bool would be a race in this exact layout-and-page-both-call-on-init scenario — if `NavMenu` starts the load and yields at an `await`, and the routed page checks the flag before `NavMenu` resumes, a bool would already read `true` and the page would read `MyBusinesses`/`SelectedBusinessId` before either was populated. Caching the `Task` means every caller, concurrent or not, awaits the same completion.
 
 ---
 
@@ -464,10 +485,10 @@ Calls `OrderController.GetOrderForManagementAsync(Id)` on load — the exact sam
 Stat cards (Businesses/Users admin-only; Packages/Orders scoped per-role) plus a 14-day **Orders / Kg saved trend chart**, added as a Phase 3 feature. The chart is a hand-rolled bar chart — no charting library:
 
 ```csharp
-private async Task LoadDailyStatsAsync()
+private async Task LoadDailyStatsAsync(Guid? businessId)
 {
     var since = DateTime.UtcNow.Date.AddDays(-13);
-    var rangeOrders = (await OrderController.GetOrdersInRangeAsync(since, null)).Value ?? [];
+    var rangeOrders = (await OrderController.GetOrdersInRangeAsync(since, null, businessId)).Value ?? [];
 
     _dailyStats = Enumerable.Range(0, 14)
         .Select(i => since.AddDays(i))
@@ -484,9 +505,11 @@ private static int BarHeightPx(decimal value, decimal max) =>
 ```
 Reuses the exact same `OrderController.GetOrdersInRangeAsync` call the CSV export uses (`OrderManagement.razor`, below) — one backend query, two frontend consumers. Bucketed in **UTC**, not the viewer's local time — good enough for a trend *shape*, and it avoids depending on `ClientTimeZoneService`'s async JS-interop initialization inside a component whose other data (counts) doesn't need it. Bar heights are computed as **pixels**, not CSS percentages — percentage heights don't reliably resolve through a flex-item chain whose parent isn't itself stretched (`align-items: flex-end` on the row), so pixel math sidesteps that entirely rather than fighting the CSS.
 
+A `BusinessManager`'s stat cards and trend chart are scoped to `ManagedBusinessContext.SelectedBusinessId`, not every business they staff — `LoadDashboardAsync` passes it straight through to `OrderController.GetOrdersForManagementAsync`/`GetOrdersInRangeAsync`, and `OnInitializedAsync` subscribes to `ManagedBusinessContext.OnChange` (`HandleManagedBusinessChanged` re-runs `LoadDashboardAsync`) so switching businesses in `NavMenu` reloads every card and the chart in place, no navigation needed. Admins skip `ManagedBusinessContext` entirely and always see platform-wide totals.
+
 ### Businesses / BusinessForm
 
-`Businesses.razor` is the admin/manager list — admins see every business and can create new ones and reassign managers inline via an `AnchoredDropdown` (flagging when picking a manager would displace them from another business they currently run: `elsewhere = businesses.FirstOrDefault(b => b.ManagerId == manager.Id && b.Id != business.Id)`); a `BusinessManager` sees only their own row and can edit it. `BusinessForm.razor` serves both `/businesses/create` (admin-only) and `/businesses/edit/{id}` (admin or the business's own manager) behind one component, branching on whether `Id` was supplied (`IsEdit`).
+`Businesses.razor` is the admin/manager list — admins see every business and can create new ones; a `BusinessManager` sees only the business(es) they're staff of (`staffUserId` passed to `BusinessController.GetPagedAsync`) and can edit any of them. Staff are shown as removable chips per row (`business.Staff.OrderBy(s => s.User.Name)`, each with a small `×` calling `BusinessController.RemoveStaffAsync`) plus an admin-only `AnchoredDropdown` "add staff" trigger listing every `BusinessManager` not already on that row — picking one calls `AddStaffAsync` and **deliberately doesn't close the dropdown**, so an admin can add several staff in one open. `BusinessForm.razor` serves both `/businesses/create` (admin-only) and `/businesses/edit/{id}` (admin or one of the business's own staff, via `IsStaffAsync`) behind one component, branching on whether `Id` was supplied (`IsEdit`) — staff assignment itself lives on `Businesses.razor`/`Users.razor`, not on this form.
 
 `BusinessForm.razor`'s optional Location fields (`Latitude`/`Longitude`, both plain `InputNumber`) can be typed in by hand or filled by a "use my location" button next to them:
 ```csharp
@@ -503,7 +526,7 @@ Same `EcoMeal.geo.getPosition` interop `Home.razor`'s "near me" toggle uses (§6
 ### Packages / PackageForm / PackageTemplates
 
 Same list/form split as Businesses, plus:
-- Managers are scoped to their own business via a **sentinel `Guid.Empty`** fallback (`_myBusinessId ?? Guid.Empty`) when they have no business assigned yet — passing `null` there would instead show *every* business's packages, which is the opposite of the intended scoping.
+- `Packages.razor`/`PackageTemplates.razor` scope a manager to `ManagedBusinessContext.SelectedBusinessId` (updated live via its `OnChange`, same subscription pattern as Dashboard) via a **sentinel `Guid.Empty`** fallback (`_myBusinessId ?? Guid.Empty`) when nothing's selected yet — passing `null` there would instead show *every* business's packages, which is the opposite of the intended scoping. `PackageForm.razor`'s create path uses the same selection to default `_model.BusinessId`, but its **edit** authorization check is deliberately broader: it calls `BusinessService.IsStaffAsync(existing.BusinessId, currentUserId)` against the package's *own* business, not just whichever one is currently selected in the switcher — so a manager can still open and edit a package that belongs to a different business they staff, without first switching to it.
 - `PackageForm.razor`'s dietary-tag picker is a checkbox grid over `Constants.DietaryTags.All`, toggling membership in `_model.DietaryTags` (a plain `List<string>`, no multi-select `InputSelect` involved).
 - Cross-field pickup-window validation lives on the private `PackageFormModel : IValidatableObject` (pickup end must be after pickup start **and** in the future) — compared against `NowLocal`, a field the parent component keeps in sync with `ClientTimeZoneService`'s resolved local time, specifically so the "must be in the future" check uses the *viewer's* clock rather than the server's.
 - `Packages.razor` shows a 🔁 "Daily" badge next to any package whose `TemplateId` is set (`BACKEND_ARCHITECTURE.md` §3), plus a "Recurring templates" link to `/packages/templates` alongside the existing "Add Package" button.
@@ -541,9 +564,11 @@ The package is created first (same as the non-recurring path), then the template
 ```
 This is a **plain `<a href>`**, not a button wired to `OrderController` — it has to be, since `OrderExportController` is a real HTTP endpoint and the browser needs to treat the response as a downloadable file (see `BACKEND_ARCHITECTURE.md` §6). The rest of the page (search, status/business filters, confirm/complete/cancel actions) follows the identical `Debouncer`-gated paged-list pattern every other admin list page uses.
 
+A manager's `businessId` (both for the paged list and for `ExportHref` above) comes from `ManagedBusinessContext.SelectedBusinessId`, not a page-local dropdown — an admin instead picks from `_businessFilter`, a plain `<select>` over every business. `OnInitializedAsync` subscribes to `ManagedBusinessContext.OnChange` (`HandleManagedBusinessChanged`, resetting `_pageIndex` back to 1 before reloading) so switching businesses in `NavMenu` refreshes the order queue in place. If a manager staffs zero businesses, `GetOrdersForManagementPagedAsync` returns `UnauthorizedResult` and the page renders `ForbiddenPanel` ("You don't manage a business yet…") instead of an empty table.
+
 ### Users
 
-Admin-only role management. Two independent `AnchoredDropdown`s per row (role, and — only for `BusinessManager` rows — business assignment), deliberately mutually exclusive (`ToggleDropdown` closes the business dropdown and vice versa, so only one is ever open at a time). Role changes and business (re)assignments both re-fetch the manager list afterward, since `UserService.UpdateRoleAsync` can auto-release a business server-side as a side effect of a role change away from `BusinessManager` (see `BACKEND_ARCHITECTURE.md` §7) — the UI has no way to know that happened without asking again.
+Admin-only role management. Two independent `AnchoredDropdown`s per row (role, and — only for `BusinessManager` rows — business assignment), deliberately mutually exclusive (closing one when the other opens, so only one is ever open at a time). The business column is the same removable-chips-plus-add-dropdown shape `Businesses.razor`'s Staff column uses (§11 above), just inverted — one row per user, chips for every business they're staff of (`AssignedBusinesses(user.Id)`), and an "add business" `AnchoredDropdown` listing every business not already assigned that **stays open across multiple picks**, same as the Staff column. Both call the same `BusinessController.AddStaffAsync`/`RemoveStaffAsync` `Businesses.razor` does — there's exactly one staff-assignment backend surface, just two admin entry points into it (by business, or by user). Role changes and business (re)assignments both re-fetch the user list afterward, since `UserService.UpdateRoleAsync` can auto-release every business a user staffed server-side as a side effect of a role change away from `BusinessManager` (see `BACKEND_ARCHITECTURE.md` §7) — the UI has no way to know that happened without asking again.
 
 ---
 
@@ -621,10 +646,11 @@ window.EcoMeal = {
         render(elementId, markers) { /* creates/replaces a Leaflet map in #elementId, one pin per marker */ },
         destroy(elementId) { /* removes a previously rendered map instance, if any */ }
     },
-    cart: { save(key, json), load(key), clear(key) }   // thin localStorage wrapper, every call swallows exceptions
+    cart: { save(key, json), load(key), clear(key) },   // thin localStorage wrapper, every call swallows exceptions
+    managedBusiness: { save(key, businessId), load(key) }   // same wrapper shape, backs ManagedBusinessContext (§5)
 };
 ```
-Called via plain `IJSRuntime.InvokeAsync("EcoMeal.xyz", ...)` from C# (`AnchoredDropdown`, `ClientTimeZoneService`, `Home.razor`'s "near me"/map view, `BusinessForm.razor`'s "use my location") or inline `onclick="EcoMeal.cart.clear(...)"` HTML attributes (both layouts' logout buttons). No JS module isolation here — it's genuinely global, loaded once via a plain `<script>` tag, because every consumer needs it available synchronously from inline HTML attributes as well as from C#.
+Called via plain `IJSRuntime.InvokeAsync("EcoMeal.xyz", ...)` from C# (`AnchoredDropdown`, `ClientTimeZoneService`, `ManagedBusinessContext`, `Home.razor`'s "near me"/map view, `BusinessForm.razor`'s "use my location") or inline `onclick="EcoMeal.cart.clear(...)"` HTML attributes (both layouts' logout buttons). No JS module isolation here — it's genuinely global, loaded once via a plain `<script>` tag, because every consumer needs it available synchronously from inline HTML attributes as well as from C#.
 
 `geo.getPosition` wraps `navigator.geolocation.getCurrentPosition` in a `Promise` that always **resolves** (`null` on denial, timeout, or an unsupported browser) rather than ever rejecting — every C# caller (§6, §11) can `await` it and branch on a plain `null` check instead of wrapping the call in `try/catch`, and the UI degrades to an inline error message on any failure path instead of an unhandled exception. `map.render` lazily creates a `L.map(...)` the first time it's called for a given element ID and removes any previous instance first (`_instances[elementId]`), so repeatedly toggling `Home.razor`'s map view on/off doesn't leak Leaflet instances or double-initialize the same `<div>`. Each marker's popup HTML is built with a small hand-rolled `escapeHtml` — business names come from the database, not user input, but nothing stops an admin from typing HTML-significant characters into one, so the popup still escapes them rather than trusting the value.
 

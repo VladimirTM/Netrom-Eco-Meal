@@ -14,9 +14,16 @@ public static class DbSeeder
     private const string DemoCustomerPassword = "Demo123!";
     private const string DemoManagerEmail = "demo.manager@ecomeal.local";
     private const string DemoManagerPassword = "Demo123!";
+    // A second demo manager so a fresh database already demonstrates multiple staff per
+    // business (this one shares Stadionul de Gusturi with the first demo manager below).
+    private const string DemoManagerEmail2 = "demo.manager2@ecomeal.local";
+    private const string DemoManagerPassword2 = "Demo123!";
 
     // The managed business for the demo manager/orders below — Stadionul de Gusturi.
     private static readonly Guid DemoManagedBusinessId = new("44444444-0000-0000-0000-000000000001");
+    // The demo manager's second business — VAR Bistro — so the business switcher has something
+    // to switch between out of the box (demonstrates one staffer, multiple businesses).
+    private static readonly Guid DemoSecondBusinessId = new("44444444-0000-0000-0000-000000000002");
 
     public static async Task SeedAsync(IServiceProvider services, IConfiguration configuration)
     {
@@ -46,6 +53,7 @@ public static class DbSeeder
 
         var demoCustomer = await GetOrCreateUserAsync(userManager, DemoCustomerEmail, "Demo Customer", AppRoles.Customer, DemoCustomerPassword, logger);
         var demoManager = await GetOrCreateUserAsync(userManager, DemoManagerEmail, "Demo Manager", AppRoles.BusinessManager, DemoManagerPassword, logger);
+        var demoManager2 = await GetOrCreateUserAsync(userManager, DemoManagerEmail2, "Demo Manager Two", AppRoles.BusinessManager, DemoManagerPassword2, logger);
 
         var db = services.GetRequiredService<EcoMealDbContext>();
         await SeedBusinessTypesAsync(db);
@@ -54,6 +62,7 @@ public static class DbSeeder
         await SeedBusinessesAsync(db);
         await SeedPackagesAsync(db);
         await SeedPackageTemplateAsync(db);
+        await SeedBusinessStaffAsync(db, demoManager?.Id, demoManager2?.Id);
 
         if (demoCustomer is not null && demoManager is not null)
             await SeedDemoActivityAsync(db, demoCustomer, demoManager.Id);
@@ -332,6 +341,45 @@ public static class DbSeeder
         await db.SaveChangesAsync();
     }
 
+    // Staffs the two demo manager accounts across the demo businesses, demonstrating both
+    // directions of the many-to-many: demoManagerId works Stadionul de Gusturi AND VAR Bistro
+    // (one staffer, several businesses), while demoManager2Id joins demoManagerId at Stadionul
+    // de Gusturi (several staff, one business). Idempotent by (BusinessId, UserId) pair, same
+    // reconcile-don't-clobber style as the rest of this file.
+    private static async Task SeedBusinessStaffAsync(EcoMealDbContext db, string? demoManagerId, string? demoManager2Id)
+    {
+        var pairs = new List<(Guid BusinessId, string UserId)>();
+        if (demoManagerId is not null)
+        {
+            pairs.Add((DemoManagedBusinessId, demoManagerId));
+            pairs.Add((DemoSecondBusinessId, demoManagerId));
+        }
+        if (demoManager2Id is not null)
+            pairs.Add((DemoManagedBusinessId, demoManager2Id));
+
+        if (pairs.Count == 0) return;
+
+        var businessIds = pairs.Select(p => p.BusinessId).Distinct().ToList();
+        var existing = await db.BusinessStaff
+            .Where(s => businessIds.Contains(s.BusinessId))
+            .Select(s => new { s.BusinessId, s.UserId })
+            .ToListAsync();
+
+        var now = DateTime.UtcNow;
+        var added = false;
+        foreach (var (businessId, userId) in pairs)
+        {
+            if (existing.Any(e => e.BusinessId == businessId && e.UserId == userId))
+                continue;
+
+            db.BusinessStaff.Add(new BusinessStaff { Id = Guid.NewGuid(), BusinessId = businessId, UserId = userId, AssignedAt = now });
+            added = true;
+        }
+
+        if (added)
+            await db.SaveChangesAsync();
+    }
+
     // Gives the demo customer/manager accounts a lived-in history — orders in every status,
     // spread across the last 14 days so the dashboard trend chart and CSV export have something
     // to show, plus favorites/reviews/notifications. Guarded by "no orders exist yet" so it only
@@ -340,16 +388,12 @@ public static class DbSeeder
     {
         if (await db.Orders.AnyAsync()) return;
 
-        var managedBusiness = await db.Businesses.FindAsync(DemoManagedBusinessId);
-        if (managedBusiness is not null && managedBusiness.ManagerId is null)
-            managedBusiness.ManagerId = demoManagerId;
-
-        var b1 = DemoManagedBusinessId;                                    // Stadionul de Gusturi (managed)
-        var b2 = new Guid("44444444-0000-0000-0000-000000000002");         // VAR Bistro
-        var b3 = new Guid("44444444-0000-0000-0000-000000000003");         // Derby Deli
-        var b7 = new Guid("44444444-0000-0000-0000-000000000007");         // Extra Time Café
-        var b9 = new Guid("44444444-0000-0000-0000-000000000009");         // Fault Fresh Market
-        var b10 = new Guid("44444444-0000-0000-0000-000000000010");        // Penalty Pantry
+        var b1 = DemoManagedBusinessId;
+        var b2 = new Guid("44444444-0000-0000-0000-000000000002");
+        var b3 = new Guid("44444444-0000-0000-0000-000000000003");
+        var b7 = new Guid("44444444-0000-0000-0000-000000000007");
+        var b9 = new Guid("44444444-0000-0000-0000-000000000009");
+        var b10 = new Guid("44444444-0000-0000-0000-000000000010");
 
         var statusIdByName = await db.Statuses.ToDictionaryAsync(s => s.Name, s => s.Id);
         var packagesById = await db.Packages.ToDictionaryAsync(p => p.Id);

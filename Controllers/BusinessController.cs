@@ -15,14 +15,19 @@ public class BusinessController(IBusinessService businessService) : ControllerBa
         return await businessService.GetAllAsync();
     }
 
-    public async Task<ActionResult<PaginatedList<Business>>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? managerId = null, string? sortBy = null, bool favoritesOnly = false, double? customerLat = null, double? customerLng = null)
+    public async Task<ActionResult<PaginatedList<Business>>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, bool favoritesOnly = false, double? customerLat = null, double? customerLng = null)
     {
-        return await businessService.GetPagedAsync(pageIndex, pageSize, search, businessTypeId, managerId, sortBy, favoritesOnly, customerLat, customerLng);
+        return await businessService.GetPagedAsync(pageIndex, pageSize, search, businessTypeId, staffUserId, sortBy, favoritesOnly, customerLat, customerLng);
     }
 
     public async Task<ActionResult<Business?>> GetByIdAsync(Guid id)
     {
         return await businessService.GetByIdAsync(id);
+    }
+
+    public async Task<ActionResult<List<ApplicationUser>>> GetStaffAsync(Guid businessId)
+    {
+        return await businessService.GetStaffAsync(businessId);
     }
 
     public async Task<ActionResult> AddAsync(Business business)
@@ -43,9 +48,15 @@ public class BusinessController(IBusinessService businessService) : ControllerBa
         return NoContent();
     }
 
-    public async Task<ActionResult> AssignManagerAsync(Guid businessId, string? managerId)
+    public async Task<ActionResult> AddStaffAsync(Guid businessId, string userId)
     {
-        var success = await businessService.AssignManagerAsync(businessId, managerId);
+        var success = await businessService.AddStaffAsync(businessId, userId);
         return success ? NoContent() : Conflict();
+    }
+
+    public async Task<ActionResult> RemoveStaffAsync(Guid businessId, string userId)
+    {
+        var success = await businessService.RemoveStaffAsync(businessId, userId);
+        return success ? NoContent() : NotFound();
     }
 }

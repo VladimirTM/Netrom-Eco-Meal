@@ -79,8 +79,7 @@ public class PackageService(
         if (isAdmin)
             return;
 
-        var business = await businessService.GetByIdAsync(businessId);
-        if (business is null || business.ManagerId != userId)
+        if (userId is null || !await businessService.IsStaffAsync(businessId, userId))
             throw new UnauthorizedAccessException("You can only manage packages that belong to your business.");
     }
 

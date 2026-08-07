@@ -81,8 +81,9 @@ public class AuthService(
     public async Task RequestPasswordResetAsync(string email)
     {
         var user = await userManager.FindByEmailAsync(email);
+        // Don't reveal whether an account exists for this email.
         if (user is null)
-            return; // Don't reveal whether an account exists for this email.
+            return;
 
         var token = await userManager.GeneratePasswordResetTokenAsync(user);
         var link = $"{BaseUrl}/account/reset-password?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}";

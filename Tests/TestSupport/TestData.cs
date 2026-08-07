@@ -37,14 +37,21 @@ public static class TestData
     public static ApplicationUser User(string id = "user-1", string name = "Test User") =>
         new() { Id = id, UserName = $"{id}@test.local", Email = $"{id}@test.local", Name = name };
 
-    public static Business Business(Guid? id = null, string? managerId = null) => new()
+    public static Business Business(Guid? id = null) => new()
     {
         Id = id ?? Guid.NewGuid(),
         Name = "Test Business",
         Description = "A place that sells food",
         Address = "1 Test Street",
         BusinessTypeId = Guid.NewGuid(),
-        ManagerId = managerId,
+    };
+
+    public static BusinessStaff BusinessStaff(Guid businessId, string userId) => new()
+    {
+        Id = Guid.NewGuid(),
+        BusinessId = businessId,
+        UserId = userId,
+        AssignedAt = DateTime.UtcNow,
     };
 
     public static Package Package(Guid businessId, int quantity = 5, decimal weightKg = 1m) => new()

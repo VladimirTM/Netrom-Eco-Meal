@@ -14,6 +14,7 @@
 @inject IPackageTypeService PackageTypeService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ClientTimeZoneService ClientTimeZoneService
+@inject ManagedBusinessContext ManagedBusinessContext
 @attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
 
 <PageTitle>Packages — Eco Meal</PageTitle>
@@ -110,7 +111,7 @@
                 </tr>
                 </thead>
                 <tbody>
-                @* Managers only see packages belonging to their own business here. *@
+                @* Managers only see packages belonging to their currently selected business here. *@
                 @foreach (var package in _paged.Items)
                 {
                     var canManage = _isAdmin || (_isBusinessManager && package.BusinessId == _myBusinessId);
@@ -192,12 +193,14 @@
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var currentUserId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         _isAdmin = authState.User.IsInRole(AppRoles.Admin);
         _isBusinessManager = authState.User.IsInRole(AppRoles.BusinessManager);
 
-        if (_isBusinessManager && currentUserId is not null)
-            _myBusinessId = (await BusinessService.GetByManagerIdAsync(currentUserId))?.Id;
+        if (_isBusinessManager)
+        {
+            await ManagedBusinessContext.EnsureLoadedAsync();
+            _myBusinessId = ManagedBusinessContext.SelectedBusinessId;
+        }
 
         _allBusinesses = (await BusinessService.GetAllAsync())?.OrderBy(b => b.Name).ToList() ?? [];
         _packageTypes = (await PackageTypeService.GetAllAsync()).OrderBy(t => t.Name).ToList();
@@ -205,6 +208,18 @@
         await LoadPageAsync();
 
         ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
+        ManagedBusinessContext.OnChange += HandleManagedBusinessChanged;
+    }
+
+    private async void HandleManagedBusinessChanged()
+    {
+        _myBusinessId = ManagedBusinessContext.SelectedBusinessId;
+        _pageIndex = 1;
+        await InvokeAsync(async () =>
+        {
+            await LoadPageAsync();
+            StateHasChanged();
+        });
     }
 
     private async Task LoadPageAsync()
@@ -256,6 +271,7 @@
     public void Dispose()
     {
         ClientTimeZoneService.OnChange -= HandleTimeZoneChanged;
+        ManagedBusinessContext.OnChange -= HandleManagedBusinessChanged;
     }
 
     private Task ClearFiltersAsync()

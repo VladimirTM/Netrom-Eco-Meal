@@ -19,6 +19,7 @@ public class OrderServiceTests
     private const string CustomerId = "customer-1";
     private const string OtherCustomerId = "customer-2";
     private const string ManagerId = "manager-1";
+    private const string ManagerId2 = "manager-2";
     private const string AdminId = "admin-1";
 
     private sealed record Fixture(
@@ -120,7 +121,8 @@ public class OrderServiceTests
         await f.Db.SaveChangesAsync();
 
         var businessId = Guid.NewGuid();
-        var package = TestData.Package(Guid.NewGuid()); // belongs to a different business
+        // The package belongs to a different business than businessId.
+        var package = TestData.Package(Guid.NewGuid());
         f.PackageRepo.Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>())).ReturnsAsync([package]);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -164,7 +166,7 @@ public class OrderServiceTests
     }
 
     [Fact]
-    public async Task PlaceOrderAsync_Success_CreatesOrderAndNotifiesManager()
+    public async Task PlaceOrderAsync_Success_CreatesOrderAndNotifiesEveryStaffMember()
     {
         var f = Build(CustomerId, AppRoles.Customer);
         var user = TestData.User(CustomerId);
@@ -175,7 +177,9 @@ public class OrderServiceTests
         var package = TestData.Package(businessId, quantity: 5);
         f.PackageRepo.Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>())).ReturnsAsync([package]);
         f.BusinessService.Setup(b => b.GetByIdAsync(businessId))
-            .ReturnsAsync(TestData.Business(businessId, managerId: ManagerId));
+            .ReturnsAsync(TestData.Business(businessId));
+        f.BusinessService.Setup(b => b.GetStaffAsync(businessId))
+            .ReturnsAsync([TestData.User(ManagerId), TestData.User(ManagerId2)]);
 
         var order = await f.Service.PlaceOrderAsync(businessId, [new OrderLineRequest(package.Id, 2)]);
 
@@ -185,10 +189,11 @@ public class OrderServiceTests
         f.OrderRepo.Verify(r => r.AddAsync(order), Times.Once);
         f.OrderRepo.Verify(r => r.SaveChangesAsync(), Times.Once);
         f.NotificationService.Verify(n => n.CreateAsync(ManagerId, It.IsAny<string>(), It.IsAny<string>()), Times.Once);
+        f.NotificationService.Verify(n => n.CreateAsync(ManagerId2, It.IsAny<string>(), It.IsAny<string>()), Times.Once);
     }
 
     [Fact]
-    public async Task PlaceOrderAsync_BusinessWithoutManager_DoesNotNotify()
+    public async Task PlaceOrderAsync_BusinessWithoutStaff_DoesNotNotify()
     {
         var f = Build(CustomerId, AppRoles.Customer);
         var user = TestData.User(CustomerId);
@@ -199,7 +204,8 @@ public class OrderServiceTests
         var package = TestData.Package(businessId, quantity: 5);
         f.PackageRepo.Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>())).ReturnsAsync([package]);
         f.BusinessService.Setup(b => b.GetByIdAsync(businessId))
-            .ReturnsAsync(TestData.Business(businessId, managerId: null));
+            .ReturnsAsync(TestData.Business(businessId));
+        f.BusinessService.Setup(b => b.GetStaffAsync(businessId)).ReturnsAsync([]);
 
         await f.Service.PlaceOrderAsync(businessId, [new OrderLineRequest(package.Id, 1)]);
 
@@ -240,7 +246,8 @@ public class OrderServiceTests
             f.Service.UpdateStatusAsync(order.Id, OrderStatuses.Confirmed));
 
         Assert.Contains("Only 1 left", ex.Message);
-        Assert.Equal(1, package.Quantity); // untouched on failure
+        // Untouched on failure.
+        Assert.Equal(1, package.Quantity);
     }
 
     [Fact]
@@ -312,40 +319,27 @@ public class OrderServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatusAsync_ManagerOfDifferentBusiness_Throws()
+    public async Task UpdateStatusAsync_ManagerNotStaffOfOrdersBusiness_Throws()
     {
         var f = Build(ManagerId, AppRoles.BusinessManager);
-        var managedBusinessId = Guid.NewGuid();
-        f.BusinessService.Setup(b => b.GetByManagerIdAsync(ManagerId))
-            .ReturnsAsync(TestData.Business(managedBusinessId, ManagerId));
 
         var user = TestData.User(CustomerId);
         var otherBusinessId = Guid.NewGuid();
         var package = TestData.Package(otherBusinessId);
         var order = TestData.Order(user, otherBusinessId, OrderStatuses.Pending, (package, 1));
         f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+        f.BusinessService.Setup(b => b.IsStaffAsync(otherBusinessId, ManagerId)).ReturnsAsync(false);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             f.Service.UpdateStatusAsync(order.Id, OrderStatuses.Confirmed));
     }
 
     [Fact]
-    public async Task UpdateStatusAsync_ManagerNotAssignedToAnyBusiness_Throws()
-    {
-        var f = Build(ManagerId, AppRoles.BusinessManager);
-        f.BusinessService.Setup(b => b.GetByManagerIdAsync(ManagerId)).ReturnsAsync((Business?)null);
-
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            f.Service.UpdateStatusAsync(Guid.NewGuid(), OrderStatuses.Confirmed));
-    }
-
-    [Fact]
-    public async Task UpdateStatusAsync_ManagerOfOwnBusiness_Succeeds()
+    public async Task UpdateStatusAsync_ManagerStaffOfOrdersBusiness_Succeeds()
     {
         var f = Build(ManagerId, AppRoles.BusinessManager);
         var businessId = Guid.NewGuid();
-        f.BusinessService.Setup(b => b.GetByManagerIdAsync(ManagerId))
-            .ReturnsAsync(TestData.Business(businessId, ManagerId));
+        f.BusinessService.Setup(b => b.IsStaffAsync(businessId, ManagerId)).ReturnsAsync(true);
 
         var user = TestData.User(CustomerId);
         var package = TestData.Package(businessId, quantity: 5);
@@ -355,6 +349,47 @@ public class OrderServiceTests
         var result = await f.Service.UpdateStatusAsync(order.Id, OrderStatuses.Confirmed);
 
         Assert.Equal(TestStatusIds.Confirmed, result.StatusId);
+    }
+
+    [Fact]
+    public async Task UpdateStatusAsync_ManagerStaffOfSecondBusiness_Succeeds()
+    {
+        // A single manager can now staff more than one business — confirming an order for
+        // whichever one they're staff of (not just a single "own business") must work.
+        var f = Build(ManagerId, AppRoles.BusinessManager);
+        var firstBusinessId = Guid.NewGuid();
+        var secondBusinessId = Guid.NewGuid();
+        f.BusinessService.Setup(b => b.IsStaffAsync(firstBusinessId, ManagerId)).ReturnsAsync(true);
+        f.BusinessService.Setup(b => b.IsStaffAsync(secondBusinessId, ManagerId)).ReturnsAsync(true);
+
+        var user = TestData.User(CustomerId);
+        var package = TestData.Package(secondBusinessId, quantity: 5);
+        var order = TestData.Order(user, secondBusinessId, OrderStatuses.Pending, (package, 1));
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        var result = await f.Service.UpdateStatusAsync(order.Id, OrderStatuses.Confirmed);
+
+        Assert.Equal(TestStatusIds.Confirmed, result.StatusId);
+    }
+
+    [Fact]
+    public async Task GetOrdersForManagementAsync_ManagerWithoutBusinessId_Throws()
+    {
+        var f = Build(ManagerId, AppRoles.BusinessManager);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            f.Service.GetOrdersForManagementAsync(null));
+    }
+
+    [Fact]
+    public async Task GetOrdersForManagementAsync_ManagerNotStaffOfRequestedBusiness_Throws()
+    {
+        var f = Build(ManagerId, AppRoles.BusinessManager);
+        var businessId = Guid.NewGuid();
+        f.BusinessService.Setup(b => b.IsStaffAsync(businessId, ManagerId)).ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            f.Service.GetOrdersForManagementAsync(businessId));
     }
 
     // ---- CancelMyOrderAsync -------------------------------------------------

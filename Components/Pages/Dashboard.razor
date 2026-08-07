@@ -8,14 +8,17 @@
 @using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services
 @using Netrom_Eco_Meal.Services.Interfaces
 @rendermode InteractiveServer
+@implements IDisposable
 @inject BusinessController BusinessController
 @inject PackageController PackageController
 @inject OrderController OrderController
 @inject IBusinessService BusinessService
 @inject UserManager<ApplicationUser> UserManager
 @inject AuthenticationStateProvider AuthStateProvider
+@inject ManagedBusinessContext ManagedBusinessContext
 @attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
 
 <PageTitle>Dashboard — Eco Meal</PageTitle>
@@ -234,39 +237,64 @@
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         _isAdmin = authState.User.IsInRole(AppRoles.Admin);
-        var currentUserId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
+        if (!_isAdmin)
+        {
+            await ManagedBusinessContext.EnsureLoadedAsync();
+            ManagedBusinessContext.OnChange += HandleManagedBusinessChanged;
+        }
+
+        await LoadDashboardAsync();
+    }
+
+    private async Task LoadDashboardAsync()
+    {
         var allPackages = (await PackageController.GetAllAsync()).Value ?? [];
 
-        // Business managers only see counts scoped to their own business, not platform-wide totals.
+        Guid? myBusinessId = null;
+
+        // Business managers only see counts scoped to their currently selected business, not
+        // platform-wide totals.
         if (_isAdmin)
         {
             _businessCount = (await BusinessController.GetAllAsync()).Value?.Count;
             _packageCount = allPackages.Count;
             _userCount = await UserManager.Users.CountAsync();
         }
-        else if (currentUserId is not null)
+        else
         {
-            var myBusiness = await BusinessService.GetByManagerIdAsync(currentUserId);
-            _packageCount = myBusiness is null ? 0 : allPackages.Count(p => p.BusinessId == myBusiness.Id);
+            myBusinessId = ManagedBusinessContext.SelectedBusinessId;
+            _packageCount = myBusinessId is null ? 0 : allPackages.Count(p => p.BusinessId == myBusinessId);
         }
 
-        var orders = await OrderController.GetOrdersForManagementAsync();
+        var orders = await OrderController.GetOrdersForManagementAsync(myBusinessId);
         if (orders.Result is UnauthorizedResult)
         {
             _ordersUnavailable = true;
             return;
         }
 
+        _ordersUnavailable = false;
         _orderCount = orders.Value?.Count ?? 0;
-        await LoadDailyStatsAsync();
+        await LoadDailyStatsAsync(myBusinessId);
     }
 
-    private async Task LoadDailyStatsAsync()
+    private void HandleManagedBusinessChanged() => InvokeAsync(async () =>
+    {
+        await LoadDashboardAsync();
+        StateHasChanged();
+    });
+
+    public void Dispose()
+    {
+        ManagedBusinessContext.OnChange -= HandleManagedBusinessChanged;
+    }
+
+    private async Task LoadDailyStatsAsync(Guid? businessId)
     {
         // Bucketed in UTC, not local time — good enough for a trend shape, no JS interop needed.
         var since = DateTime.UtcNow.Date.AddDays(-13);
-        var rangeOrders = (await OrderController.GetOrdersInRangeAsync(since, null)).Value ?? [];
+        var rangeOrders = (await OrderController.GetOrdersInRangeAsync(since, null, businessId)).Value ?? [];
 
         _dailyStats = Enumerable.Range(0, 14)
             .Select(i => since.AddDays(i))

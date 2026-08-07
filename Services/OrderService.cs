@@ -86,11 +86,15 @@ public class OrderService(
         await orderRepository.SaveChangesAsync();
 
         var business = await businessService.GetByIdAsync(businessId);
-        if (business?.ManagerId is not null)
+        if (business is not null)
         {
-            await notificationService.CreateAsync(business.ManagerId,
-                $"New order #{order.OrderNumber:000} from {user.Name} at {business.Name} needs confirmation.",
-                "/orders/manage");
+            var staff = await businessService.GetStaffAsync(businessId);
+            foreach (var staffMember in staff)
+            {
+                await notificationService.CreateAsync(staffMember.Id,
+                    $"New order #{order.OrderNumber:000} from {user.Name} at {business.Name} needs confirmation.",
+                    "/orders/manage");
+            }
         }
 
         return order;
@@ -108,10 +112,14 @@ public class OrderService(
         return await orderRepository.GetByUserIdAsync(userId);
     }
 
-    public async Task<List<Order>> GetOrdersForManagementAsync()
+    public async Task<List<Order>> GetOrdersForManagementAsync(Guid? businessId)
     {
-        var (isAdmin, business) = await ResolveManagedBusinessAsync();
-        return isAdmin ? await orderRepository.GetAllAsync() : await orderRepository.GetByBusinessIdAsync(business!.Id);
+        var (isAdmin, userId) = await currentUser.GetCurrentUserAsync();
+        if (isAdmin)
+            return businessId is null ? await orderRepository.GetAllAsync() : await orderRepository.GetByBusinessIdAsync(businessId.Value);
+
+        var managedBusinessId = await ResolveManagerBusinessIdAsync(userId, businessId);
+        return await orderRepository.GetByBusinessIdAsync(managedBusinessId);
     }
 
     public async Task<PaginatedList<Order>> GetMyOrdersPagedAsync(int pageIndex, int pageSize, string? status)
@@ -128,16 +136,16 @@ public class OrderService(
 
     public async Task<PaginatedList<Order>> GetOrdersForManagementPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessId, string? status)
     {
-        var (isAdmin, business) = await ResolveManagedBusinessAsync();
-        var effectiveBusinessId = isAdmin ? businessId : business!.Id;
+        var (isAdmin, userId) = await currentUser.GetCurrentUserAsync();
+        var effectiveBusinessId = isAdmin ? businessId : await ResolveManagerBusinessIdAsync(userId, businessId);
 
         return await orderRepository.GetPagedForManagementAsync(pageIndex, pageSize, search, effectiveBusinessId, status);
     }
 
     public async Task<List<Order>> GetOrdersInRangeAsync(DateTime? from, DateTime? to, Guid? businessId = null)
     {
-        var (isAdmin, business) = await ResolveManagedBusinessAsync();
-        var effectiveBusinessId = isAdmin ? businessId : business!.Id;
+        var (isAdmin, userId) = await currentUser.GetCurrentUserAsync();
+        var effectiveBusinessId = isAdmin ? businessId : await ResolveManagerBusinessIdAsync(userId, businessId);
 
         return await orderRepository.GetInRangeAsync(effectiveBusinessId, from, to);
     }
@@ -352,29 +360,35 @@ public class OrderService(
     // status-change path and the QR validation page's read, so the check can't drift out of sync.
     private async Task<Order> GetOwnedOrderAsync(Guid orderId)
     {
-        var (isAdmin, business) = await ResolveManagedBusinessAsync();
-
         var order = await orderRepository.GetByIdAsync(orderId)
             ?? throw new InvalidOperationException("This order no longer exists.");
 
-        if (!isAdmin && order.BusinessId != business!.Id)
-            throw new UnauthorizedAccessException("You can only manage orders that belong to your business.");
+        var (isAdmin, userId) = await currentUser.GetCurrentUserAsync();
+        if (!isAdmin)
+        {
+            if (userId is null || !await currentUser.IsInRoleAsync(AppRoles.BusinessManager))
+                throw new UnauthorizedAccessException("Only business managers can manage orders.");
+
+            if (!await businessService.IsStaffAsync(order.BusinessId, userId))
+                throw new UnauthorizedAccessException("You can only manage orders that belong to your business.");
+        }
 
         return order;
     }
 
-    private async Task<(bool IsAdmin, Business? Business)> ResolveManagedBusinessAsync()
+    // Validates and resolves which business a manager (who may now staff more than one) is
+    // acting on — the caller must say which one, since it's no longer a single implicit answer.
+    private async Task<Guid> ResolveManagerBusinessIdAsync(string? userId, Guid? requestedBusinessId)
     {
-        var (isAdmin, userId) = await currentUser.GetCurrentUserAsync();
-        if (isAdmin)
-            return (true, null);
-
         if (userId is null || !await currentUser.IsInRoleAsync(AppRoles.BusinessManager))
             throw new UnauthorizedAccessException("Only business managers can manage orders.");
 
-        var business = await businessService.GetByManagerIdAsync(userId)
-            ?? throw new UnauthorizedAccessException("You aren't assigned to manage a business yet.");
+        if (requestedBusinessId is null)
+            throw new UnauthorizedAccessException("Select which business to manage.");
 
-        return (false, business);
+        if (!await businessService.IsStaffAsync(requestedBusinessId.Value, userId))
+            throw new UnauthorizedAccessException("You aren't assigned to manage that business.");
+
+        return requestedBusinessId.Value;
     }
 }

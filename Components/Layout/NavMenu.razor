@@ -1,7 +1,9 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Services
+@implements IDisposable
 @inject CartService CartService
+@inject ManagedBusinessContext ManagedBusinessContext
 
 <div class="sidebar-brand py-4">
     <a href="" class="text-decoration-none d-flex align-items-center justify-content-center gap-2">
@@ -18,6 +20,45 @@
 @* Closes the mobile nav toggle after any link click inside. *@
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="nav flex-column px-2 pb-3">
+        <AuthorizeView Roles="@AppRoles.BusinessManager">
+            <Authorized>
+                @if (ManagedBusinessContext.MyBusinesses.Count > 1)
+                {
+                    <div class="nav-item position-relative px-2 pb-2">
+                        <AnchoredDropdown TriggerClass="role-badge role-badge-businessmanager w-100 d-flex justify-content-between align-items-center"
+                                          Title="Switch business"
+                                          IsOpen="_businessSwitcherOpen"
+                                          OnToggle="ToggleBusinessSwitcher"
+                                          OnClose="CloseBusinessSwitcher">
+                            <Trigger>
+                                <span class="text-truncate">@SelectedBusinessName</span>
+                                <i class="bi bi-chevron-down" style="font-size:0.65rem;"></i>
+                            </Trigger>
+                            <Content>
+                                @foreach (var business in ManagedBusinessContext.MyBusinesses)
+                                {
+                                    <button type="button" class="role-option" @onclick="() => SelectBusinessAsync(business.Id)">
+                                        <span class="role-option-dot" style="background-color:#2563eb"></span>
+                                        @business.Name
+                                        @if (business.Id == ManagedBusinessContext.SelectedBusinessId)
+                                        {
+                                            <i class="bi bi-check-lg ms-auto text-muted"></i>
+                                        }
+                                    </button>
+                                }
+                            </Content>
+                        </AnchoredDropdown>
+                    </div>
+                }
+                else if (ManagedBusinessContext.MyBusinesses.Count == 1)
+                {
+                    <div class="nav-item px-2 pb-2 text-white-50 small text-truncate">
+                        <i class="bi bi-building me-2"></i>@SelectedBusinessName
+                    </div>
+                }
+            </Authorized>
+        </AuthorizeView>
+
         <div class="nav-section-label">Main</div>
 
         <div class="nav-item">
@@ -86,6 +127,37 @@
 </AuthorizeView>
 
 @code {
+    private bool _businessSwitcherOpen;
+
+    private string SelectedBusinessName =>
+        ManagedBusinessContext.MyBusinesses.FirstOrDefault(b => b.Id == ManagedBusinessContext.SelectedBusinessId)?.Name
+        ?? "Select a business";
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Harmless no-op for admins/customers — resolves to an empty business list, so the
+        // switcher above simply never renders for them.
+        await ManagedBusinessContext.EnsureLoadedAsync();
+        ManagedBusinessContext.OnChange += HandleManagedBusinessChanged;
+    }
+
+    private void HandleManagedBusinessChanged() => InvokeAsync(StateHasChanged);
+
+    private void ToggleBusinessSwitcher() => _businessSwitcherOpen = !_businessSwitcherOpen;
+
+    private void CloseBusinessSwitcher() => _businessSwitcherOpen = false;
+
+    private async Task SelectBusinessAsync(Guid businessId)
+    {
+        _businessSwitcherOpen = false;
+        await ManagedBusinessContext.SelectAsync(businessId);
+    }
+
+    public void Dispose()
+    {
+        ManagedBusinessContext.OnChange -= HandleManagedBusinessChanged;
+    }
+
     // Falls back to "Signed in" for any authenticated role not named above.
     private static string DisplayRole(System.Security.Claims.ClaimsPrincipal user) => user switch
     {

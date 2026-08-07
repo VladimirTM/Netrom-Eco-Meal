@@ -13,6 +13,7 @@
 @inject IBusinessService BusinessService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ClientTimeZoneService ClientTimeZoneService
+@inject ManagedBusinessContext ManagedBusinessContext
 @attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
 
 <PageTitle>Manage Orders — Eco Meal</PageTitle>
@@ -238,6 +239,8 @@
                 query.Add($"to={to.AddDays(1):yyyy-MM-dd}");
             if (_isAdmin && Guid.TryParse(_businessFilter, out var businessId))
                 query.Add($"businessId={businessId}");
+            else if (!_isAdmin && ManagedBusinessContext.SelectedBusinessId is { } selectedBusinessId)
+                query.Add($"businessId={selectedBusinessId}");
 
             return "/api/orders/export" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
         }
@@ -250,6 +253,8 @@
 
         if (_isAdmin)
             _allBusinesses = (await BusinessService.GetAllAsync()).OrderBy(b => b.Name).ToList();
+        else
+            await ManagedBusinessContext.EnsureLoadedAsync();
 
         await LoadPageAsync();
 
@@ -257,11 +262,14 @@
             return;
 
         ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
+        ManagedBusinessContext.OnChange += HandleManagedBusinessChanged;
     }
 
     private async Task LoadPageAsync()
     {
-        Guid? businessId = Guid.TryParse(_businessFilter, out var bId) ? bId : null;
+        Guid? businessId = _isAdmin
+            ? (Guid.TryParse(_businessFilter, out var bId) ? bId : null)
+            : ManagedBusinessContext.SelectedBusinessId;
         var result = await OrderController.GetOrdersForManagementPagedAsync(_pageIndex, PageSize, _search, businessId, _statusFilter == "" ? null : _statusFilter);
         if (result.Result is UnauthorizedResult)
         {
@@ -275,9 +283,20 @@
 
     private void HandleTimeZoneChanged() => InvokeAsync(StateHasChanged);
 
+    private async void HandleManagedBusinessChanged()
+    {
+        _pageIndex = 1;
+        await InvokeAsync(async () =>
+        {
+            await LoadPageAsync();
+            StateHasChanged();
+        });
+    }
+
     public void Dispose()
     {
         ClientTimeZoneService.OnChange -= HandleTimeZoneChanged;
+        ManagedBusinessContext.OnChange -= HandleManagedBusinessChanged;
     }
 
     private Task ReloadAsync(int delayMs = 0) => _reloadGate.DebounceAsync(LoadPageAsync, delayMs);

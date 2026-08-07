@@ -98,12 +98,12 @@ public class UserService(
         await userManager.RemoveFromRolesAsync(user, currentRoles);
         await userManager.AddToRoleAsync(user, role);
 
-        // Moving away from BusinessManager releases whatever business they managed.
+        // Moving away from BusinessManager releases every business they were staff of.
         if (role != AppRoles.BusinessManager)
         {
-            var managedBusiness = await businessService.GetByManagerIdAsync(userId);
-            if (managedBusiness is not null)
-                await businessService.AssignManagerAsync(managedBusiness.Id, null);
+            var staffedBusinesses = await businessService.GetByStaffUserIdAsync(userId);
+            foreach (var business in staffedBusinesses)
+                await businessService.RemoveStaffAsync(business.Id, userId);
         }
 
         return true;

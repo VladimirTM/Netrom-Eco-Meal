@@ -12,6 +12,7 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
     }
 
     public DbSet<Business> Businesses { get; set; }
+    public DbSet<BusinessStaff> BusinessStaff { get; set; }
     public DbSet<BusinessType> BusinessTypes { get; set; }
     public DbSet<Order> Orders { get; set; }
     public DbSet<OrderPackage> OrderPackages { get; set; }
@@ -27,15 +28,23 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.Entity<Business>()
-            .HasOne(b => b.Manager)
-            .WithMany()
-            .HasForeignKey(b => b.ManagerId)
-            .OnDelete(DeleteBehavior.SetNull);
-
-        modelBuilder.Entity<Business>()
-            .HasIndex(b => b.ManagerId)
+        // A business can have several staff, and a staff member can be assigned to several
+        // businesses — only the (BusinessId, UserId) pair itself needs to stay unique.
+        modelBuilder.Entity<BusinessStaff>()
+            .HasIndex(s => new { s.BusinessId, s.UserId })
             .IsUnique();
+
+        modelBuilder.Entity<BusinessStaff>()
+            .HasOne(s => s.Business)
+            .WithMany(b => b.Staff)
+            .HasForeignKey(s => s.BusinessId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<BusinessStaff>()
+            .HasOne(s => s.User)
+            .WithMany()
+            .HasForeignKey(s => s.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // DB sequence instead of app-side MAX+1 so concurrent checkouts can't collide on a number.
         modelBuilder.HasSequence<int>("order_numbers").StartsAt(1);

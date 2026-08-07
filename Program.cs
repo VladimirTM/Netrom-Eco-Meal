@@ -67,6 +67,7 @@ builder.Services.AddScoped<IAppEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<CurrentUserAccessor>();
 builder.Services.AddScoped<CartService>();
 builder.Services.AddScoped<ClientTimeZoneService>();
+builder.Services.AddScoped<ManagedBusinessContext>();
 builder.Services.AddControllers();
 builder.Services.AddScoped<BusinessController>();
 builder.Services.AddScoped<PackageController>();

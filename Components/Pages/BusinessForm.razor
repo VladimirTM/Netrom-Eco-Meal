@@ -10,6 +10,7 @@
 @using Netrom_Eco_Meal.Services.Interfaces
 @rendermode InteractiveServer
 @inject BusinessController BusinessController
+@inject IBusinessService BusinessService
 @inject IBusinessTypeService BusinessTypeService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
@@ -156,7 +157,7 @@
                 return;
             }
 
-            if (!isAdmin && existing.ManagerId != currentUserId)
+            if (!isAdmin && (currentUserId is null || !await BusinessService.IsStaffAsync(existing.Id, currentUserId)))
             {
                 _forbidden = true;
                 return;
