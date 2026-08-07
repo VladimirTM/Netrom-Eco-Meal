@@ -164,6 +164,7 @@ public class OrderRepository(EcoMealDbContext context) : IOrderRepository
             .Include(o => o.User)
             .Include(o => o.Business)
             .Include(o => o.Status)
+            .Include(o => o.Payment)
             .Include(o => o.OrderPackages)
             .ThenInclude(op => op.Package)
             .ThenInclude(p => p.Business);

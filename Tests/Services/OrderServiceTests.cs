@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Database;
@@ -29,6 +30,7 @@ public class OrderServiceTests
         Mock<IBusinessService> BusinessService,
         Mock<INotificationService> NotificationService,
         Mock<IAppEmailSender> EmailSender,
+        Mock<IStripeGateway> StripeGateway,
         EcoMealDbContext Db);
 
     private static Fixture Build(string? userId, params string[] roles)
@@ -39,13 +41,14 @@ public class OrderServiceTests
         var businessService = new Mock<IBusinessService>();
         var notificationService = new Mock<INotificationService>();
         var emailSender = new Mock<IAppEmailSender>();
+        var stripeGateway = new Mock<IStripeGateway>();
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
 
         var service = new OrderService(
             orderRepo.Object, packageRepo.Object, businessService.Object, notificationService.Object,
-            emailSender.Object, db, currentUser);
+            emailSender.Object, stripeGateway.Object, db, currentUser, NullLogger<OrderService>.Instance);
 
-        return new Fixture(service, orderRepo, packageRepo, businessService, notificationService, emailSender, db);
+        return new Fixture(service, orderRepo, packageRepo, businessService, notificationService, emailSender, stripeGateway, db);
     }
 
     // ---- PlaceOrderAsync ---------------------------------------------------
@@ -283,6 +286,31 @@ public class OrderServiceTests
     }
 
     [Fact]
+    public async Task UpdateStatusAsync_ConfirmedToCancelled_RefundsPaidOrder()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 3);
+        var order = TestData.Order(user, businessId, OrderStatuses.Confirmed, (package, 2));
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+        f.Db.Payments.Add(new Payment
+        {
+            Id = Guid.NewGuid(), OrderId = order.Id, Amount = 20m, Currency = "ron",
+            StripeCheckoutSessionId = "cs_test", StripePaymentIntentId = "pi_test",
+            Status = PaymentStatuses.Succeeded, CreatedAt = DateTime.UtcNow,
+        });
+        await f.Db.SaveChangesAsync();
+
+        await f.Service.UpdateStatusAsync(order.Id, OrderStatuses.Cancelled);
+
+        f.StripeGateway.Verify(s => s.RefundAsync("pi_test"), Times.Once);
+        var payment = await f.Db.Payments.FirstAsync(p => p.OrderId == order.Id);
+        Assert.Equal(PaymentStatuses.Refunded, payment.Status);
+        Assert.NotNull(payment.RefundedAt);
+    }
+
+    [Fact]
     public async Task UpdateStatusAsync_ConfirmedToNoShow_RestoresStock()
     {
         var f = Build(AdminId, AppRoles.Admin);
@@ -297,6 +325,31 @@ public class OrderServiceTests
         Assert.Equal(TestStatusIds.NoShow, result.StatusId);
         Assert.Equal(5, package.Quantity);
         f.NotificationService.Verify(n => n.CreateAsync(user.Id, It.Is<string>(m => m.Contains("no-show")), It.IsAny<string>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateStatusAsync_ConfirmedToNoShow_DoesNotRefund()
+    {
+        // No-show deliberately keeps the charge — that's the no-show fee (see RefundIfPaidAsync).
+        var f = Build(AdminId, AppRoles.Admin);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 3);
+        var order = TestData.Order(user, businessId, OrderStatuses.Confirmed, (package, 2));
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+        f.Db.Payments.Add(new Payment
+        {
+            Id = Guid.NewGuid(), OrderId = order.Id, Amount = 20m, Currency = "ron",
+            StripeCheckoutSessionId = "cs_test", StripePaymentIntentId = "pi_test",
+            Status = PaymentStatuses.Succeeded, CreatedAt = DateTime.UtcNow,
+        });
+        await f.Db.SaveChangesAsync();
+
+        await f.Service.UpdateStatusAsync(order.Id, OrderStatuses.NoShow);
+
+        f.StripeGateway.Verify(s => s.RefundAsync(It.IsAny<string>()), Times.Never);
+        var payment = await f.Db.Payments.FirstAsync(p => p.OrderId == order.Id);
+        Assert.Equal(PaymentStatuses.Succeeded, payment.Status);
     }
 
     [Theory]
@@ -445,6 +498,32 @@ public class OrderServiceTests
         Assert.All(stale, o => Assert.Equal(TestStatusIds.Cancelled, o.StatusId));
         f.OrderRepo.Verify(r => r.SaveChangesAsync(), Times.Once);
         f.NotificationService.Verify(n => n.CreateAsync(user.Id, It.IsAny<string>(), It.IsAny<string>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task ExpireStalePendingOrdersAsync_RefundsPaidOrders()
+    {
+        // Pending orders are only ever created after a successful Stripe payment (see
+        // CheckoutService), so an auto-expired one needs refunding just like a manual cancel.
+        var f = Build(null);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        var stale = TestData.Order(user, businessId, OrderStatuses.Pending, (package, 1));
+        f.OrderRepo.Setup(r => r.GetStalePendingOrdersAsync(It.IsAny<DateTime>())).ReturnsAsync([stale]);
+        f.Db.Payments.Add(new Payment
+        {
+            Id = Guid.NewGuid(), OrderId = stale.Id, Amount = 10m, Currency = "ron",
+            StripeCheckoutSessionId = "cs_test", StripePaymentIntentId = "pi_test",
+            Status = PaymentStatuses.Succeeded, CreatedAt = DateTime.UtcNow,
+        });
+        await f.Db.SaveChangesAsync();
+
+        await f.Service.ExpireStalePendingOrdersAsync();
+
+        f.StripeGateway.Verify(s => s.RefundAsync("pi_test"), Times.Once);
+        var payment = await f.Db.Payments.FirstAsync(p => p.OrderId == stale.Id);
+        Assert.Equal(PaymentStatuses.Refunded, payment.Status);
     }
 
     [Fact]

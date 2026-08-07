@@ -1,0 +1,103 @@
+@page "/checkout/return"
+@layout EmptyLayout
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Mvc
+@using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services
+@rendermode InteractiveServer
+@inject PaymentController PaymentController
+@inject CartService CartService
+@attribute [Authorize(Roles = AppRoles.Customer)]
+
+<PageTitle>Payment — Eco Meal</PageTitle>
+
+<div class="login-page">
+    <div class="login-card">
+        <div class="login-brand">
+            <img src="logo.png" alt="Eco Meal" class="login-logo"/>
+            <div>
+                <div class="login-brand-name">Eco Meal</div>
+                <div class="login-brand-sub">Surplus food, rescued</div>
+            </div>
+        </div>
+
+        @if (_loading)
+        {
+            <div class="cart-confirmation">
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Confirming payment...</span>
+                </div>
+                <p class="mb-0">Confirming your payment…</p>
+            </div>
+        }
+        else if (_success)
+        {
+            <div class="cart-confirmation">
+                <i class="bi bi-check-circle-fill"></i>
+                <h3>Order #@_order?.OrderNumber.ToString("000") placed</h3>
+                <p>@_order?.Business.Name has your order — head over at pickup time to collect it.</p>
+                @if (_kgSaved is > 0)
+                {
+                    <p class="cart-confirmation-impact"><i class="bi bi-leaf"></i> ~@_kgSaved.Value.ToString("0.#") kg of food saved from waste</p>
+                }
+                <a class="btn btn-primary w-100 py-2 fw-semibold" href="/orders">View my orders</a>
+            </div>
+        }
+        else
+        {
+            <h1 class="login-heading">Payment couldn't be confirmed</h1>
+            <div class="alert alert-danger py-2 small mb-3" role="alert">@_message</div>
+            <a class="btn btn-primary w-100 py-2 fw-semibold" href="/">Back to browsing</a>
+        }
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "pc")]
+    public Guid? Pc { get; set; }
+
+    [SupplyParameterFromQuery(Name = "session_id")]
+    public string? SessionId { get; set; }
+
+    private bool _loading = true;
+    private bool _success;
+    private string _message = "This payment link is invalid.";
+    private Order? _order;
+    private decimal? _kgSaved;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Pc is null || string.IsNullOrWhiteSpace(SessionId))
+        {
+            _loading = false;
+            return;
+        }
+
+        var result = await PaymentController.CompleteCheckoutAsync(Pc.Value, SessionId);
+
+        // PaymentController returns Unauthorized() if this checkout belongs to a different user.
+        if (result.Result is UnauthorizedResult)
+        {
+            _message = "This payment doesn't belong to your account.";
+        }
+        else if (result.Value is { Success: true } completion)
+        {
+            _success = true;
+            _order = completion.Order;
+            _kgSaved = completion.KgSaved;
+
+            // The basket that was checked out is now a real order — clear it so it doesn't
+            // linger and get re-submitted from a stale browser tab.
+            await CartService.RestoreAsync();
+            await CartService.ClearAsync();
+        }
+        else if (result.Value is not null)
+        {
+            _message = result.Value.Message;
+        }
+
+        _loading = false;
+    }
+}

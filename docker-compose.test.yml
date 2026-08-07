@@ -40,6 +40,11 @@ services:
       Email__FromName: "Eco Meal"
       Email__Smtp__Host: mailpit
       Email__Smtp__Port: "1025"
+      # Empty by default — checkout shows a "payments aren't configured yet" error until a real
+      # Stripe test-mode secret key (sk_test_...) is supplied here. Get one free from
+      # https://dashboard.stripe.com/test/apikeys; no live/production key is ever needed for this app.
+      Stripe__SecretKey: ""
+      Stripe__Currency: "ron"
     ports:
       - "8081:8080"
     depends_on:

@@ -15,8 +15,10 @@ public class OrderService(
     IBusinessService businessService,
     INotificationService notificationService,
     IAppEmailSender emailSender,
+    IStripeGateway stripeGateway,
     EcoMealDbContext dbContext,
-    CurrentUserAccessor currentUser) : IOrderService
+    CurrentUserAccessor currentUser,
+    ILogger<OrderService> logger) : IOrderService
 {
     public async Task<Order> PlaceOrderAsync(Guid businessId, List<OrderLineRequest> lines)
     {
@@ -195,6 +197,7 @@ public class OrderService(
         foreach (var order in staleOrders)
         {
             order.StatusId = cancelledStatus.Id;
+            await RefundIfPaidAsync(order);
             var message = $"Order #{order.OrderNumber:000} at {order.Business.Name} was automatically cancelled because it wasn't confirmed in time.";
             await notificationService.CreateAsync(order.UserId, message, "/orders");
             await SendCustomerEmailAsync(order, "Order cancelled", message);
@@ -265,6 +268,26 @@ public class OrderService(
         await emailSender.SendEmailAsync(order.User.Email, $"Eco Meal — {subject}", html);
     }
 
+    // Best-effort, same reasoning as SendCustomerEmailAsync — a Stripe outage shouldn't block the
+    // cancellation itself; the order still needs to come off the books either way.
+    private async Task RefundIfPaidAsync(Order order)
+    {
+        var payment = await dbContext.Payments.FirstOrDefaultAsync(p => p.OrderId == order.Id && p.Status == PaymentStatuses.Succeeded);
+        if (payment?.StripePaymentIntentId is null)
+            return;
+
+        try
+        {
+            await stripeGateway.RefundAsync(payment.StripePaymentIntentId);
+            payment.Status = PaymentStatuses.Refunded;
+            payment.RefundedAt = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to refund payment {PaymentId} for order #{OrderNumber:000}.", payment.Id, order.OrderNumber);
+        }
+    }
+
     public async Task<Dictionary<Guid, int>> GetPendingReservedQuantitiesAsync(IEnumerable<Guid> packageIds)
     {
         return await orderRepository.GetPendingQuantitiesByPackageIdsAsync(packageIds);
@@ -326,6 +349,12 @@ public class OrderService(
             foreach (var line in order.OrderPackages)
                 line.Package.Quantity += line.Quantity;
         }
+
+        // Refund on Cancelled, whichever state it came from — but deliberately not on NoShow: the
+        // customer already reserved/held the food and didn't collect it, so the kept charge is the
+        // no-show fee FEATURE_IDEAS.md calls for, with no extra fee-specific code needed.
+        if (statusName == OrderStatuses.Cancelled)
+            await RefundIfPaidAsync(order);
 
         order.StatusId = targetStatus.Id;
 

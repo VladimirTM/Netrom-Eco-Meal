@@ -398,8 +398,13 @@ public static class DbSeeder
         var statusIdByName = await db.Statuses.ToDictionaryAsync(s => s.Name, s => s.Id);
         var packagesById = await db.Packages.ToDictionaryAsync(p => p.Id);
         var now = DateTime.UtcNow;
+        var payments = new List<Payment>();
 
-        Order MakeOrder(Guid businessId, Guid packageId, int quantity, string statusName, DateTime createdAt)
+        // Every order now only exists once its Stripe Checkout payment is confirmed (see
+        // CheckoutService), so each seeded order gets a matching Payment — refunded for the
+        // cancelled one (mirrors OrderService's refund-on-cancel), kept Succeeded for the no-show
+        // (that's what makes the no-show fee real, per FEATURE_IDEAS.md's Phase 7).
+        Order MakeOrder(Guid businessId, Guid packageId, int quantity, string statusName, DateTime createdAt, bool refunded = false)
         {
             var order = new Order
             {
@@ -416,18 +421,32 @@ public static class DbSeeder
             if (statusName is OrderStatuses.Confirmed or OrderStatuses.Completed)
                 packagesById[packageId].Quantity -= quantity;
 
+            payments.Add(new Payment
+            {
+                Id = Guid.NewGuid(),
+                OrderId = order.Id,
+                Amount = quantity * packagesById[packageId].Price,
+                Currency = "ron",
+                StripeCheckoutSessionId = $"cs_demo_{order.Id:N}",
+                StripePaymentIntentId = $"pi_demo_{order.Id:N}",
+                Status = refunded ? PaymentStatuses.Refunded : PaymentStatuses.Succeeded,
+                CreatedAt = createdAt,
+                RefundedAt = refunded ? createdAt.AddMinutes(5) : null,
+            });
+
             return order;
         }
 
         var oldCompleted = MakeOrder(b1, new Guid("55555555-0000-0000-0000-000000000002"), 1, OrderStatuses.Completed, now.AddDays(-12));
         var midCompleted = MakeOrder(b3, new Guid("55555555-0000-0000-0000-000000000005"), 1, OrderStatuses.Completed, now.AddDays(-9));
         var recentCompleted = MakeOrder(b1, new Guid("55555555-0000-0000-0000-000000000001"), 1, OrderStatuses.Completed, now.AddDays(-6));
-        var cancelled = MakeOrder(b9, new Guid("55555555-0000-0000-0000-000000000017"), 1, OrderStatuses.Cancelled, now.AddDays(-3));
+        var cancelled = MakeOrder(b9, new Guid("55555555-0000-0000-0000-000000000017"), 1, OrderStatuses.Cancelled, now.AddDays(-3), refunded: true);
         var noShow = MakeOrder(b3, new Guid("55555555-0000-0000-0000-000000000006"), 1, OrderStatuses.NoShow, now.AddDays(-4));
         var confirmed = MakeOrder(b2, new Guid("55555555-0000-0000-0000-000000000004"), 1, OrderStatuses.Confirmed, now.AddDays(-1));
         var pending = MakeOrder(b1, new Guid("55555555-0000-0000-0000-000000000008"), 1, OrderStatuses.Pending, now.AddMinutes(-20));
 
         db.Orders.AddRange(oldCompleted, midCompleted, recentCompleted, cancelled, noShow, confirmed, pending);
+        db.Payments.AddRange(payments);
 
         db.Favorites.AddRange(
             new Favorite { Id = Guid.NewGuid(), UserId = demoCustomer.Id, BusinessId = b1, CreatedAt = now },

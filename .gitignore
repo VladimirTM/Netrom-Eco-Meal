@@ -3,3 +3,6 @@ obj/
 /packages/
 riderModule.iml
 /_ReSharper.Caches/
+
+# Local-only Stripe test key etc — never commit real API keys, even test-mode ones.
+docker-compose.override.yml

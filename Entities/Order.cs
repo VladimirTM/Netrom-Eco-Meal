@@ -21,4 +21,6 @@ public class Order
     [ForeignKey(nameof(StatusId))]
     public Status Status { get; set; } = null!;
     public ICollection<OrderPackage> OrderPackages { get; set; } = [];
+    // Null until CheckoutService.CompleteCheckoutAsync confirms the Stripe payment.
+    public Payment? Payment { get; set; }
 }

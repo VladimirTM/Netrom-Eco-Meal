@@ -1,6 +1,6 @@
 # Backend Architecture — Netrom Eco Meal
 
-**Stack:** ASP.NET Core 10 · Blazor Server (interactive server render mode) · Entity Framework Core · PostgreSQL (Npgsql) · ASP.NET Identity (cookie auth) · QRCoder
+**Stack:** ASP.NET Core 10 · Blazor Server (interactive server render mode) · Entity Framework Core · PostgreSQL (Npgsql) · ASP.NET Identity (cookie auth) · QRCoder · Stripe Checkout (`Stripe.net`)
 **Location:** repo root (single project, `Netrom-Eco-Meal.csproj`)
 
 Unlike a typical API + SPA split, this is **one ASP.NET Core project** that is both the backend and the Blazor Server UI host. There's no separate `Api`/`BusinessLogic`/`DataAccess` assembly split — instead the layering is expressed as top-level folders in one project, and Razor components call straight into the service layer through a DI-injected "Controller" rather than over HTTP. See [§6](#6-controllers--the-in-process-façade-pattern) for why that's a deliberate choice, not an oversight.
@@ -37,6 +37,7 @@ Netrom-Eco-Meal/
 │   └── *.cs                     # EF Core implementations
 ├── Services/
 │   ├── Interfaces/               # One interface per service
+│   ├── Payments/                 # CheckoutService, StripeGateway — see §5
 │   └── *.cs                      # Business logic, DI-registered Scoped (2 are BackgroundService/plain classes — see §5)
 ├── Controllers/                 # ApiController classes — mostly in-process façades, see §6
 ├── Constants/                   # Fixed string values, enums-as-strings, small pure helpers
@@ -87,7 +88,8 @@ All business logic, authorization checks, and orchestration — see [§5](#5-ser
 ApplicationUser (IdentityUser)
   │
   ├──< Order >──── Business ──── BusinessType
-  │      │             │
+  │      │  │          │
+  │      │  └──── Payment  (0..1 — set once Stripe Checkout confirms payment)
   │      └──< OrderPackage >──── Package ──── PackageType
   │                                  │
   │                                  └──── PackageTemplate  (0..1, TemplateId — the template that
@@ -95,7 +97,8 @@ ApplicationUser (IdentityUser)
   │
   ├──< Favorite >──── Business        (one per (UserId, BusinessId), unique index)
   ├──< Review >────── Business        (one per (BusinessId, UserId), unique index)
-  └──< Notification
+  ├──< Notification
+  └──< PendingCheckout ──── Business  (no FK/nav to Order — bridges checkout to Stripe; see §3 PendingCheckout)
 
 Business ──< BusinessStaff >── ApplicationUser  (many-to-many: staff a business, unique on (BusinessId, UserId))
 Order ──── Status                     (Pending | Confirmed | Completed | Cancelled | NoShow)
@@ -231,6 +234,7 @@ public class Order
     public Business Business { get; set; } = null!;
     public Status Status { get; set; } = null!;
     public ICollection<OrderPackage> OrderPackages { get; set; } = [];
+    public Payment? Payment { get; set; }           // null until CheckoutService confirms the Stripe payment
 }
 
 public class OrderPackage
@@ -244,6 +248,42 @@ public class OrderPackage
 }
 ```
 `OrderNumber` is **not** application-assigned — `EcoMealDbContext` maps it to `nextval('order_numbers')` via `HasDefaultValueSql`, backed by a real Postgres sequence (`modelBuilder.HasSequence<int>("order_numbers")`). This means two concurrent checkouts can never collide on the same human-friendly ticket number the way an app-side `MAX(OrderNumber) + 1` could. `OrderNumber` also carries its own unique index as a belt-and-suspenders check. Unlike the reviewed Smart Shopping Assistant project, `OrderPackage` does **not** snapshot the package's name/price at order time — it stays live-joined to `Package`, so a manager editing a package's name after the fact would (in principle) change how historical orders render. This hasn't come up as a real problem in practice since packages are re-created daily rather than edited after orders exist against them.
+
+An `Order` now only ever exists once its Stripe Checkout payment is confirmed — see `PendingCheckout` and `Payment` below, and `CheckoutService` in §5, for the bridge that makes that true.
+
+#### Payment
+```csharp
+public class Payment
+{
+    public Guid Id { get; set; }
+    public required Guid OrderId { get; set; }
+    public required decimal Amount { get; set; }
+    public required string Currency { get; set; }      // lowercase ISO code, as Stripe returns it (e.g. "ron")
+    public required string StripeCheckoutSessionId { get; set; }
+    public string? StripePaymentIntentId { get; set; }
+    public required string Status { get; set; }         // see Constants.PaymentStatuses: Succeeded | Refunded
+    public DateTime CreatedAt { get; set; }
+    public DateTime? RefundedAt { get; set; }
+    public Order Order { get; set; } = null!;
+}
+```
+One row per `Order`, created by `CheckoutService.CompleteCheckoutAsync` the moment Stripe confirms a session as paid — `modelBuilder.Entity<Payment>().HasOne(p => p.Order).WithOne(o => o.Payment).HasForeignKey<Payment>(p => p.OrderId)` makes this a true 1:1, matching Stripe Checkout being one session per order, never split. Never deleted: `OrderService.RefundIfPaidAsync` (§5) flips `Status` to `Refunded` and stamps `RefundedAt` on cancellation instead of removing the row, and deliberately leaves it `Succeeded` on a `NoShow` — the un-reversed charge **is** the no-show fee (FEATURE_IDEAS.md's Phase 7), with no separate fee-specific code needed. `/payments` (`Payments.razor`, `FRONTEND_ARCHITECTURE.md` §11) is the manager/admin-facing ledger over this table, reusing `OrderController.GetOrdersForManagementPagedAsync`'s already-`Payment`-included query rather than a dedicated read path.
+
+#### PendingCheckout
+```csharp
+public class PendingCheckout
+{
+    public Guid Id { get; set; }
+    public required string UserId { get; set; }
+    public required Guid BusinessId { get; set; }
+    public required string LinesJson { get; set; }      // serialized List<OrderLineRequest> — the cart at checkout time
+    public string? StripeCheckoutSessionId { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ConsumedAt { get; set; }            // set once CompleteCheckoutAsync has resolved this
+    public Guid? ResultingOrderId { get; set; }           // null if the paid-for order couldn't be placed and was refunded instead
+}
+```
+Bridges "customer clicked Pay" to "the `Order` actually exists." `CheckoutService.StartCheckoutAsync` parks the cart's lines here and sends the customer to Stripe's hosted Checkout page *before* any `Order` (and its stock reservation) is created — `CompleteCheckoutAsync`, called from the Stripe success-redirect landing page (`PaymentReturn.razor`), re-validates the Stripe session, only then calls `IOrderService.PlaceOrderAsync`, and stamps `ConsumedAt`/`ResultingOrderId`. No FK/navigation to `Order` — deliberately loose, since a `PendingCheckout` can resolve to no order at all (payment succeeded but stock vanished in the meantime — see §5's `CompleteCheckoutAsync` walkthrough). `ConsumedAt` being non-null is what makes completion idempotent: a page refresh on the Stripe return URL replays `CompleteCheckoutAsync` against the same row instead of double-spending one Stripe payment into two orders. Abandoned rows (`ConsumedAt` still null past `OrderExpiry.PendingCheckoutTimeout`) are hard-deleted by `OrderLifecycleSweepService` (§8) — nothing was ever charged, so there's nothing to refund, just tidying.
 
 #### Review
 ```csharp
@@ -377,6 +417,8 @@ Every service is `Scoped`. A few break that pattern deliberately: `OrderLifecycl
 | `IPackageTemplateService` | `PackageTemplateService` | Same admin-or-own-business-manager authorization shape as `IPackageService`. `CreateFromPackageAsync`, `SetActiveAsync`, `DeleteAsync` are the manager-facing CRUD; `GenerateDueInstancesAsync` is the one method with **no** current-user check — system-triggered by `PackageTemplateGenerationService` (§8), same pattern as `OrderService`'s sweep methods |
 | `IReviewService` | `ReviewService` | `GetContextAsync(businessId)` → `ReviewContext(CanReview, MyReview)` — `CanReview` is true once the customer has a completed order with the business; `SubmitAsync` updates an existing review in place if one exists, otherwise inserts |
 | `IUserService` | `UserService` | Admin-only (`EnsureAdminAsync` on every method — enforced via `CurrentUserAccessor`, not an `[Authorize]` HTTP filter, since this is only ever called in-process; see §6). `UpdateRoleAsync` refuses to demote the platform's last remaining admin, and auto-releases whatever business a user managed if they're moved away from `BusinessManager` |
+| `ICheckoutService` | `CheckoutService` (`Services/Payments/`) | Owns the "pay before the order exists" flow — see the deep dive below |
+| `IStripeGateway` | `StripeGateway` (`Services/Payments/`) | Thin wrapper over the Stripe SDK (`CreateCheckoutSessionAsync`, `GetSessionStatusAsync`, `RefundAsync`). Kept separate from `ICheckoutService` so `OrderService` (needs to issue refunds) doesn't have to depend on the order-creation side of checkout, and `ICheckoutService` (needs to place orders) doesn't have to depend back on `OrderService`'s refund path — breaks what would otherwise be a circular DI dependency. Reads `Stripe:SecretKey`/`Stripe:Currency` straight off `IConfiguration`, same style as `SmtpEmailSender`'s `Email:Smtp:*`; `EnsureConfigured` turns a missing key into "payments aren't configured yet" instead of a raw Stripe SDK exception, same degrade-gracefully pattern `SmtpEmailSender` uses for a missing `Email:Smtp:Host` |
 | `IOrderService` | `OrderService` | The biggest service — see the deep dive below |
 
 ### CurrentUserAccessor
@@ -392,7 +434,7 @@ Not behind an interface — it's a small, concrete helper every other service ta
 
 ### OrderService — deep dive
 
-`OrderService` owns every rule around placing, confirming, completing, cancelling, marking-no-show, and reporting on orders. Its constructor pulls in `IOrderRepository`, `IPackageRepository`, `IBusinessService`, `INotificationService`, `IAppEmailSender`, the raw `EcoMealDbContext` (for ad-hoc queries that don't warrant a repository method), and `CurrentUserAccessor`.
+`OrderService` owns every rule around placing, confirming, completing, cancelling, marking-no-show, and reporting on orders. Its constructor pulls in `IOrderRepository`, `IPackageRepository`, `IBusinessService`, `INotificationService`, `IAppEmailSender`, `IStripeGateway` (refunds only — issuing a charge is `CheckoutService`'s job, not this one's), the raw `EcoMealDbContext` (for ad-hoc queries that don't warrant a repository method), and `CurrentUserAccessor`.
 
 **`PlaceOrderAsync(businessId, lines)`** — customer-only:
 1. Resolves the caller via `CurrentUserAccessor`; throws `UnauthorizedAccessException` if not signed in or not a `Customer`.
@@ -424,6 +466,7 @@ var allowedTransition = (currentStatusName, statusName) switch
 ```
 - **Pending → Confirmed**: re-checks every line's requested quantity against the package's *current* `Quantity` (not the pending-reservation snapshot from placement — stock may have moved since), then decrements it. A concurrent confirm of the same package by another manager races on the `xmin` row-version and surfaces as "Stock for this order just changed — please refresh and try again" (`DbUpdateConcurrencyException` → `InvalidOperationException`).
 - **Confirmed → Cancelled / Confirmed → NoShow**: both restore each line's quantity back onto the package (the reverse of the confirm-time decrement) — the reservation is being released either way, whether the manager cancelled it or the pickup window just closed unclaimed. Pending → Cancelled needs **no** stock restoration, since a Pending order never touched `Package.Quantity` in the first place — it only ever affected the `pendingElsewhere` reservation math above.
+- **Refund on Cancelled, never on NoShow**: any transition to `Cancelled` (manual or the stale-Pending sweep) calls `RefundIfPaidAsync`, which looks up the order's `Succeeded` `Payment` and issues a real Stripe refund (`IStripeGateway.RefundAsync`) before flipping it to `Refunded`. `NoShow` deliberately skips this — the customer reserved/held the food and never collected it, so the un-reversed charge **is** the no-show fee, with no separate fee-specific code (FEATURE_IDEAS.md's Phase 7). A failed/unconfigured Stripe call here is logged and swallowed, same reasoning as `SendCustomerEmailAsync` below — a Stripe outage shouldn't block the cancellation itself, since the order still needs to come off the books either way.
 - Every successful transition fires a customer-facing notification (`Confirmed` → "show your QR code at pickup" linking to the pickup pass; `Completed` → thank-you; `Cancelled` → plain cancellation notice; `NoShow` → missed-pickup notice), each also best-effort emailed via `IAppEmailSender` (`SendCustomerEmailAsync`, wrapped so a failed/unconfigured send never breaks the transition itself).
 - `NoShow` is reachable two ways: a manager marking it by hand from `/orders/manage` (this transition), or automatically once the pickup window fully closes — see `ExpireNoShowOrdersAsync` below.
 
@@ -436,6 +479,24 @@ var allowedTransition = (currentStatusName, statusName) switch
 **`GetOrdersInRangeAsync(from?, to?, businessId?)`** — unpaginated, date-bounded, scoped the same way `GetOrdersForManagementPagedAsync` is via `ResolveManagerBusinessIdAsync` above: admins see everything (optionally filtered to one business via `businessId`), a manager must pass a `businessId` they're actually staff of. Backs both the CSV export and the dashboard trend chart — see §6 for why the CSV export controller can't call this method directly despite it living on the same interface.
 
 **`GetTotalKgSavedAsync()`** — the one genuinely public read (no auth check at all): sums `Quantity * WeightKg` across every `OrderPackage` on a `Completed` order, platform-wide. Backs the anonymous home-hero stat.
+
+### CheckoutService — deep dive
+
+Owns the "pay before the order exists" flow, bridging `CartPanel.razor`'s Pay button to a real `Order` via Stripe Checkout (see `FRONTEND_ARCHITECTURE.md` §8 for the frontend side).
+
+**`StartCheckoutAsync(businessId, lines)`** — customer-only:
+1. Re-validates every requested line the same way `OrderService.PlaceOrderAsync` step 3 does (`package.Quantity - pendingElsewhere`) — a courtesy so nobody pays for stock that's already gone; `PlaceOrderAsync` re-checks this for real once payment actually succeeds, since stock can still move in the time the customer spends on Stripe's page.
+2. Inserts a `PendingCheckout` row with the cart's lines serialized to JSON, then calls `IStripeGateway.CreateCheckoutSessionAsync` (one Stripe line item per cart line, `ClientReferenceId` set to the `PendingCheckout.Id`) with success/cancel URLs built off `App:BaseUrl` — `/checkout/return?pc={id}&session_id={CHECKOUT_SESSION_ID}` (Stripe substitutes that placeholder token itself) and `/checkout/cancel?pc={id}`.
+3. Stamps the returned Stripe session ID back onto the `PendingCheckout` row and returns Stripe's hosted checkout URL for the frontend to redirect to.
+
+**`CompleteCheckoutAsync(pendingCheckoutId, sessionId)`** — called from `PaymentReturn.razor` (`/checkout/return`) on the redirect back from Stripe:
+1. Loads the `PendingCheckout`; throws `UnauthorizedAccessException` if it belongs to a different signed-in user.
+2. **Idempotent by `ConsumedAt`**: if this checkout was already resolved (a page refresh replaying the return URL), it re-loads and returns the same `Order` instead of processing the payment twice — this is what stops one Stripe payment from ever becoming two orders.
+3. Re-validates the passed `sessionId` matches the stored one, then asks Stripe for the session's real status (`IStripeGateway.GetSessionStatusAsync`) rather than trusting anything client-supplied — a `session_id` query param is just as spoofable as any other URL parameter.
+4. Once Stripe confirms `IsPaid`, deserializes the parked cart lines and calls `IOrderService.PlaceOrderAsync` for real. **If that throws** (stock vanished, the rate limit was hit while the customer was on Stripe's page) the payment already went through, so it refunds via `IStripeGateway.RefundAsync` instead of keeping a charge for nothing, stamps `ConsumedAt` with no `ResultingOrderId`, and reports the refund to the customer.
+5. On success, inserts the matching `Payment` row (`Status = Succeeded`) and stamps `PendingCheckout.ConsumedAt`/`ResultingOrderId`.
+
+**`ExpireStalePendingCheckoutsAsync()`** — system-triggered, called by `OrderLifecycleSweepService` (§8). Hard-deletes any `PendingCheckout` still unconsumed past `OrderExpiry.PendingCheckoutTimeout` — nobody was ever charged for an abandoned Stripe session, so there's nothing to refund, just tidying up the bridge row.
 
 ### Reorder note
 
@@ -459,6 +520,7 @@ builder.Services.AddScoped<OrderController>();
 builder.Services.AddScoped<ReviewController>();
 builder.Services.AddScoped<NotificationController>();
 builder.Services.AddScoped<FavoriteController>();
+builder.Services.AddScoped<PaymentController>();
 ```
 
 Razor components `@inject` these the same way they'd inject any other service, and call their methods as plain in-process C# calls — no HTTP round-trip, no JSON (de)serialization, no separate DTO layer:
@@ -537,6 +599,7 @@ Note `IBusinessService.GetByStaffUserIdAsync` is safe to call here — it's a pu
 | `FavoriteController` | `GetMyFavoriteBusinessIdsAsync`, `ToggleFavoriteAsync` |
 | `NotificationController` | `GetMyNotificationsAsync`, `GetMyUnreadCountAsync`, `MarkAsReadAsync`, `MarkAllAsReadAsync` |
 | `UserController` | `GetAllAsync`, `GetByRoleAsync`, `GetPagedAsync`, `UpdateRoleAsync` |
+| `PaymentController` | `CreateCheckoutSessionAsync` → the Stripe hosted-checkout URL or `Conflict()`, `CompleteCheckoutAsync` → `CheckoutCompletionResult` or `Unauthorized()` — thin wrappers over `ICheckoutService`, same try/catch-to-`ActionResult` shape as every other in-process controller. `/payments`' read-only ledger reuses `OrderController.GetOrdersForManagementPagedAsync` instead of adding a method here (§5 Payment, `FRONTEND_ARCHITECTURE.md` §11) |
 | `AuthController` *(real HTTP)* | `POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/logout` — all `LocalRedirect` responses, never JSON. Plus the three in-process-only methods noted above |
 | `OrderExportController` *(real HTTP)* | `GET /api/orders/export?from=&to=&businessId=` → CSV file download |
 
@@ -592,7 +655,7 @@ It validates the same token directly against `IAntiforgery`, which `AddRazorComp
 | Pattern | Where | Effect |
 |---|---|---|
 | `[Authorize(Roles = AppRoles.Customer)]` | Orders, pickup pass pages | Customer-only |
-| `[Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]` | Businesses, Packages, OrderManagement, OrderScan, OrderValidate, Dashboard | Either management role |
+| `[Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]` | Businesses, Packages, OrderManagement, Payments, OrderScan, OrderValidate, Dashboard | Either management role |
 | `[Authorize(Roles = AppRoles.Admin)]` | Users | Admin-only |
 | No page-level attribute + service-side `CurrentUserAccessor` check | Every in-process controller/service | The real enforcement point for most rules — see §6 |
 | `AuthorizeRouteView` in `Routes.razor` | Global | Distinguishes "authenticated but wrong role" (→ `ForbiddenPanel`) from "not authenticated at all" (→ `RedirectToLogin`, forced full page load since no circuit exists yet) — see `FRONTEND_ARCHITECTURE.md` |
@@ -615,6 +678,8 @@ public class OrderLifecycleSweepService(IServiceScopeFactory scopeFactory, ILogg
         {
             using var scope = scopeFactory.CreateScope();
             var orderService = scope.ServiceProvider.GetRequiredService<IOrderService>();
+            var checkoutService = scope.ServiceProvider.GetRequiredService<ICheckoutService>();
+            await checkoutService.ExpireStalePendingCheckoutsAsync();
             await orderService.ExpireStalePendingOrdersAsync();
             await orderService.SendPickupRemindersAsync();
             await orderService.ExpireNoShowOrdersAsync();
@@ -622,10 +687,11 @@ public class OrderLifecycleSweepService(IServiceScopeFactory scopeFactory, ILogg
     }
 }
 ```
-Registered via `builder.Services.AddHostedService<OrderLifecycleSweepService>()` (renamed from `PendingOrderExpiryService` when the reminder/no-show sweeps were added — one periodic pass over every time-based order transition, rather than three separate `BackgroundService`s each paying for their own timer and DI scope). Runs every `OrderExpiry.SweepInterval` (5 minutes) and does three things in order:
-1. **Stale-Pending expiry** — cancels any `Pending` order idle longer than `OrderExpiry.PendingTimeout` (30 minutes) or whose pickup window has already closed. Exists to fix a real phantom-stock-lock: a `Pending` order that's never confirmed still counts against a package's availability via the `pendingElsewhere` check in `OrderService.PlaceOrderAsync` (§5) — without this sweep, an abandoned checkout could tie up stock indefinitely.
-2. **Pickup reminders** — emails/notifies `Confirmed` orders closing within `OrderExpiry.PickupReminderLeadTime` (30 minutes) that haven't been reminded yet.
-3. **No-show detection** — moves `Confirmed` orders whose pickup window has fully closed to `NoShow`, restoring stock.
+Registered via `builder.Services.AddHostedService<OrderLifecycleSweepService>()` (renamed from `PendingOrderExpiryService` when the reminder/no-show sweeps were added — one periodic pass over every time-based order transition, rather than several separate `BackgroundService`s each paying for their own timer and DI scope). Runs every `OrderExpiry.SweepInterval` (5 minutes) and does four things in order:
+1. **Stale-checkout cleanup** — hard-deletes any `PendingCheckout` (§3) still unconsumed past `OrderExpiry.PendingCheckoutTimeout` (30 minutes): a customer who clicked Pay, then closed the tab on Stripe's page, was never charged, so this is pure tidying, not a refund path.
+2. **Stale-Pending expiry** — cancels any `Pending` order idle longer than `OrderExpiry.PendingTimeout` (30 minutes) or whose pickup window has already closed, refunding it (`OrderService.RefundIfPaidAsync`, §5) since it *was* paid for at checkout time. Exists to fix a real phantom-stock-lock: a `Pending` order that's never confirmed still counts against a package's availability via the `pendingElsewhere` check in `OrderService.PlaceOrderAsync` (§5) — without this sweep, an abandoned checkout could tie up stock indefinitely.
+3. **Pickup reminders** — emails/notifies `Confirmed` orders closing within `OrderExpiry.PickupReminderLeadTime` (30 minutes) that haven't been reminded yet.
+4. **No-show detection** — moves `Confirmed` orders whose pickup window has fully closed to `NoShow`, restoring stock but deliberately *not* refunding (§3 Payment, §5).
 
 `BackgroundService` instances are effectively singletons, so it can't hold a `Scoped` `IOrderService` directly — it creates a fresh DI scope on every tick via `IServiceScopeFactory` instead, exactly the pattern any singleton needing scoped dependencies must use. The whole tick body is one `try/catch`, logged and swallowed on failure so a bad tick doesn't take the loop down — the next `PeriodicTimer` tick just tries again.
 
@@ -654,7 +720,7 @@ var generated = await templateService.GenerateDueInstancesAsync();
    - `WeightKg`, `DietaryTags`, and `Business.Latitude`/`Longitude` are **backfill-only** — only set if currently `0`/empty/`null` — since the seeder can't distinguish "never set" from "an admin/manager deliberately cleared it," so it defaults to filling in demo data either way rather than guessing.
 5. **Demo business staff** (`SeedBusinessStaffAsync`) — staffs the demo managers across the demo businesses, reconciled by `(BusinessId, UserId)` pair like the steps above: the first demo manager staffs both Stadionul de Gusturi and VAR Bistro (one staffer, several businesses), and the second demo manager joins the first at Stadionul de Gusturi (several staff, one business) — a fresh database demonstrates both shapes of the many-to-many without an admin having to click through `/businesses` first.
 6. **Demo recurring template** (`SeedPackageTemplateAsync`) — turns the demo-staffed business's "Golden Boot Surprise Bag" package into a `PackageTemplate` (fixed GUID, same idempotency check as the lookup tables) so `/packages/templates` and the 🔁 "Daily" badge aren't empty on a fresh database. Runs once; `PackageTemplateGenerationService` (§8) owns that package's future daily instances from there.
-7. **Demo customer/manager activity** (`SeedDemoActivityAsync`) — **only on a genuinely fresh database** (`if (await db.Orders.AnyAsync()) return;`, unlike the reconcile-on-every-run steps above), creates seven orders spanning every status (`Pending`/`Confirmed`/`Completed`×3/`Cancelled`/`NoShow`) across the last 14 days for the demo customer/manager accounts from point 2, plus favorites, reviews, and notifications. This exists so every feature (dashboard trend chart, CSV export, reorder, the notification bell, QR pickup, reviews, the `NoShow` badge) has real data to look at immediately after a fresh `docker compose up`, without manually clicking through the app first. Because it's gated on "no orders exist yet" rather than reconciled like steps 3–5, it never touches orders placed by real usage afterward.
+7. **Demo customer/manager activity** (`SeedDemoActivityAsync`) — **only on a genuinely fresh database** (`if (await db.Orders.AnyAsync()) return;`, unlike the reconcile-on-every-run steps above), creates seven orders spanning every status (`Pending`/`Confirmed`/`Completed`×3/`Cancelled`/`NoShow`) across the last 14 days for the demo customer/manager accounts from point 2, plus favorites, reviews, and notifications. Since every real `Order` now only exists once its Stripe payment is confirmed (§3), each seeded order also gets a matching `Payment` row — `Refunded` for the cancelled one (mirroring `OrderService.RefundIfPaidAsync`), left `Succeeded` for the no-show (that's what makes the no-show fee real, per FEATURE_IDEAS.md's Phase 7). This exists so every feature (dashboard trend chart, CSV export, reorder, the notification bell, QR pickup, reviews, the `NoShow` badge, the `/payments` ledger) has real data to look at immediately after a fresh `docker compose up`, without manually clicking through the app first. Because it's gated on "no orders exist yet" rather than reconciled like steps 3–5, it never touches orders placed by real usage afterward.
 
 This reconciliation approach — add-if-missing, refresh-if-stale, backfill-if-empty, never overwrite a live/customized value — is what lets the exact same seeder run unconditionally on every container start (see `docker-compose.test.yml`) without ever fighting real usage data.
 
@@ -670,6 +736,8 @@ This reconciliation approach — add-if-missing, refresh-if-stale, backfill-if-e
 | `App:BaseUrl` | user-secrets / docker-compose env (`App__BaseUrl`) | Absolute origin (e.g. `http://localhost:8081`) used to build links in confirmation/reset emails — falls back to `http://localhost:8080` if unset |
 | `Email:Smtp:Host` / `Port` / `Username` / `Password` / `EnableSsl` | user-secrets / docker-compose env (double-underscore form) | SMTP settings for `SmtpEmailSender`. Leaving `Host` unset makes it log the email instead of sending — no SMTP server is required to run the app |
 | `Email:FromAddress` / `Email:FromName` | user-secrets / docker-compose env | The `From:` header on outgoing emails; defaults to `no-reply@ecomeal.local` / `Eco Meal` |
+| `Stripe:SecretKey` | user-secrets / docker-compose env (`Stripe__SecretKey`) | A Stripe **test-mode** secret key (`sk_test_...`). Empty by default — `StripeGateway.EnsureConfigured` then turns any checkout attempt into "payments aren't configured yet" instead of an SDK exception, so the app still runs (browsing, orders history, everything but actually checking out) with zero Stripe setup |
+| `Stripe:Currency` | user-secrets / docker-compose env (`Stripe__Currency`) | Lowercase ISO currency code passed to Stripe Checkout; defaults to `ron` |
 | `Logging:LogLevel` | `appsettings.json` | Standard ASP.NET Core logging config; `Microsoft.AspNetCore` pinned to `Warning` to keep request-pipeline noise out of the console in Development |
 
 No `appsettings.Production.json` exists — the only environment-specific file is `appsettings.Development.json`, which layers in the seed-admin credentials for local dev so a fresh `dotnet run` against an empty DB has a working login without extra setup. `docker-compose.test.yml` is explicitly documented (README) as a local test/demo harness, not a production deployment (fixed DB password, HTTP only) — it also bundles a `mailpit` container and points `Email:Smtp:Host` at it, so every email the app sends is visible at `http://localhost:8025` with zero real SMTP setup.
@@ -684,7 +752,8 @@ No `appsettings.Production.json` exists — the only environment-specific file i
 
 Two kinds of tests, deliberately using different EF Core providers for different reasons:
 
-- **`Services/OrderServiceTests.cs`** — unit tests for `OrderService`'s status-transition/stock logic (rate limiting, the pending-reservation math in `PlaceOrderAsync`, confirm/cancel/no-show stock reservation and restoration, illegal-transition rejection, manager/admin/customer authorization scoping, the pickup-reminder and no-show sweep methods). `IOrderRepository`/`IPackageRepository`/`IBusinessService`/`INotificationService`/`IAppEmailSender` are mocked with Moq; `EcoMealDbContext` is real but backed by the EF Core **InMemory** provider (`Tests/TestSupport/InMemoryDb.cs`), since `OrderService` queries it directly for a few things (rate-limit counts, status lookups, pending-reservation sums) that are simple enough for InMemory to translate correctly. `CurrentUserAccessor` is also real, constructed around a `FakeAuthenticationStateProvider` test double instead of mocking the concrete class.
+- **`Services/OrderServiceTests.cs`** — unit tests for `OrderService`'s status-transition/stock logic (rate limiting, the pending-reservation math in `PlaceOrderAsync`, confirm/cancel/no-show stock reservation and restoration, illegal-transition rejection, manager/admin/customer authorization scoping, the pickup-reminder and no-show sweep methods, refund-on-cancel vs. kept-charge-on-no-show). `IOrderRepository`/`IPackageRepository`/`IBusinessService`/`INotificationService`/`IAppEmailSender`/`IStripeGateway` are mocked with Moq; `EcoMealDbContext` is real but backed by the EF Core **InMemory** provider (`Tests/TestSupport/InMemoryDb.cs`), since `OrderService` queries it directly for a few things (rate-limit counts, status lookups, pending-reservation sums) that are simple enough for InMemory to translate correctly. `CurrentUserAccessor` is also real, constructed around a `FakeAuthenticationStateProvider` test double instead of mocking the concrete class.
+- **`Services/CheckoutServiceTests.cs`** — covers the "pay before the order exists" bridge (§5 CheckoutService deep dive): `PendingCheckout` bookkeeping, pre-checkout availability validation, and the refund-on-failure path when `PlaceOrderAsync` fails after Stripe already confirmed payment. `IStripeGateway` is mocked (`CheckoutService` never talks to real Stripe) and `IOrderService` is mocked too (never creates `Order`s directly) — so this test file is purely about `CheckoutService`'s own orchestration, not re-testing `OrderService`'s or `StripeGateway`'s own logic.
 - **`Database/DbSeederTests.cs`** — integration tests that run `DbSeeder.SeedAsync` against a **real Postgres** container (`Testcontainers.PostgreSql`, `Tests/TestSupport/PostgresFixture.cs`), applying real EF migrations first via `MigrateAsync()` — exactly what `Program.cs` does on startup. This is deliberate, not incidental: an InMemory-provider test wouldn't replay real migration history, so it can't catch the class of bug this project has hit before (see §9 point 4's history and the old `SeedData`/`MoreSeedData` migrations vs. `DbSeeder` conflict) — only a real migration run proves the current seed data actually wins. One Postgres container is shared per test class; each test gets its own logical database on it (`CreateDatabaseAsync`) for isolation without paying container-startup cost per test. Requires Docker to be running locally.
 
 Given this split, Postgres-only query behavior (`EF.Functions.ILike` in `OrderRepository`, the `xmin` optimistic-concurrency token on `Package`, the `order_numbers` sequence) is exercised by the seeding integration tests' real Postgres round-trip, not by the InMemory-backed unit tests.

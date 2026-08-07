@@ -17,7 +17,7 @@ packages and orders for whichever business or businesses they're staff of) and *
   or "near me" (browser geolocation) — with an optional map view of every kitchen that has
   a saved location
 - View a business's live packages and add them to a basket
-- Check out and track past orders with pickup windows on `/orders`
+- Check out via Stripe Checkout, and track past orders with pickup windows on `/orders`
 - Show a QR pickup pass for a confirmed order, scanned by the business at collection
 - Leave a star rating and comment on a business once you've ordered from it
 
@@ -27,9 +27,10 @@ whichever one they pick in the sidebar switcher:
 - Manage packages on `/packages` for the currently selected business, including "repeat
   this every day" recurring templates managed on `/packages/templates`
 - Confirm, complete or cancel orders placed at the currently selected business on
-  `/orders/manage`
+  `/orders/manage` — cancelling automatically refunds the customer's Stripe payment
 - Scan a customer's pickup QR code on `/orders/scan` to confirm pickup
-- See stats scoped to the currently selected business on `/dashboard`
+- See stats scoped to the currently selected business on `/dashboard`, and a payout ledger
+  of every payment collected (and refunded) on `/payments`
 - Staffing more than one business surfaces a switcher in the sidebar to pick which one is
   "current" for every page above — staffing just one skips the switcher entirely
 
@@ -40,7 +41,7 @@ whichever one they pick in the sidebar switcher:
 - Manage packages (and recurring templates) for any business on `/packages`
 - Review and manage orders across every business on `/orders/manage`
 - Promote or demote users between Customer, BusinessManager and Admin on `/users`
-- See store-wide stats on `/dashboard`
+- See store-wide stats on `/dashboard` and every payment across every business on `/payments`
 
 ## Stack
 
@@ -49,6 +50,7 @@ whichever one they pick in the sidebar switcher:
 - ASP.NET Identity for auth/roles
 - QRCoder for server-side pickup QR generation, jsQR (vendored) for client-side camera scanning
 - Leaflet + OpenStreetMap tiles (CDN, no API key) for the home page's map view
+- Stripe Checkout (`Stripe.net`) for payment
 
 ## Running locally
 
@@ -102,6 +104,25 @@ require clicking an emailed confirmation link before sign-in works — this need
 `Email:Smtp:Host` configured to actually deliver that link. Password reset
 (`/account/forgot-password`) works either way, regardless of that flag.
 
+## Payments
+
+Checkout redirects to a real Stripe Checkout Session (test-mode). An `Order` is only created
+once Stripe confirms payment — an abandoned checkout never creates a phantom order. Configure
+a free Stripe **test-mode** secret key to enable it:
+
+```bash
+dotnet user-secrets set "Stripe:SecretKey" "sk_test_..."
+dotnet user-secrets set "Stripe:Currency" "ron"
+```
+
+Get a test-mode key from [dashboard.stripe.com/test/apikeys](https://dashboard.stripe.com/test/apikeys) —
+no live/production key is ever needed for this app. Leave `Stripe:SecretKey` unset (the
+default) and checkout shows a friendly "payments aren't configured yet" error instead of a
+raw SDK exception; every other part of the app (browsing, order history, everything but
+actually checking out) still works with zero Stripe setup. Cancelling a paid order (manually
+or via the stale-Pending sweep) automatically refunds the charge; a `NoShow` deliberately
+does **not** — the kept charge doubles as the no-show fee.
+
 ## Running with Docker
 
 `docker-compose.test.yml` spins up Postgres and the app together, which is the easiest
@@ -135,6 +156,12 @@ back-in-stock alerts, account confirmation, password reset) is visible at
 confirmation link (check Mailpit) clicked before it can sign in — the two seeded demo
 accounts are unaffected, since they're created pre-confirmed.
 
+`Stripe__SecretKey` is empty by default here too, so checkout shows the same "payments
+aren't configured yet" error until you set a real test-mode key — see [Payments](#payments)
+above. Set it as an environment variable before running `docker compose up`, or add it
+directly to `docker-compose.test.yml`; either way, no live/production Stripe key is ever
+needed to try the app.
+
 The pickup QR scanner (`/orders/scan`) uses the device camera, which browsers only allow
 over HTTPS or on `localhost`. It works fine when you open the app as `localhost:8081`,
 but won't get camera access if you open it via a LAN IP from another device (e.g. testing
@@ -163,8 +190,8 @@ instead of an empty app:
 - **BusinessManager** — demo.manager@ecomeal.local / Demo123! — staffs both Stadionul de
   Gusturi and VAR Bistro, so the sidebar's business switcher has something to switch
   between out of the box. Has a pending order waiting to be confirmed on `/orders/manage`
-  and enough order history for `/dashboard`'s trend chart and CSV export to be worth
-  looking at.
+  and enough order history for `/dashboard`'s trend chart, `/payments`'s ledger, and CSV
+  export to be worth looking at.
 - **BusinessManager** — demo.manager2@ecomeal.local / Demo123! — staffs Stadionul de
   Gusturi alongside the first demo manager, demonstrating the other direction of the
   many-to-many (several staff, one business).
@@ -176,9 +203,9 @@ placed for real afterward.
 ## Running tests
 
 `Tests/Netrom-Eco-Meal.Tests.csproj` is a separate xUnit project (unit tests for
-`OrderService`'s status-transition/stock logic, plus integration tests that run the real
-migrations + `DbSeeder` against a Postgres container via Testcontainers). Requires Docker
-to be running locally:
+`OrderService`'s status-transition/stock logic and `CheckoutService`'s Stripe checkout
+bridge, plus integration tests that run the real migrations + `DbSeeder` against a
+Postgres container via Testcontainers). Requires Docker to be running locally:
 
 ```bash
 dotnet test

@@ -37,7 +37,7 @@ Components/
 ├── _Imports.razor                # Global @using directives for every .razor file
 │
 ├── Layout/
-│   ├── MainLayout.razor          # Sidebar shell for /dashboard, /businesses, /packages, /orders/manage, /users
+│   ├── MainLayout.razor          # Sidebar shell for /dashboard, /businesses, /packages, /orders/manage, /payments, /users
 │   ├── NavMenu.razor             # The sidebar itself — role-aware nav links + user footer
 │   ├── PublicLayout.razor        # Header + footer shell for the customer storefront
 │   ├── EmptyLayout.razor         # Chrome-free — Login/Register only
@@ -46,6 +46,8 @@ Components/
 ├── Pages/
 │   ├── Home.razor                # / — storefront browse/search/filter
 │   ├── BusinessDetail.razor      # /businesses/{Id} — packages + reviews + favorite + add to cart
+│   ├── PaymentReturn.razor       # /checkout/return — Stripe success redirect landing page, confirms payment
+│   ├── PaymentCancel.razor       # /checkout/cancel — Stripe cancel redirect landing page
 │   ├── Orders.razor              # /orders — customer order history + cancel + reorder
 │   ├── OrderPickupPass.razor     # /orders/pickup/{Id} — QR code for a Confirmed order
 │   ├── OrderScan.razor(.js)      # /orders/scan — manager camera scanner
@@ -58,6 +60,7 @@ Components/
 │   ├── Packages.razor / PackageForm.razor
 │   ├── PackageTemplates.razor    # /packages/templates — recurring "repeat daily" template management
 │   ├── OrderManagement.razor     # /orders/manage — confirm/complete/cancel + CSV export
+│   ├── Payments.razor            # /payments — manager/admin payout ledger
 │   └── Users.razor               # /users — role + business-manager assignment
 │
 └── Shared/
@@ -159,7 +162,7 @@ One consequence worth knowing: when `NotFoundPage` renders via the Router's in-c
 | Layout | Used by | Shell |
 |---|---|---|
 | `PublicLayout` | Home, BusinessDetail, Orders, OrderPickupPass, AccessDenied, NotFound | Sticky header (logo, notification bell, orders link, basket button + badge, dashboard link if staff, logout), `@Body`, footer. Owns the `CartPanel` and its open/closed state |
-| `MainLayout` | Dashboard, Businesses(+Form), Packages(+Form), OrderManagement, Users, OrderScan, OrderValidate | Fixed left sidebar (`NavMenu`) + `<main>` content area — the classic admin-panel shell |
+| `MainLayout` | Dashboard, Businesses(+Form), Packages(+Form), OrderManagement, Payments, Users, OrderScan, OrderValidate | Fixed left sidebar (`NavMenu`) + `<main>` content area — the classic admin-panel shell |
 | `EmptyLayout` | Login, Register | Just `@Body` — no header, no sidebar, no footer; the login/register cards center themselves entirely via `app.css`'s `.login-page`/`.login-card` |
 
 ### PublicLayout — the customer chrome
@@ -338,26 +341,66 @@ Three independent concerns on one page: the business's live packages, its review
 
 **File:** `Components/Shared/CartPanel.razor`
 
-A slide-in `<aside>` rendered by `PublicLayout`, controlled by a two-way-bound `IsOpen` parameter (`@bind-IsOpen="_cartOpen"` in the layout, toggled by the header's basket button). Three states in one component: empty basket, active basket (line items with `+`/`-`/remove, running total, "Place order"), and a post-order confirmation screen (order number + kg-saved impact stat) shown in place of the basket. `Close()` — wired to "Done," the X icon, *and* the backdrop click — always clears the three `_placed*` confirmation fields before closing, not just on "Done": leaving them set after an X/backdrop dismiss meant reopening the panel later (even with a fresh, non-empty cart) re-rendered the *old* confirmation instead of the live basket, since the confirmation branch is checked first in the render tree. One method now, not two (`CloseAndReset()` was folded into `Close()` — there was never a real reason for the two dismiss paths to behave differently).
+A slide-in `<aside>` rendered by `PublicLayout`, controlled by a two-way-bound `IsOpen` parameter (`@bind-IsOpen="_cartOpen"` in the layout, toggled by the header's basket button). Two states: empty basket, or an active basket (line items with `+`/`-`/remove, running total, "Pay & place order"). There's no order-confirmation state inside this component anymore — placing an order now means leaving the app entirely for Stripe's hosted Checkout page, so the confirmation screen lives on its own page after the redirect back (`PaymentReturn.razor`, below), not inside the slide-in panel.
 
 ```csharp
-private async Task PlaceOrderAsync()
+// Sends the browser off to Stripe's hosted Checkout page — the cart itself is only cleared
+// once payment is confirmed on the /checkout/return page (see PaymentReturn.razor), since the
+// Order (and this basket) shouldn't be considered placed until then.
+private async Task StartCheckoutAsync()
 {
+    if (CartService.BusinessId is null || _placing) return;
+    _placing = true;
+
     var lines = CartService.Items.Select(i => new OrderLineRequest(i.Package.Id, i.Quantity)).ToList();
-    var result = await OrderController.PlaceOrderAsync(businessId, lines);
+    var result = await PaymentController.CreateCheckoutSessionAsync(CartService.BusinessId.Value, lines);
 
     if (result.Result is ConflictObjectResult conflict)
     {
-        _error = conflict.Value?.ToString() ?? "We couldn't place your order. Please try again.";
+        _placing = false;
+        _error = conflict.Value?.ToString() ?? "We couldn't start checkout. Please try again.";
         return;
     }
 
-    _placedOrderNumber = result.Value?.OrderNumber;
-    _placedKgSaved = CartService.Items.Sum(i => i.Quantity * i.Package.WeightKg);
-    await CartService.ClearAsync();
+    Navigation.NavigateTo(result.Value!, forceLoad: true);
 }
 ```
-The `ConflictObjectResult` check is exactly how the rate-limit error, stock-conflict errors, and any other `OrderService.PlaceOrderAsync` exception surface to the customer — one `if`, no exception-type-specific handling needed client-side, because `OrderController.PlaceOrderAsync` already collapsed every relevant exception into `Conflict(ex.Message)` (see `BACKEND_ARCHITECTURE.md` §6). `_placedKgSaved` is computed **client-side** from the cart items about to be cleared, purely for instant display — the authoritative, persisted "kg saved" stat only actually counts once the order reaches `Completed` (see `OrderService.GetTotalKgSavedAsync`).
+The `ConflictObjectResult` check is exactly how the rate-limit error, stock-conflict errors, "payments aren't configured yet," and any other `CheckoutService.StartCheckoutAsync` exception surface to the customer — one `if`, no exception-type-specific handling needed client-side, because `PaymentController.CreateCheckoutSessionAsync` already collapsed every relevant exception into `Conflict(ex.Message)` (see `BACKEND_ARCHITECTURE.md` §6, §5 CheckoutService). On success, `result.Value` is Stripe's own hosted checkout URL — `forceLoad: true` is required here, not stylistic, since this is a genuine cross-origin navigation off the Blazor circuit entirely, not an in-app route a soft navigation could handle. The cart itself is left untouched at this point; it's only cleared once the customer actually comes back from Stripe having paid.
+
+### PaymentReturn / PaymentCancel — the Stripe redirect landing pages
+
+**Files:** `Components/Pages/PaymentReturn.razor` (`/checkout/return`), `Components/Pages/PaymentCancel.razor` (`/checkout/cancel`) — both `@layout EmptyLayout`, reusing the same `.login-page`/`.login-card`/`.cart-confirmation` CSS shapes the auth pages and the old in-panel confirmation used, so the visual language doesn't shift just because the flow moved pages.
+
+`PaymentReturn.razor` is where `CheckoutService.CompleteCheckoutAsync` (`BACKEND_ARCHITECTURE.md` §5) actually gets called from, driven by the two query-string parameters Stripe's `successUrl` was built with:
+```csharp
+[SupplyParameterFromQuery(Name = "pc")] public Guid? Pc { get; set; }
+[SupplyParameterFromQuery(Name = "session_id")] public string? SessionId { get; set; }
+
+protected override async Task OnInitializedAsync()
+{
+    if (Pc is null || string.IsNullOrWhiteSpace(SessionId)) { _loading = false; return; }
+
+    var result = await PaymentController.CompleteCheckoutAsync(Pc.Value, SessionId);
+    if (result.Result is UnauthorizedResult) { _message = "This payment doesn't belong to your account."; }
+    else if (result.Value is { Success: true } completion)
+    {
+        _success = true;
+        _order = completion.Order;
+        _kgSaved = completion.KgSaved;
+
+        // The basket that was checked out is now a real order — clear it so it doesn't
+        // linger and get re-submitted from a stale browser tab.
+        await CartService.RestoreAsync();
+        await CartService.ClearAsync();
+    }
+    else if (result.Value is not null) { _message = result.Value.Message; }
+
+    _loading = false;
+}
+```
+Three render states: a "Confirming your payment…" spinner while the `CompleteCheckoutAsync` round-trip is in flight, the success screen (order number + kg-saved impact stat, mirroring what used to live in `CartPanel`'s old confirmation state), or an error message with a "Back to browsing" link. `CartService.RestoreAsync()` is called before `ClearAsync()` — unlike every other `CartPanel`/`Home`/`BusinessDetail` call site, this page can be the very first one to render in a fresh circuit (the customer left the app entirely for Stripe and came back via a real HTTP redirect), so `CartService`'s in-memory state isn't already populated the way it would be on an in-app navigation; restoring first is what makes `ClearAsync()` actually clear something instead of a no-op. `_kgSaved` here **is** the authoritative figure by this point (`completion.KgSaved`, computed server-side by `CheckoutService` from the just-placed `Order`), unlike the old client-side-computed version this page replaced.
+
+`PaymentCancel.razor` is comparatively trivial — no query params, no service calls, just a static "Payment cancelled, nothing was charged, your basket is still saved" message with a link back to `/`. Stripe redirects here when the customer backs out of the hosted Checkout page instead of completing it; the cart survives because nothing about it was ever touched — `StartCheckoutAsync` above never clears the basket itself, only a confirmed `PaymentReturn.razor` success does.
 
 ---
 
@@ -565,6 +608,12 @@ The package is created first (same as the non-recurring path), then the template
 This is a **plain `<a href>`**, not a button wired to `OrderController` — it has to be, since `OrderExportController` is a real HTTP endpoint and the browser needs to treat the response as a downloadable file (see `BACKEND_ARCHITECTURE.md` §6). The rest of the page (search, status/business filters, confirm/complete/cancel actions) follows the identical `Debouncer`-gated paged-list pattern every other admin list page uses.
 
 A manager's `businessId` (both for the paged list and for `ExportHref` above) comes from `ManagedBusinessContext.SelectedBusinessId`, not a page-local dropdown — an admin instead picks from `_businessFilter`, a plain `<select>` over every business. `OnInitializedAsync` subscribes to `ManagedBusinessContext.OnChange` (`HandleManagedBusinessChanged`, resetting `_pageIndex` back to 1 before reloading) so switching businesses in `NavMenu` refreshes the order queue in place. If a manager staffs zero businesses, `GetOrdersForManagementPagedAsync` returns `UnauthorizedResult` and the page renders `ForbiddenPanel` ("You don't manage a business yet…") instead of an empty table.
+
+### Payments
+
+**File:** `Components/Pages/Payments.razor` — `@page "/payments"`, manager/admin payout ledger.
+
+Deliberately **not** a new backend surface — it calls the exact same `OrderController.GetOrdersForManagementPagedAsync` `OrderManagement.razor` does (same `ManagedBusinessContext`/`_businessFilter` scoping split, same `Debouncer`-gated reload, same `ForbiddenPanel` fallback for a staffless manager), just reading `order.Payment` off each row instead of rendering the status-change action buttons. Two stat cards up top — "Collected (this page)" / "Refunded (this page)" — are computed client-side from the currently-loaded page (`_paged.Items.Where(o => o.Payment is not null).Sum(...)`), not a separate aggregate query; "this page" in the label is accurate, not a rounding shortcut — switching pages recomputes both from whatever page just loaded. No write actions live here at all — refunds only ever happen as a side effect of `OrderService.ApplyStatusChangeAsync`'s Cancelled transition (`BACKEND_ARCHITECTURE.md` §5), never a button on this page.
 
 ### Users
 

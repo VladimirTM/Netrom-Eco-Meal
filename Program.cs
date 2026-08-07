@@ -10,6 +10,7 @@ using Netrom_Eco_Meal.Repositories.Interfaces;
 using Netrom_Eco_Meal.Services;
 using Netrom_Eco_Meal.Services.Email;
 using Netrom_Eco_Meal.Services.Interfaces;
+using Netrom_Eco_Meal.Services.Payments;
 
 // Single-locale app: prices are always RON, so every ToString("C") call site (cart,
 // package cards, orders...) gets that formatting for free instead of the server's OS culture.
@@ -18,6 +19,13 @@ CultureInfo.DefaultThreadCurrentCulture = romanianCulture;
 CultureInfo.DefaultThreadCurrentUICulture = romanianCulture;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Left unset when Stripe:SecretKey isn't configured — StripeGateway.EnsureConfigured then turns
+// any checkout attempt into a friendly "payments aren't configured yet" error instead of an SDK
+// exception, same as SmtpEmailSender degrading when Email:Smtp:Host is missing.
+var stripeSecretKey = builder.Configuration["Stripe:SecretKey"];
+if (!string.IsNullOrWhiteSpace(stripeSecretKey))
+    Stripe.StripeConfiguration.ApiKey = stripeSecretKey;
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -64,6 +72,8 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IFavoriteRepository, FavoriteRepository>();
 builder.Services.AddScoped<IFavoriteService, FavoriteService>();
 builder.Services.AddScoped<IAppEmailSender, SmtpEmailSender>();
+builder.Services.AddScoped<IStripeGateway, StripeGateway>();
+builder.Services.AddScoped<ICheckoutService, CheckoutService>();
 builder.Services.AddScoped<CurrentUserAccessor>();
 builder.Services.AddScoped<CartService>();
 builder.Services.AddScoped<ClientTimeZoneService>();
@@ -74,6 +84,7 @@ builder.Services.AddScoped<PackageController>();
 builder.Services.AddScoped<PackageTemplateController>();
 builder.Services.AddScoped<UserController>();
 builder.Services.AddScoped<OrderController>();
+builder.Services.AddScoped<PaymentController>();
 builder.Services.AddScoped<ReviewController>();
 builder.Services.AddScoped<NotificationController>();
 builder.Services.AddScoped<FavoriteController>();

@@ -1,0 +1,27 @@
+@page "/checkout/cancel"
+@layout EmptyLayout
+@using Microsoft.AspNetCore.Authorization
+@using Netrom_Eco_Meal.Constants
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = AppRoles.Customer)]
+
+<PageTitle>Payment cancelled — Eco Meal</PageTitle>
+
+<div class="login-page">
+    <div class="login-card">
+        <div class="login-brand">
+            <img src="logo.png" alt="Eco Meal" class="login-logo"/>
+            <div>
+                <div class="login-brand-name">Eco Meal</div>
+                <div class="login-brand-sub">Surplus food, rescued</div>
+            </div>
+        </div>
+
+        <div class="cart-confirmation">
+            <i class="bi bi-x-circle text-muted"></i>
+            <h3>Payment cancelled</h3>
+            <p>Nothing was charged. Your basket is still saved if you'd like to try again.</p>
+            <a class="btn btn-primary w-100 py-2 fw-semibold" href="/">Back to browsing</a>
+        </div>
+    </div>
+</div>

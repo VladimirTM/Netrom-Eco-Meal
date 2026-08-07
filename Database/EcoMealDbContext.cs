@@ -23,6 +23,8 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Notification> Notifications { get; set; }
     public DbSet<Favorite> Favorites { get; set; }
     public DbSet<PackageTemplate> PackageTemplates { get; set; }
+    public DbSet<Payment> Payments { get; set; }
+    public DbSet<PendingCheckout> PendingCheckouts { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +68,17 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
         // One favorite per customer per business — toggling un-favorites instead of duplicating.
         modelBuilder.Entity<Favorite>()
             .HasIndex(f => new { f.UserId, f.BusinessId })
+            .IsUnique();
+
+        // One Payment per Order — Stripe Checkout is one session per order, never split.
+        modelBuilder.Entity<Payment>()
+            .HasOne(p => p.Order)
+            .WithOne(o => o.Payment)
+            .HasForeignKey<Payment>(p => p.OrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<Payment>()
+            .HasIndex(p => p.OrderId)
             .IsUnique();
 
         // Newest-first lookups for a user's bell dropdown are the only query pattern.

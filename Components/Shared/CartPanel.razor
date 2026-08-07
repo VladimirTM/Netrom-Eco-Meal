@@ -4,7 +4,8 @@
 @using Netrom_Eco_Meal.Services.Interfaces
 @implements IDisposable
 @inject CartService CartService
-@inject OrderController OrderController
+@inject PaymentController PaymentController
+@inject NavigationManager Navigation
 
 @if (IsOpen)
 {
@@ -23,20 +24,7 @@
             </button>
         </div>
 
-        @if (_placedOrderNumber is not null)
-        {
-            <div class="cart-panel-body cart-confirmation">
-                <i class="bi bi-check-circle-fill"></i>
-                <h3>Order #@_placedOrderNumber placed</h3>
-                <p>@_placedBusinessName has your order — head over at pickup time to collect it.</p>
-                @if (_placedKgSaved is > 0)
-                {
-                    <p class="cart-confirmation-impact"><i class="bi bi-leaf"></i> ~@_placedKgSaved.Value.ToString("0.#") kg of food saved from waste</p>
-                }
-                <button type="button" class="btn btn-primary w-100" @onclick="Close">Done</button>
-            </div>
-        }
-        else if (CartService.Items.Count == 0)
+        @if (CartService.Items.Count == 0)
         {
             <div class="cart-panel-body cart-empty">
                 <i class="bi bi-basket2"></i>
@@ -80,12 +68,16 @@
                     <span>Total</span>
                     <span class="cart-panel-total-value">@CartService.TotalPrice.ToString("C")</span>
                 </div>
-                <button type="button" class="btn btn-primary w-100 py-2" disabled="@_placing" @onclick="PlaceOrderAsync">
+                <button type="button" class="btn btn-primary w-100 py-2" disabled="@_placing" @onclick="StartCheckoutAsync">
                     @if (_placing)
                     {
                         <span class="spinner-border spinner-border-sm me-2" role="status"></span>
                     }
-                    Place order
+                    else
+                    {
+                        <i class="bi bi-credit-card me-2"></i>
+                    }
+                    Pay &amp; place order
                 </button>
             </div>
         }
@@ -98,9 +90,6 @@
 
     private bool _placing;
     private string? _error;
-    private int? _placedOrderNumber;
-    private string? _placedBusinessName;
-    private decimal? _placedKgSaved;
 
     protected override void OnInitialized()
     {
@@ -109,17 +98,15 @@
 
     private void HandleCartChanged() => InvokeAsync(StateHasChanged);
 
-    // Always clears the post-order confirmation state, not just on the "Done" button — otherwise
-    // dismissing it via the X icon or backdrop leaves it showing stale on the next basket open.
     private async Task Close()
     {
-        _placedOrderNumber = null;
-        _placedBusinessName = null;
-        _placedKgSaved = null;
         await IsOpenChanged.InvokeAsync(false);
     }
 
-    private async Task PlaceOrderAsync()
+    // Sends the browser off to Stripe's hosted Checkout page — the cart itself is only cleared
+    // once payment is confirmed on the /checkout/return page (see PaymentReturn.razor), since the
+    // Order (and this basket) shouldn't be considered placed until then.
+    private async Task StartCheckoutAsync()
     {
         if (CartService.BusinessId is null || _placing)
             return;
@@ -128,23 +115,18 @@
         _error = null;
 
         var businessId = CartService.BusinessId.Value;
-        var businessName = CartService.BusinessName;
         var lines = CartService.Items.Select(i => new OrderLineRequest(i.Package.Id, i.Quantity)).ToList();
-        var result = await OrderController.PlaceOrderAsync(businessId, lines);
+        var result = await PaymentController.CreateCheckoutSessionAsync(businessId, lines);
 
-        _placing = false;
-
-        // OrderController returns Conflict() for auth/stock failures instead of throwing.
+        // PaymentController returns Conflict() for auth/stock/unconfigured-Stripe failures instead of throwing.
         if (result.Result is ConflictObjectResult conflict)
         {
-            _error = conflict.Value?.ToString() ?? "We couldn't place your order. Please try again.";
+            _placing = false;
+            _error = conflict.Value?.ToString() ?? "We couldn't start checkout. Please try again.";
             return;
         }
 
-        _placedOrderNumber = result.Value?.OrderNumber;
-        _placedBusinessName = businessName;
-        _placedKgSaved = CartService.Items.Sum(i => i.Quantity * i.Package.WeightKg);
-        await CartService.ClearAsync();
+        Navigation.NavigateTo(result.Value!, forceLoad: true);
     }
 
     public void Dispose()
