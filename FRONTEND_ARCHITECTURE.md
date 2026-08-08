@@ -550,6 +550,23 @@ Reuses the exact same `OrderController.GetOrdersInRangeAsync` call the CSV expor
 
 A `BusinessManager`'s stat cards and trend chart are scoped to `ManagedBusinessContext.SelectedBusinessId`, not every business they staff — `LoadDashboardAsync` passes it straight through to `OrderController.GetOrdersForManagementAsync`/`GetOrdersInRangeAsync`, and `OnInitializedAsync` subscribes to `ManagedBusinessContext.OnChange` (`HandleManagedBusinessChanged` re-runs `LoadDashboardAsync`) so switching businesses in `NavMenu` reloads every card and the chart in place, no navigation needed. Admins skip `ManagedBusinessContext` entirely and always see platform-wide totals.
 
+**Business Analytics card (Phase 8)** — sell-through rate and a 24-bar "busiest pickup hours" chart, right below the trend chart, fed by one call to `PackageController.GetForAnalyticsAsync(businessId, since)` (same 14-day `since` as the trend chart, reused from `LoadDailyStatsAsync`) rather than a second backend round-trip per metric:
+```csharp
+private async Task LoadAnalyticsAsync(Guid? businessId)
+{
+    var since = DateTime.UtcNow.Date.AddDays(-13);
+    _analyticsPackages = (await PackageController.GetForAnalyticsAsync(businessId, since)).Value ?? [];
+
+    var closed = _analyticsPackages.Where(p => p.PickupEnd < DateTime.UtcNow).ToList();
+    _soldQty = closed.Sum(p => p.OrderPackages.Where(op => op.Order.Status.Name == Completed).Sum(op => op.Quantity));
+    _unsoldQty = closed.Sum(p => p.Quantity);
+    _sellThroughRate = _soldQty + _unsoldQty > 0 ? (decimal)_soldQty / (_soldQty + _unsoldQty) : 0m;
+
+    RecomputeHourlyPickupStats(); // buckets by ClientTimeZoneService.ToLocal(p.PickupStart).Hour
+}
+```
+Sell-through only counts packages whose pickup window has **already closed** — an open package's remaining `Quantity` hasn't finished selling yet, so counting it as "unsold" would understate the rate. This falls out of `Package.Quantity`'s own lifecycle rather than needing a separate "original quantity" field: `Confirmed`/`Completed` decrement it and only `Completed` never restores it, so once every `Pending`/`Confirmed` order against a closed package has resolved, `Quantity` remaining *is* "never sold." The hourly chart is bucketed by the **viewer's local hour** (`ClientTimeZoneService.ToLocal`, not UTC like the trend chart above it) — split into its own `RecomputeHourlyPickupStats` method specifically so a timezone that resolves *after* the initial data fetch (`ClientTimeZoneService.OnChange`) can rebucket without refetching from the server. The progress-bar width is rendered from a plain `int` percentage, not the raw `decimal` rate — interpolating a `decimal` straight into inline CSS (`width: @(rate * 100)%`) renders through the app's fixed `ro-RO` culture (§10 `BACKEND_ARCHITECTURE.md`) as `70,0%`, a comma the browser silently can't parse as a CSS length, so the bar would render at 0 width even though the percentage text above it reads correctly.
+
 ### Businesses / BusinessForm
 
 `Businesses.razor` is the admin/manager list — admins see every business and can create new ones; a `BusinessManager` sees only the business(es) they're staff of (`staffUserId` passed to `BusinessController.GetPagedAsync`) and can edit any of them. Staff are shown as removable chips per row (`business.Staff.OrderBy(s => s.User.Name)`, each with a small `×` calling `BusinessController.RemoveStaffAsync`) plus an admin-only `AnchoredDropdown` "add staff" trigger listing every `BusinessManager` not already on that row — picking one calls `AddStaffAsync` and **deliberately doesn't close the dropdown**, so an admin can add several staff in one open. `BusinessForm.razor` serves both `/businesses/create` (admin-only) and `/businesses/edit/{id}` (admin or one of the business's own staff, via `IsStaffAsync`) behind one component, branching on whether `Id` was supplied (`IsEdit`) — staff assignment itself lives on `Businesses.razor`/`Users.razor`, not on this form.
@@ -581,6 +598,22 @@ if (_model.RepeatDaily)
     await PackageTemplateController.CreateFromPackageAsync(package.Id, pickupStart.TimeOfDay, pickupEnd.TimeOfDay);
 ```
 The package is created first (same as the non-recurring path), then the template is derived from it in a second call — `package.Id` is already populated at that point because EF Core client-generates `Guid` primary keys when an entity enters the `Added` state, not deferred until `SaveChangesAsync` (see `BACKEND_ARCHITECTURE.md` §3 PackageTemplate). `PackageTemplates.razor` (`/packages/templates`) is the standalone management page for existing templates — a flat table (name, daily window converted through `ClientTimeZoneService` the same way `Packages.razor` does, qty/day, last-generated date, active/paused status) with Pause/Resume (`SetActiveAsync`) and a `ConfirmDialog`-gated "stop repeating" (`DeleteAsync`) per row. No create form of its own — a template can only be created by ticking the checkbox while creating a package, never edited or created standalone, since it's meant to always start from a real package's current values.
+
+**Bulk-action toolbar (Phase 8)** — a checkbox column (only rendered per-row when the viewer can manage that package — admin, or manager on their currently-selected business) plus a header "select all on this page" checkbox drive a `_selectedIds` `HashSet<Guid>`. Selecting anything reveals a toolbar above the table (Duplicate / Adjust quantity / Extend pickup window / Clear selection), reusing the same `.confirm-backdrop`/`.confirm-dialog` shell `ConfirmDialog.razor` uses for the two modal-driven actions rather than a new component:
+```csharp
+private async Task ApplyBulkModalAsync()
+{
+    if (_bulkMode == BulkMode.AdjustQuantity)
+        await PackageController.AdjustQuantityManyAsync(_selectedIds.ToList(), _bulkQuantityDelta);
+    else
+        await PackageController.ExtendPickupWindowManyAsync(_selectedIds.ToList(), _bulkExtendHours);
+
+    _bulkMode = BulkMode.None;
+    _selectedIds.Clear();
+    await ReloadAsync();
+}
+```
+The selection deliberately **isn't** scoped to the current page — it's a plain `HashSet<Guid>` that survives paging and filter changes, so a manager can build up a selection across several pages before acting on all of it in one call. It's cleared on a successful bulk action and on `HandleManagedBusinessChanged` (switching business in `NavMenu`), since a selection built up under the previous business no longer applies. An admin viewing "All businesses" isn't limited to one business per batch either — `PackageService.EnsureCanManageBusinessesAsync` (`BACKEND_ARCHITECTURE.md` §5) just loops the existing single-package ownership check across every distinct `BusinessId` in the selection.
 
 ### OrderManagement (+ CSV export)
 
@@ -637,18 +670,19 @@ Admin-only role management. Two independent `AnchoredDropdown`s per row (role, a
 
 ## 13. CSS Design System
 
-**File:** `wwwroot/app.css` — a single ~3100-line stylesheet, no Sass/Less, no CSS-in-JS, no Tailwind. Organized into clearly delimited sections (`/* ── Section name ── */`), roughly in the order features were added:
+**File:** `wwwroot/app.css` — a single ~3400-line stylesheet, no Sass/Less, no CSS-in-JS, no Tailwind. Organized into clearly delimited sections (`/* ── Section name ── */`), roughly in the order features were added:
 
 ```
 Design tokens · Buttons · Sidebar nav · Content · Stat card accents · Table · Badges
 Role badges · Form focus · Login page · Sidebar user footer · Blazor error banner
 Misc · Public shell · Home hero · Home browse · Package grid · Add to basket
 Cart button + badge · Cart panel · Toast · Orders hero · Orders list
-Order ticket (signature element) · Pickup pass · Confirm dialog · Manager order actions
-Dashboard trend chart · Star rating · Business grid (home) · Business detail page
-Packages inside the business modal · Reviews inside the business modal
-Package detail modal · Order detail modal · Manager pickup scanner
-Pickup validation page · Notification bell · Favorites · Dietary tag badges
+Order ticket (signature element) · Packages bulk-action toolbar · Confirm dialog
+Manager order actions · Dashboard trend chart · Star rating · Business grid (home)
+Business detail page · Packages inside the business modal
+Reviews inside the business modal · Package detail modal · Order detail modal
+Manager pickup scanner · Pickup validation page · Notification bell · Favorites
+Dietary tag badges
 ```
 
 ### Design tokens

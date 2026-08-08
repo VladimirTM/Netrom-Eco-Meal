@@ -72,6 +72,29 @@
     </div>
 }
 
+@if (_selectedIds.Count > 0)
+{
+    <div class="card border-0 shadow-sm bulk-toolbar mb-3">
+        <div class="card-body d-flex align-items-center gap-3 flex-wrap py-2">
+            <span class="fw-semibold small">@_selectedIds.Count selected</span>
+            <div class="d-flex gap-2 flex-wrap ms-auto">
+                <button class="btn btn-sm btn-outline-secondary" disabled="@_bulkBusy" @onclick="() => _confirmingDuplicate = true">
+                    <i class="bi bi-copy me-1"></i> Duplicate
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" disabled="@_bulkBusy" @onclick="OpenAdjustQuantity">
+                    <i class="bi bi-dash-slash-lg me-1"></i> Adjust quantity
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" disabled="@_bulkBusy" @onclick="OpenExtendPickup">
+                    <i class="bi bi-clock-history me-1"></i> Extend pickup window
+                </button>
+                <button class="btn btn-sm btn-link text-muted" disabled="@_bulkBusy" @onclick="() => _selectedIds.Clear()">
+                    Clear selection
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 <div class="card border-0 shadow-sm">
     @if (_paged is null)
     {
@@ -98,6 +121,14 @@
             <table class="table table-hover mb-0 align-middle">
                 <thead>
                 <tr class="border-bottom">
+                    @if (_isAdmin || _isBusinessManager)
+                    {
+                        <th class="ps-4 py-3" style="width: 2.5rem;">
+                            <input type="checkbox" class="form-check-input" checked="@AllSelectableOnPageSelected"
+                                   disabled="@(!SelectablePackagesOnPage.Any())"
+                                   @onchange="e => ToggleSelectAll((bool)e.Value!)" aria-label="Select all on this page"/>
+                        </th>
+                    }
                     <th class="px-4 py-3 text-uppercase text-muted small fw-semibold">Name</th>
                     <th class="py-3 text-uppercase text-muted small fw-semibold">Business</th>
                     <th class="py-3 text-uppercase text-muted small fw-semibold">Type</th>
@@ -116,6 +147,16 @@
                 {
                     var canManage = _isAdmin || (_isBusinessManager && package.BusinessId == _myBusinessId);
                     <tr>
+                        @if (_isAdmin || _isBusinessManager)
+                        {
+                            <td class="ps-4">
+                                @if (canManage)
+                                {
+                                    <input type="checkbox" class="form-check-input" checked="@_selectedIds.Contains(package.Id)"
+                                           @onchange="e => ToggleSelect(package.Id, (bool)e.Value!)" aria-label="Select @package.Name"/>
+                                }
+                            </td>
+                        }
                         <td class="px-4">
                             <div class="fw-semibold">
                                 @package.Name
@@ -172,7 +213,61 @@
                OnConfirm="ConfirmDeleteAsync"
                OnCancel="() => _pendingDelete = null"/>
 
+<ConfirmDialog IsOpen="_confirmingDuplicate"
+               Title="Duplicate packages?"
+               Message="@($"{_selectedIds.Count} package{(_selectedIds.Count == 1 ? "" : "s")} will be copied with the same name, price, and pickup window. Adjust the copies afterward as needed.")"
+               ConfirmLabel="Duplicate"
+               ConfirmClass="btn-primary"
+               Busy="@_bulkBusy"
+               OnConfirm="DuplicateSelectedAsync"
+               OnCancel="() => _confirmingDuplicate = false"/>
+
+@if (_bulkMode != BulkMode.None)
+{
+    <div class="confirm-backdrop" @onclick="CloseBulkModal"></div>
+    <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="bulk-modal-title">
+        @if (_bulkMode == BulkMode.AdjustQuantity)
+        {
+            <h2 class="confirm-dialog-title" id="bulk-modal-title">Adjust quantity</h2>
+            <p class="confirm-dialog-message">
+                Applied to @_selectedIds.Count selected package@(_selectedIds.Count == 1 ? "" : "s"). Use a negative
+                number to reduce stock — it won't go below 0.
+            </p>
+            <div class="mb-3">
+                <label for="bulkQtyDelta" class="form-label fw-semibold small">Change quantity by</label>
+                <input id="bulkQtyDelta" type="number" class="form-control" @bind="_bulkQuantityDelta"/>
+            </div>
+        }
+        else
+        {
+            <h2 class="confirm-dialog-title" id="bulk-modal-title">Extend pickup window</h2>
+            <p class="confirm-dialog-message">
+                Pushes the pickup end time later for @_selectedIds.Count selected package@(_selectedIds.Count == 1 ? "" : "s"). The start time is unchanged.
+            </p>
+            <div class="mb-3">
+                <label for="bulkExtendHours" class="form-label fw-semibold small">Extend by (hours)</label>
+                <input id="bulkExtendHours" type="number" min="0.5" step="0.5" class="form-control" @bind="_bulkExtendHours"/>
+            </div>
+        }
+        @if (_bulkError is not null)
+        {
+            <p class="text-danger small">@_bulkError</p>
+        }
+        <div class="confirm-dialog-actions">
+            <button type="button" class="btn btn-outline-secondary" disabled="@_bulkBusy" @onclick="CloseBulkModal">Cancel</button>
+            <button type="button" class="btn btn-primary" disabled="@_bulkBusy" @onclick="ApplyBulkModalAsync">
+                @if (_bulkBusy)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                }
+                Apply
+            </button>
+        </div>
+    </div>
+}
+
 @code {
+    private enum BulkMode { None, AdjustQuantity, ExtendPickup }
     private PaginatedList<Package>? _paged;
     private List<Business> _allBusinesses = [];
     private List<PackageType> _packageTypes = [];
@@ -189,6 +284,15 @@
     // Guards every reload trigger (search, filters, paging, post-mutation refresh) so
     // overlapping ones cancel each other instead of using the shared DbContext concurrently.
     private readonly Debouncer _reloadGate = new();
+
+    // Selection persists across pages/filters so a manager can build it up while paging, then act on all of it at once.
+    private readonly HashSet<Guid> _selectedIds = [];
+    private bool _confirmingDuplicate;
+    private BulkMode _bulkMode = BulkMode.None;
+    private int _bulkQuantityDelta;
+    private double _bulkExtendHours = 1;
+    private bool _bulkBusy;
+    private string? _bulkError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -215,11 +319,91 @@
     {
         _myBusinessId = ManagedBusinessContext.SelectedBusinessId;
         _pageIndex = 1;
+        // A selection built up under the previous business no longer applies once it changes.
+        _selectedIds.Clear();
         await InvokeAsync(async () =>
         {
             await LoadPageAsync();
             StateHasChanged();
         });
+    }
+
+    private IEnumerable<Package> SelectablePackagesOnPage =>
+        _paged?.Items.Where(p => _isAdmin || (_isBusinessManager && p.BusinessId == _myBusinessId)) ?? [];
+
+    private bool AllSelectableOnPageSelected =>
+        SelectablePackagesOnPage.Any() && SelectablePackagesOnPage.All(p => _selectedIds.Contains(p.Id));
+
+    private void ToggleSelectAll(bool select)
+    {
+        foreach (var package in SelectablePackagesOnPage)
+        {
+            if (select) _selectedIds.Add(package.Id);
+            else _selectedIds.Remove(package.Id);
+        }
+    }
+
+    private void ToggleSelect(Guid id, bool select)
+    {
+        if (select) _selectedIds.Add(id);
+        else _selectedIds.Remove(id);
+    }
+
+    private void OpenAdjustQuantity()
+    {
+        _bulkMode = BulkMode.AdjustQuantity;
+        _bulkQuantityDelta = 0;
+        _bulkError = null;
+    }
+
+    private void OpenExtendPickup()
+    {
+        _bulkMode = BulkMode.ExtendPickup;
+        _bulkExtendHours = 1;
+        _bulkError = null;
+    }
+
+    private void CloseBulkModal()
+    {
+        _bulkMode = BulkMode.None;
+        _bulkError = null;
+    }
+
+    private async Task DuplicateSelectedAsync()
+    {
+        _bulkBusy = true;
+        await PackageController.DuplicateManyAsync(_selectedIds.ToList());
+        _bulkBusy = false;
+        _confirmingDuplicate = false;
+        _selectedIds.Clear();
+        await ReloadAsync();
+    }
+
+    private async Task ApplyBulkModalAsync()
+    {
+        if (_bulkMode == BulkMode.AdjustQuantity && _bulkQuantityDelta == 0)
+        {
+            _bulkError = "Enter a non-zero amount.";
+            return;
+        }
+        if (_bulkMode == BulkMode.ExtendPickup && _bulkExtendHours <= 0)
+        {
+            _bulkError = "Enter a positive number of hours.";
+            return;
+        }
+
+        _bulkBusy = true;
+        _bulkError = null;
+
+        if (_bulkMode == BulkMode.AdjustQuantity)
+            await PackageController.AdjustQuantityManyAsync(_selectedIds.ToList(), _bulkQuantityDelta);
+        else
+            await PackageController.ExtendPickupWindowManyAsync(_selectedIds.ToList(), _bulkExtendHours);
+
+        _bulkBusy = false;
+        _bulkMode = BulkMode.None;
+        _selectedIds.Clear();
+        await ReloadAsync();
     }
 
     private async Task LoadPageAsync()

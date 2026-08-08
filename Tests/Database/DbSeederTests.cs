@@ -62,7 +62,8 @@ public class DbSeederTests(PostgresFixture fixture)
             statusNames.ToHashSet());
 
         Assert.Equal(12, await db.Businesses.CountAsync());
-        Assert.Equal(24, await db.Packages.CountAsync());
+        // 24 live storefront packages + 9 historical ones backing the Phase 8 analytics card.
+        Assert.Equal(33, await db.Packages.CountAsync());
     }
 
     [Fact]
@@ -113,8 +114,9 @@ public class DbSeederTests(PostgresFixture fixture)
         Assert.Contains(manager2.Id, stadionulStaffIds);
 
         var orders = await db.Orders.Include(o => o.Status).Where(o => o.UserId == customer.Id).ToListAsync();
-        Assert.Equal(7, orders.Count);
-        Assert.Equal(3, orders.Count(o => o.Status.Name == OrderStatuses.Completed));
+        // 7 original demo orders + 9 historical ones backing the Phase 8 analytics card.
+        Assert.Equal(16, orders.Count);
+        Assert.Equal(12, orders.Count(o => o.Status.Name == OrderStatuses.Completed));
         Assert.Single(orders, o => o.Status.Name == OrderStatuses.Confirmed);
         Assert.Single(orders, o => o.Status.Name == OrderStatuses.Cancelled);
         Assert.Single(orders, o => o.Status.Name == OrderStatuses.Pending);
@@ -168,8 +170,8 @@ public class DbSeederTests(PostgresFixture fixture)
 
         await using var finalDb = provider.GetRequiredService<EcoMealDbContext>();
         Assert.Equal(12, await finalDb.Businesses.CountAsync());
-        Assert.Equal(24, await finalDb.Packages.CountAsync());
-        Assert.Equal(7, await finalDb.Orders.CountAsync());
+        Assert.Equal(33, await finalDb.Packages.CountAsync());
+        Assert.Equal(16, await finalDb.Orders.CountAsync());
         Assert.Equal(3, await finalDb.Favorites.CountAsync());
         Assert.Equal(2, await finalDb.Reviews.CountAsync());
         // Two demo managers each staff one or two of the demo businesses — must not double-insert.

@@ -10,6 +10,8 @@ public interface IPackageRepository
     public Task<PaginatedList<Package>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessId, Guid? packageTypeId);
     public Task<Package?> GetByIdAsync(Guid id);
     public Task<List<Package>> GetByIdsAsync(IEnumerable<Guid> ids);
+    // Includes the OrderPackages/Order/Status graph so analytics can aggregate without a second round-trip.
+    public Task<List<Package>> GetForAnalyticsAsync(Guid? businessId, DateTime since);
     public Task AddAsync(Package package);
     public Task DeleteAsync(Guid id);
     public Task SaveChangesAsync();

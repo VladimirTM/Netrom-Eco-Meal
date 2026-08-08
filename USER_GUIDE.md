@@ -197,6 +197,21 @@ fresh instance of it — same name, price, and pickup window — every day going
 don't have to hand-recreate the same package each morning. A 🔁 "Daily" badge on `/packages`
 marks any package a template is currently generating.
 
+**Bulk-select** packages with the checkbox column (each row's checkbox only appears on
+packages you're allowed to manage; a header checkbox selects everything selectable on the
+current page). Selecting one or more reveals a toolbar above the table:
+
+- **Duplicate** — copies each selected package as a new, independent one (same name, price,
+  quantity, tags, and pickup window; not linked to the original's recurring template even if
+  it has one). Asks for confirmation first, showing how many will be copied.
+- **Adjust quantity** — adds (or, with a negative number, subtracts) the same amount to every
+  selected package's stock in one go; never drops below 0.
+- **Extend pickup window** — pushes just the pickup *end* time later by however many hours you
+  enter, for every selected package; the start time is untouched.
+
+A selection persists as you page through or change filters, so you can build it up across
+multiple pages before acting — "Clear selection" or completing an action empties it again.
+
 ### Manage recurring templates
 
 `/packages/templates` lists every template for the current business: name and description,
@@ -248,6 +263,18 @@ carrying a hover/focus tooltip with the exact date and value, and today's bar vi
 highlighted. If you don't currently manage a business, it explains that instead of showing an
 empty chart.
 
+Below that, a **Business Analytics** card covers packages with a pickup window in the last 14
+days:
+
+- **Sell-through rate** — the share of listed stock that actually got picked up, counting only
+  packages whose pickup window has already closed (an open package hasn't finished selling
+  yet, so its remaining stock isn't "unsold" — just not decided). Shows the percentage, a
+  progress bar, and "X of Y listed picked up"; if nothing's closed yet in the period, it says so
+  instead of showing a misleading 0%.
+- **Busiest pickup hours** — a 24-bar chart of completed pickups bucketed by hour of day (in
+  *your* local time), so you can see when foot traffic actually peaks. Hover or focus a bar for
+  the exact hour range and count.
+
 `/payments` is the money version, scoped the same way: every order for your business with its
 payment status (Unpaid/Paid/Refunded), amount, and paid/refunded timestamps, plus two totals —
 "Collected" and "Refunded" — for whatever page of results you're currently looking at (not a
@@ -289,7 +316,10 @@ permanently removed.
 `/packages` and `/orders/manage` both gain an **All businesses** dropdown filter for admins
 instead of being locked to one currently-selected business — pick a specific business or leave
 it on "All" to see everything at once. Order actions (Confirm/Complete/Cancel/No-show) work
-exactly the same way here as they do for a BusinessManager.
+exactly the same way here as they do for a BusinessManager. The [bulk-select
+toolbar](#manage-whats-available) works the same way too, and isn't limited to one
+business at a time — an admin viewing "All businesses" can select and act on packages from
+several businesses in the same batch.
 
 ### Manage people
 
@@ -309,4 +339,6 @@ with the same chip-and-dropdown UI, shown only for BusinessManager accounts.
 
 `/dashboard` and `/payments` show store-wide totals for an Admin instead of being scoped to one
 business — every order, every package, every payment collected or refunded, across every
-kitchen on the platform, plus a `Businesses` and `Users` stat tile that only Admins see.
+kitchen on the platform, plus a `Businesses` and `Users` stat tile that only Admins see. The
+[Business Analytics card](#keep-an-eye-on-things) follows the same rule: sell-through rate and
+busiest pickup hours are platform-wide for an Admin, not just one business's.

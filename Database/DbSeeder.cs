@@ -399,6 +399,7 @@ public static class DbSeeder
         var packagesById = await db.Packages.ToDictionaryAsync(p => p.Id);
         var now = DateTime.UtcNow;
         var payments = new List<Payment>();
+        var newPackages = new List<Package>();
 
         // Every order now only exists once its Stripe Checkout payment is confirmed (see
         // CheckoutService), so each seeded order gets a matching Payment — refunded for the
@@ -445,7 +446,52 @@ public static class DbSeeder
         var confirmed = MakeOrder(b2, new Guid("55555555-0000-0000-0000-000000000004"), 1, OrderStatuses.Confirmed, now.AddDays(-1));
         var pending = MakeOrder(b1, new Guid("55555555-0000-0000-0000-000000000008"), 1, OrderStatuses.Pending, now.AddMinutes(-20));
 
-        db.Orders.AddRange(oldCompleted, midCompleted, recentCompleted, cancelled, noShow, confirmed, pending);
+        // Backs the Phase 8 analytics card: closed pickup windows, each completed for less than
+        // its full quantity, so sell-through lands below 100% and the hourly chart gets more than
+        // one bar. Unlike the packages above, these are already past their window, so they never
+        // show up as live/orderable — only in order history and dashboard analytics.
+        Package HistoricalPackage(Guid id, Guid businessId, Guid packageTypeId, string name, string description, decimal price, int quantity, decimal weightKg, DateTime pickupStart, DateTime pickupEnd)
+        {
+            var package = new Package
+            {
+                Id = id, BusinessId = businessId, PackageTypeId = packageTypeId, Name = name, Description = description,
+                Price = price, Quantity = quantity, WeightKg = weightKg, PickupStart = pickupStart, PickupEnd = pickupEnd,
+            };
+            packagesById[id] = package;
+            newPackages.Add(package);
+            return package;
+        }
+
+        var surpriseBag = new Guid("22222222-0000-0000-0000-000000000001");
+        var mealBox     = new Guid("22222222-0000-0000-0000-000000000002");
+        var breadBag    = new Guid("22222222-0000-0000-0000-000000000003");
+        var pastryBox   = new Guid("22222222-0000-0000-0000-000000000005");
+
+        DateTime PastAt(int daysAgo, int hour, int minute) => now.Date.AddDays(-daysAgo).AddHours(hour).AddMinutes(minute);
+
+        var hist1 = HistoricalPackage(new Guid("77777777-0000-0000-0000-000000000001"), b1, mealBox,     "Lunch Break Meal Box",    "Midday leftovers from the kitchen's lunch service.", 9.50m, 5,  1.2m, PastAt(9, 12, 0), PastAt(9, 13, 0));
+        var hist2 = HistoricalPackage(new Guid("77777777-0000-0000-0000-000000000002"), b1, surpriseBag, "Full-Time Surprise Bag",  "Evening surplus, sold out fast.",                     8.99m, 6,  1.5m, PastAt(7, 18, 0), PastAt(7, 19, 0));
+        var hist3 = HistoricalPackage(new Guid("77777777-0000-0000-0000-000000000003"), b1, mealBox,     "Second Half Meal Box",    "A second batch from the same evening service.",      9.99m, 4,  1.2m, PastAt(6, 18, 0), PastAt(6, 19, 0));
+        var hist4 = HistoricalPackage(new Guid("77777777-0000-0000-0000-000000000004"), b1, surpriseBag, "Late Kick-Off Bag",       "Whatever's left once the evening rush ends.",        7.99m, 5,  1.5m, PastAt(5, 19, 0), PastAt(5, 20, 0));
+        var hist5 = HistoricalPackage(new Guid("77777777-0000-0000-0000-000000000005"), b2, pastryBox,   "Midday Pastry Box",       "Leftover pastries from the lunch counter.",          6.50m, 8,  0.6m, PastAt(8, 13, 0), PastAt(8, 14, 0));
+        var hist6 = HistoricalPackage(new Guid("77777777-0000-0000-0000-000000000006"), b2, breadBag,    "Sundown Bread Bag",       "Bread and rolls nearing the end of the day.",        5.50m, 10, 1.4m, PastAt(4, 17, 0), PastAt(4, 18, 0));
+        var hist7 = HistoricalPackage(new Guid("77777777-0000-0000-0000-000000000007"), b2, mealBox,     "Closing Time Meal Box",   "The last meal boxes before closing.",                9.75m, 6,  1.2m, PastAt(3, 18, 0), PastAt(3, 19, 0));
+        var hist8 = HistoricalPackage(new Guid("77777777-0000-0000-0000-000000000008"), b3, surpriseBag, "Derby Night Bag",         "Match-night surplus from the derby-day kitchen.",    8.50m, 5,  1.5m, PastAt(2, 19, 0), PastAt(2, 20, 0));
+        var hist9 = HistoricalPackage(new Guid("77777777-0000-0000-0000-000000000009"), b3, mealBox,     "Last Call Meal Box",      "The final meal boxes of the night.",                10.50m, 4,  1.2m, PastAt(1, 20, 0), PastAt(1, 21, 0));
+
+        var histCompleted1 = MakeOrder(b1, hist1.Id, 3, OrderStatuses.Completed, PastAt(9, 12, 15));
+        var histCompleted2 = MakeOrder(b1, hist2.Id, 6, OrderStatuses.Completed, PastAt(7, 18, 10));
+        var histCompleted3 = MakeOrder(b1, hist3.Id, 3, OrderStatuses.Completed, PastAt(6, 18, 20));
+        var histCompleted4 = MakeOrder(b1, hist4.Id, 2, OrderStatuses.Completed, PastAt(5, 19, 5));
+        var histCompleted5 = MakeOrder(b2, hist5.Id, 5, OrderStatuses.Completed, PastAt(8, 13, 10));
+        var histCompleted6 = MakeOrder(b2, hist6.Id, 7, OrderStatuses.Completed, PastAt(4, 17, 25));
+        var histCompleted7 = MakeOrder(b2, hist7.Id, 6, OrderStatuses.Completed, PastAt(3, 18, 5));
+        var histCompleted8 = MakeOrder(b3, hist8.Id, 4, OrderStatuses.Completed, PastAt(2, 19, 15));
+        var histCompleted9 = MakeOrder(b3, hist9.Id, 1, OrderStatuses.Completed, PastAt(1, 20, 30));
+
+        db.Packages.AddRange(newPackages);
+        db.Orders.AddRange(oldCompleted, midCompleted, recentCompleted, cancelled, noShow, confirmed, pending,
+            histCompleted1, histCompleted2, histCompleted3, histCompleted4, histCompleted5, histCompleted6, histCompleted7, histCompleted8, histCompleted9);
         db.Payments.AddRange(payments);
 
         db.Favorites.AddRange(

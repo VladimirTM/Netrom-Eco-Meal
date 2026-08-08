@@ -1788,6 +1788,11 @@ h1:focus {
     }
 }
 
+/* ── Packages bulk-action toolbar ── */
+.bulk-toolbar {
+    border-left: 3px solid var(--em-leaf-mid);
+}
+
 /* ── Confirm dialog ── */
 .confirm-backdrop {
     position: fixed;
@@ -2013,6 +2018,10 @@ h1:focus {
 
 .dash-trend-bar-kg {
     background: var(--em-rescue);
+}
+
+.dash-trend-bar-hours {
+    background: #8b5cf6;
 }
 
 .dash-trend-bar-wrap:hover .dash-trend-bar,

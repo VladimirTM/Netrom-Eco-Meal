@@ -19,6 +19,7 @@
 @inject UserManager<ApplicationUser> UserManager
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ManagedBusinessContext ManagedBusinessContext
+@inject ClientTimeZoneService ClientTimeZoneService
 @attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
 
 <PageTitle>Dashboard — Eco Meal</PageTitle>
@@ -210,6 +211,76 @@
     </div>
 </div>
 
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-transparent border-0 pt-4 px-4 pb-0">
+        <h6 class="fw-semibold mb-0">Business Analytics</h6>
+        <p class="text-muted small mb-0">Packages with a pickup window in the last 14 days.</p>
+    </div>
+    <div class="card-body px-4 pb-4">
+        @if (_ordersUnavailable)
+        {
+            <p class="text-muted small mb-0">You don't manage a business yet, so there's no analytics to show.</p>
+        }
+        else if (_analyticsPackages is null)
+        {
+            <div class="d-flex justify-content-center py-4">
+                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="row g-4">
+                <div class="col-md-5">
+                    <div class="text-muted small mb-1">Sell-through rate</div>
+                    @if (_soldQty + _unsoldQty == 0)
+                    {
+                        <p class="text-muted small mb-0">No packages with a closed pickup window yet in this period.</p>
+                    }
+                    else
+                    {
+                        <div class="d-flex align-items-baseline gap-2 mb-2">
+                            <span class="fw-bold fs-2">@_sellThroughRate.ToString("P0")</span>
+                            <span class="text-muted small">@_soldQty of @(_soldQty + _unsoldQty) listed picked up</span>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-success" role="progressbar"
+                                 style="width: @(SellThroughRatePercent)%"
+                                 aria-valuenow="@(SellThroughRatePercent)" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <div class="text-muted small mt-2">@_closedPackageCount package@(_closedPackageCount == 1 ? "" : "s") with a closed pickup window.</div>
+                    }
+                </div>
+                <div class="col-md-7">
+                    <div class="text-muted small mb-2">Busiest pickup hours <span class="text-muted">(completed pickups)</span></div>
+                    <div class="dash-trend-chart" style="height: 56px;">
+                        @for (var h = 0; h < 24; h++)
+                        {
+                            var hour = h;
+                            var qty = _hourlyPickupQty[hour];
+                            <div class="dash-trend-bar-wrap" tabindex="0"
+                                 aria-label="@HourLabel(hour): @qty pickup@(qty == 1 ? "" : "s")">
+                                <span class="dash-trend-tooltip">
+                                    <span class="dash-trend-tooltip-date">@HourLabel(hour)</span>
+                                    <span class="dash-trend-tooltip-value">@qty pickup@(qty == 1 ? "" : "s")</span>
+                                </span>
+                                <div class="dash-trend-bar dash-trend-bar-hours" style="height: @(BarHeightPx(qty, _maxHourlyQty))px"></div>
+                            </div>
+                        }
+                    </div>
+                    <div class="dash-trend-chart dash-trend-axis-row">
+                        @for (var h = 0; h < 24; h++)
+                        {
+                            <div class="dash-trend-axis-tick">@(h % 3 == 0 ? $"{h}h" : "")</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
 <div class="card border-0 shadow-sm">
     <div class="card-header bg-transparent border-0 pt-4 px-4 pb-0">
         <h6 class="fw-semibold mb-0">Quick Actions</h6>
@@ -266,6 +337,15 @@
     private int _maxOrderCount = 1;
     private decimal _maxKgSaved = 1m;
 
+    // Business analytics (sell-through rate, busiest pickup hours) — both derived from one fetch.
+    private List<Package>? _analyticsPackages;
+    private int _closedPackageCount;
+    private int _soldQty;
+    private int _unsoldQty;
+    private decimal _sellThroughRate;
+    private int[] _hourlyPickupQty = new int[24];
+    private int _maxHourlyQty = 1;
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -278,6 +358,8 @@
         }
 
         await LoadDashboardAsync();
+
+        ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
     }
 
     private async Task LoadDashboardAsync()
@@ -310,6 +392,7 @@
         _ordersUnavailable = false;
         _orderCount = orders.Value?.Count ?? 0;
         await LoadDailyStatsAsync(myBusinessId);
+        await LoadAnalyticsAsync(myBusinessId);
     }
 
     private void HandleManagedBusinessChanged() => InvokeAsync(async () =>
@@ -318,9 +401,16 @@
         StateHasChanged();
     });
 
+    private void HandleTimeZoneChanged()
+    {
+        RecomputeHourlyPickupStats();
+        InvokeAsync(StateHasChanged);
+    }
+
     public void Dispose()
     {
         ManagedBusinessContext.OnChange -= HandleManagedBusinessChanged;
+        ClientTimeZoneService.OnChange -= HandleTimeZoneChanged;
     }
 
     private async Task LoadDailyStatsAsync(Guid? businessId)
@@ -345,6 +435,57 @@
         _maxOrderCount = Math.Max(1, _dailyStats.Max(d => d.OrderCount));
         _maxKgSaved = Math.Max(1m, _dailyStats.Max(d => d.KgSaved));
     }
+
+    private async Task LoadAnalyticsAsync(Guid? businessId)
+    {
+        var since = DateTime.UtcNow.Date.AddDays(-13);
+        var result = await PackageController.GetForAnalyticsAsync(businessId, since);
+        if (result.Result is UnauthorizedResult)
+        {
+            _analyticsPackages = [];
+            return;
+        }
+
+        _analyticsPackages = result.Value ?? [];
+
+        // Only counts closed pickup windows — an open package's remaining stock isn't "unsold"
+        // yet, it just hasn't finished selling (Confirmed already decremented it like a sale).
+        var now = DateTime.UtcNow;
+        var closed = _analyticsPackages.Where(p => p.PickupEnd < now).ToList();
+        _closedPackageCount = closed.Count;
+        _soldQty = closed.Sum(p => p.OrderPackages.Where(op => op.Order.Status.Name == OrderStatuses.Completed).Sum(op => op.Quantity));
+        _unsoldQty = closed.Sum(p => p.Quantity);
+        var totalOffered = _soldQty + _unsoldQty;
+        _sellThroughRate = totalOffered > 0 ? (decimal)_soldQty / totalOffered : 0m;
+
+        RecomputeHourlyPickupStats();
+    }
+
+    // Split out so a late-resolving timezone (HandleTimeZoneChanged) can rebucket by local hour
+    // without a refetch.
+    private void RecomputeHourlyPickupStats()
+    {
+        var hourly = new int[24];
+        foreach (var package in _analyticsPackages ?? [])
+        {
+            var completedQty = package.OrderPackages
+                .Where(op => op.Order.Status.Name == OrderStatuses.Completed)
+                .Sum(op => op.Quantity);
+            if (completedQty <= 0)
+                continue;
+
+            var localHour = ClientTimeZoneService.ToLocal(package.PickupStart).Hour;
+            hourly[localHour] += completedQty;
+        }
+
+        _hourlyPickupQty = hourly;
+        _maxHourlyQty = Math.Max(1, hourly.Max());
+    }
+
+    private static string HourLabel(int hour) => $"{hour:00}:00–{(hour + 1) % 24:00}:00";
+
+    // An int, not a decimal — avoids "70,0%" landing in inline CSS and silently breaking the width in ro-RO locale.
+    private int SellThroughRatePercent => (int)Math.Round(_sellThroughRate * 100);
 
     // Pixels, not percentage height — percentages don't reliably resolve through an unstretched flex-item chain.
     private const int ChartHeightPx = 64;

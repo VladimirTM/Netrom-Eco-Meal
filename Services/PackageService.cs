@@ -78,6 +78,73 @@ public class PackageService(
         await packageRepository.SaveChangesAsync();
     }
 
+    // Copies name/price/tags/pickup window as-is, for a manager to adjust afterward. TemplateId
+    // is deliberately not copied — a duplicate is a standalone package, not another template instance.
+    public async Task<List<Package>> DuplicateManyAsync(List<Guid> packageIds)
+    {
+        var packages = await packageRepository.GetByIdsAsync(packageIds);
+        await EnsureCanManageBusinessesAsync(packages);
+
+        var duplicates = packages.Select(p => new Package
+        {
+            Id = Guid.NewGuid(),
+            BusinessId = p.BusinessId,
+            PackageTypeId = p.PackageTypeId,
+            Name = p.Name,
+            Description = p.Description,
+            Price = p.Price,
+            Quantity = p.Quantity,
+            WeightKg = p.WeightKg,
+            DietaryTags = [..p.DietaryTags],
+            PickupStart = p.PickupStart,
+            PickupEnd = p.PickupEnd,
+            ImageUrl = p.ImageUrl,
+        }).ToList();
+
+        foreach (var duplicate in duplicates)
+            await packageRepository.AddAsync(duplicate);
+        await packageRepository.SaveChangesAsync();
+
+        return duplicates;
+    }
+
+    // Relative, not absolute — "add 5 more" works the same regardless of current stock. Clamped
+    // at 0, same floor a single-package edit enforces.
+    public async Task AdjustQuantityManyAsync(List<Guid> packageIds, int delta)
+    {
+        var packages = await packageRepository.GetByIdsAsync(packageIds);
+        await EnsureCanManageBusinessesAsync(packages);
+
+        foreach (var package in packages)
+            package.Quantity = Math.Max(0, package.Quantity + delta);
+
+        await packageRepository.SaveChangesAsync();
+    }
+
+    // Pushes PickupEnd later, leaving PickupStart untouched — matches "extend" rather than shifting the whole window.
+    public async Task ExtendPickupWindowManyAsync(List<Guid> packageIds, TimeSpan extension)
+    {
+        var packages = await packageRepository.GetByIdsAsync(packageIds);
+        await EnsureCanManageBusinessesAsync(packages);
+
+        foreach (var package in packages)
+            package.PickupEnd += extension;
+
+        await packageRepository.SaveChangesAsync();
+    }
+
+    public async Task<List<Package>> GetForAnalyticsAsync(Guid? businessId, DateTime since)
+    {
+        var (isAdmin, userId) = await currentUser.GetCurrentUserAsync();
+        if (!isAdmin)
+        {
+            if (userId is null || businessId is null || !await businessService.IsStaffAsync(businessId.Value, userId))
+                throw new UnauthorizedAccessException("You can only view analytics for your own business.");
+        }
+
+        return await packageRepository.GetForAnalyticsAsync(businessId, since);
+    }
+
     private async Task EnsureCanManageBusinessAsync(Guid businessId)
     {
         var (isAdmin, userId) = await currentUser.GetCurrentUserAsync();
@@ -86,6 +153,12 @@ public class PackageService(
 
         if (userId is null || !await businessService.IsStaffAsync(businessId, userId))
             throw new UnauthorizedAccessException("You can only manage packages that belong to your business.");
+    }
+
+    private async Task EnsureCanManageBusinessesAsync(IEnumerable<Package> packages)
+    {
+        foreach (var businessId in packages.Select(p => p.BusinessId).Distinct())
+            await EnsureCanManageBusinessAsync(businessId);
     }
 
     private static void UpdatePackage(Package package, Package packageToUpdate)

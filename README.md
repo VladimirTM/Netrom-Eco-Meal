@@ -194,7 +194,10 @@ instead of an empty app:
   Gusturi and VAR Bistro, so the sidebar's business switcher has something to switch
   between out of the box. Has a pending order waiting to be confirmed on `/orders/manage`
   and enough order history for `/dashboard`'s trend chart, `/payments`'s ledger, and CSV
-  export to be worth looking at.
+  export to be worth looking at. Also has a handful of already-closed packages with
+  partial completed sales spread across several days/hours, purely so `/dashboard`'s
+  Business Analytics card (sell-through rate, busiest pickup hours) has real history to
+  show instead of an empty state.
 - **BusinessManager** — demo.manager2@ecomeal.local / Demo123! — staffs Stadionul de
   Gusturi alongside the first demo manager, demonstrating the other direction of the
   many-to-many (several staff, one business).

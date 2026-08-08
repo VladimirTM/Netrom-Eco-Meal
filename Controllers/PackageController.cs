@@ -42,4 +42,33 @@ public class PackageController(IPackageService packageService) : ControllerBase
         await packageService.DeleteAsync(package);
         return NoContent();
     }
+
+    public async Task<ActionResult<List<Package>>> DuplicateManyAsync(List<Guid> packageIds)
+    {
+        return await packageService.DuplicateManyAsync(packageIds);
+    }
+
+    public async Task<ActionResult> AdjustQuantityManyAsync(List<Guid> packageIds, int delta)
+    {
+        await packageService.AdjustQuantityManyAsync(packageIds, delta);
+        return NoContent();
+    }
+
+    public async Task<ActionResult> ExtendPickupWindowManyAsync(List<Guid> packageIds, double hours)
+    {
+        await packageService.ExtendPickupWindowManyAsync(packageIds, TimeSpan.FromHours(hours));
+        return NoContent();
+    }
+
+    public async Task<ActionResult<List<Package>>> GetForAnalyticsAsync(Guid? businessId, DateTime since)
+    {
+        try
+        {
+            return await packageService.GetForAnalyticsAsync(businessId, since);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized();
+        }
+    }
 }
