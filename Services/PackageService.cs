@@ -1,7 +1,7 @@
-using System.Net;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Models;
 using Netrom_Eco_Meal.Repositories.Interfaces;
+using Netrom_Eco_Meal.Services.Email;
 using Netrom_Eco_Meal.Services.Interfaces;
 
 namespace Netrom_Eco_Meal.Services;
@@ -13,8 +13,13 @@ public class PackageService(
     IFavoriteRepository favoriteRepository,
     INotificationService notificationService,
     IAppEmailSender emailSender,
-    CurrentUserAccessor currentUser) : IPackageService
+    CurrentUserAccessor currentUser,
+    IConfiguration configuration) : IPackageService
 {
+    // Same fallback/config-key convention as AuthService.BaseUrl — used to build an absolute
+    // link for the back-in-stock email CTA.
+    private string BaseUrl => (configuration["App:BaseUrl"] ?? "http://localhost:8080").TrimEnd('/');
+
     public async Task<List<Package>> GetAllAsync()
     {
         return await packageRepository.GetAllAsync();
@@ -116,7 +121,12 @@ public class PackageService(
 
             if (!string.IsNullOrWhiteSpace(user.Email))
             {
-                var html = $"<p>Hi {WebUtility.HtmlEncode(user.Name)},</p><p>{WebUtility.HtmlEncode(fullMessage)}</p><p>— Eco Meal</p>";
+                var html = EmailTemplateBuilder.Build(
+                    message,
+                    [$"You're following {business?.Name} on Eco Meal — here's what just changed."],
+                    eyebrow: business?.Name,
+                    ctaLabel: "View this kitchen",
+                    ctaUrl: $"{BaseUrl}{url}");
                 await emailSender.SendEmailAsync(user.Email, "Eco Meal — New packages available", html);
             }
         }

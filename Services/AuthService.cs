@@ -1,9 +1,9 @@
-using System.Net;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.Extensions.Options;
 using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Entities;
+using Netrom_Eco_Meal.Services.Email;
 using Netrom_Eco_Meal.Services.Interfaces;
 
 namespace Netrom_Eco_Meal.Services;
@@ -87,10 +87,14 @@ public class AuthService(
 
         var token = await userManager.GeneratePasswordResetTokenAsync(user);
         var link = $"{BaseUrl}/account/reset-password?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}";
-        var html = $"<p>Hi {WebUtility.HtmlEncode(user.Name)},</p>" +
-                   "<p>Someone requested a password reset for your Eco Meal account. If this was you, click below to choose a new password:</p>" +
-                   $"<p><a href=\"{link}\">Reset my password</a></p>" +
-                   "<p>If you didn't request this, you can ignore this email.</p>";
+        var html = EmailTemplateBuilder.Build(
+            $"Reset your password, {user.Name}",
+            [
+                "Someone requested a password reset for your Eco Meal account. If this was you, use the button below to choose a new one.",
+                "If you didn't request this, you can safely ignore this email — your password hasn't changed.",
+            ],
+            ctaLabel: "Reset my password",
+            ctaUrl: link);
         await emailSender.SendEmailAsync(email, "Eco Meal — Reset your password", html);
     }
 
@@ -108,9 +112,12 @@ public class AuthService(
     {
         var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
         var link = $"{BaseUrl}/account/confirm-email?userId={user.Id}&token={Uri.EscapeDataString(token)}";
-        var html = $"<p>Welcome to Eco Meal, {WebUtility.HtmlEncode(user.Name)}!</p>" +
-                   "<p>Confirm your account to start rescuing surplus food:</p>" +
-                   $"<p><a href=\"{link}\">Confirm my account</a></p>";
+        var html = EmailTemplateBuilder.Build(
+            $"Welcome, {user.Name}",
+            ["Confirm your account to start rescuing surplus food before it's binned."],
+            eyebrow: "Get started",
+            ctaLabel: "Confirm my account",
+            ctaUrl: link);
         await emailSender.SendEmailAsync(user.Email!, "Eco Meal — Confirm your account", html);
     }
 }

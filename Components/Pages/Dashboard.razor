@@ -154,9 +154,16 @@
             <div class="dash-trend-row">
                 <span class="dash-trend-label">Orders</span>
                 <div class="dash-trend-chart">
-                    @foreach (var day in _dailyStats)
+                    @for (var i = 0; i < _dailyStats.Count; i++)
                     {
-                        <div class="dash-trend-bar-wrap" title="@day.Date.ToString("MMM d"): @day.OrderCount order@(day.OrderCount == 1 ? "" : "s")">
+                        var day = _dailyStats[i];
+                        var isToday = i == _dailyStats.Count - 1;
+                        <div class="dash-trend-bar-wrap @(isToday ? "dash-trend-bar-wrap-today" : "")" tabindex="0"
+                             aria-label="@day.Date.ToString("MMM d"): @day.OrderCount order@(day.OrderCount == 1 ? "" : "s")">
+                            <span class="dash-trend-tooltip">
+                                <span class="dash-trend-tooltip-date">@(isToday ? "Today" : day.Date.ToString("MMM d"))</span>
+                                <span class="dash-trend-tooltip-value">@day.OrderCount order@(day.OrderCount == 1 ? "" : "s")</span>
+                            </span>
                             <div class="dash-trend-bar dash-trend-bar-orders" style="height: @(BarHeightPx(day.OrderCount, _maxOrderCount))px"></div>
                         </div>
                     }
@@ -165,10 +172,36 @@
             <div class="dash-trend-row">
                 <span class="dash-trend-label">Kg saved</span>
                 <div class="dash-trend-chart">
-                    @foreach (var day in _dailyStats)
+                    @for (var i = 0; i < _dailyStats.Count; i++)
                     {
-                        <div class="dash-trend-bar-wrap" title="@day.Date.ToString("MMM d"): @day.KgSaved.ToString("0.#") kg saved">
+                        var day = _dailyStats[i];
+                        var isToday = i == _dailyStats.Count - 1;
+                        <div class="dash-trend-bar-wrap @(isToday ? "dash-trend-bar-wrap-today" : "")" tabindex="0"
+                             aria-label="@day.Date.ToString("MMM d"): @day.KgSaved.ToString("0.#") kg saved">
+                            <span class="dash-trend-tooltip">
+                                <span class="dash-trend-tooltip-date">@(isToday ? "Today" : day.Date.ToString("MMM d"))</span>
+                                <span class="dash-trend-tooltip-value">@day.KgSaved.ToString("0.#") kg saved</span>
+                            </span>
                             <div class="dash-trend-bar dash-trend-bar-kg" style="height: @(BarHeightPx(day.KgSaved, _maxKgSaved))px"></div>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="dash-trend-row dash-trend-axis-row">
+                <span class="dash-trend-label"></span>
+                <div class="dash-trend-chart">
+                    @for (var i = 0; i < _dailyStats.Count; i++)
+                    {
+                        var isToday = i == _dailyStats.Count - 1;
+                        <div class="dash-trend-axis-tick">
+                            @if (isToday)
+                            {
+                                <span class="dash-trend-axis-today">Today</span>
+                            }
+                            else if (i % 2 == 0)
+                            {
+                                <span>@_dailyStats[i].Date.ToString("MMM d")</span>
+                            }
                         </div>
                     }
                 </div>

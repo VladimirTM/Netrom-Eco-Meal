@@ -9,6 +9,9 @@ Three roles: **Customer** (browses, orders, leaves reviews), **BusinessManager**
 packages and orders for whichever business or businesses they're staff of) and **Admin**
 (manages businesses, staff, types and users).
 
+See [USER_GUIDE.md](USER_GUIDE.md) for a step-by-step walkthrough of each role — this section
+is just the capability summary.
+
 ## What each role can do
 
 **Customer** — what you get on self-registration:

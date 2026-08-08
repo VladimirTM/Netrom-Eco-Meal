@@ -1,10 +1,10 @@
-using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Database;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Models;
 using Netrom_Eco_Meal.Repositories.Interfaces;
+using Netrom_Eco_Meal.Services.Email;
 using Netrom_Eco_Meal.Services.Interfaces;
 
 namespace Netrom_Eco_Meal.Services;
@@ -18,8 +18,13 @@ public class OrderService(
     IStripeGateway stripeGateway,
     EcoMealDbContext dbContext,
     CurrentUserAccessor currentUser,
+    IConfiguration configuration,
     ILogger<OrderService> logger) : IOrderService
 {
+    // Same fallback/config-key convention as AuthService.BaseUrl — used to build absolute links
+    // for email CTAs, since a relative "/orders" path means nothing outside a browser tab.
+    private string BaseUrl => (configuration["App:BaseUrl"] ?? "http://localhost:8080").TrimEnd('/');
+
     public async Task<Order> PlaceOrderAsync(Guid businessId, List<OrderLineRequest> lines)
     {
         if (!await currentUser.IsInRoleAsync(AppRoles.Customer))
@@ -200,7 +205,7 @@ public class OrderService(
             await RefundIfPaidAsync(order);
             var message = $"Order #{order.OrderNumber:000} at {order.Business.Name} was automatically cancelled because it wasn't confirmed in time.";
             await notificationService.CreateAsync(order.UserId, message, "/orders");
-            await SendCustomerEmailAsync(order, "Order cancelled", message);
+            await SendCustomerEmailAsync(order, "Order cancelled", message, "/orders");
         }
 
         if (staleOrders.Count > 0)
@@ -227,7 +232,7 @@ public class OrderService(
 
             var message = $"Order #{order.OrderNumber:000} at {order.Business.Name} was marked as a no-show — the pickup window closed without it being picked up.";
             await notificationService.CreateAsync(order.UserId, message, "/orders");
-            await SendCustomerEmailAsync(order, "Missed pickup", message);
+            await SendCustomerEmailAsync(order, "Missed pickup", message, "/orders");
         }
 
         if (overdueOrders.Count > 0)
@@ -247,8 +252,9 @@ public class OrderService(
         {
             order.PickupReminderSentAt = now;
             var message = $"Order #{order.OrderNumber:000} at {order.Business.Name} — your pickup window closes soon, don't forget to collect it.";
-            await notificationService.CreateAsync(order.UserId, message, $"/orders/pickup/{order.Id}");
-            await SendCustomerEmailAsync(order, "Pickup closes soon", message);
+            var pickupUrl = $"/orders/pickup/{order.Id}";
+            await notificationService.CreateAsync(order.UserId, message, pickupUrl);
+            await SendCustomerEmailAsync(order, "Pickup closes soon", message, pickupUrl);
         }
 
         if (candidates.Count > 0)
@@ -259,12 +265,19 @@ public class OrderService(
 
     // Best-effort — a failed/unconfigured email should never break an order transition. The bell
     // notification (already created by the caller) remains the source of truth either way.
-    private async Task SendCustomerEmailAsync(Order order, string subject, string message)
+    private async Task SendCustomerEmailAsync(Order order, string subject, string message, string url)
     {
         if (string.IsNullOrWhiteSpace(order.User.Email))
             return;
 
-        var html = $"<p>Hi {WebUtility.HtmlEncode(order.User.Name)},</p><p>{WebUtility.HtmlEncode(message)}</p><p>— Eco Meal</p>";
+        // A pickup-window link is more useful than a bare order list when there's a QR code to show.
+        var ctaLabel = url.Contains("/pickup/") ? "Show my QR code" : "View my orders";
+        var html = EmailTemplateBuilder.Build(
+            subject,
+            [message],
+            eyebrow: $"Order #{order.OrderNumber:000}",
+            ctaLabel: ctaLabel,
+            ctaUrl: $"{BaseUrl}{url}");
         await emailSender.SendEmailAsync(order.User.Email, $"Eco Meal — {subject}", html);
     }
 
@@ -379,7 +392,7 @@ public class OrderService(
         if (message is not null)
         {
             await notificationService.CreateAsync(order.UserId, message, url);
-            await SendCustomerEmailAsync(order, emailSubject!, message);
+            await SendCustomerEmailAsync(order, emailSubject!, message, url!);
         }
 
         return order;

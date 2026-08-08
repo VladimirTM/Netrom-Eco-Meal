@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Netrom_Eco_Meal.Constants;
@@ -43,10 +44,11 @@ public class OrderServiceTests
         var emailSender = new Mock<IAppEmailSender>();
         var stripeGateway = new Mock<IStripeGateway>();
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
+        var configuration = new ConfigurationBuilder().Build();
 
         var service = new OrderService(
             orderRepo.Object, packageRepo.Object, businessService.Object, notificationService.Object,
-            emailSender.Object, stripeGateway.Object, db, currentUser, NullLogger<OrderService>.Instance);
+            emailSender.Object, stripeGateway.Object, db, currentUser, configuration, NullLogger<OrderService>.Instance);
 
         return new Fixture(service, orderRepo, packageRepo, businessService, notificationService, emailSender, stripeGateway, db);
     }

@@ -1,60 +1,111 @@
 /* ── Design tokens ── */
+/* Two brand hues doing real work — herb-green for "fresh/rescued," rescue-orange for
+   "reduced, closing soon" — on a warm paper ground instead of a cool mint one. --em-ink
+   is tinted toward forest rather than neutral gray, so body copy reads as part of the same
+   family as the headlines instead of generic UI gray. */
 :root {
-    --em-forest:    #0b1f13;
-    --em-forest-mid: #1a3a22;
-    --em-leaf:      #22c55e;
-    --em-leaf-mid:  #16a34a;
-    --em-leaf-dark: #15803d;
-    --em-surface:   #f4f9f5;
-    --em-text:      #111827;
-    --em-muted:     #6b7280;
+    --em-forest:     #0e2117;
+    --em-forest-mid: #1c3f28;
+    --em-leaf:       #2f9e5c;
+    --em-leaf-mid:   #1f8a4c;
+    --em-leaf-dark:  #1b7a44;
+    --em-paper:      #f5efe2;
+    --em-surface:    var(--em-paper);
+    --em-ink:        #1b2a1f;
+    --em-text:       var(--em-ink);
+    --em-muted:      #6f6656;
 
-    --bs-primary: #16a34a;
-    --bs-primary-rgb: 22, 163, 74;
-    --bs-link-color: #16a34a;
-    --bs-link-color-rgb: 22, 163, 74;
-    --bs-link-hover-color: #15803d;
-    --bs-link-hover-color-rgb: 21, 128, 61;
+    --bs-primary: #1f8a4c;
+    --bs-primary-rgb: 31, 138, 76;
+    --bs-link-color: #1f8a4c;
+    --bs-link-color-rgb: 31, 138, 76;
+    --bs-link-hover-color: #1b7a44;
+    --bs-link-hover-color-rgb: 27, 122, 68;
 
-    /* Public storefront accent, lifted from the logo mark — used sparingly */
-    --em-rescue: #c9971f;
-    --em-rescue-soft: rgba(201, 151, 31, 0.22);
+    /* Rescue-orange — a "reduced for quick sale" sticker color, not a decorative accent:
+       urgency badges, the hero stamp, and anything meaning "closing soon." */
+    --em-rescue:      #d9702f;
+    --em-rescue-dark: #b85a22;
+    --em-rescue-soft: rgba(217, 112, 47, 0.16);
+
+    --em-font-display: 'Fraunces', Georgia, 'Iowan Old Style', serif;
+    --em-font-body: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+    --em-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+    --em-shadow-sm: 0 1px 2px rgba(14, 33, 23, 0.05);
+    --em-shadow-md: 0 1px 2px rgba(14, 33, 23, 0.05), 0 10px 26px rgba(14, 33, 23, 0.07);
+    --em-shadow-lg: 0 4px 10px rgba(14, 33, 23, 0.06), 0 20px 40px rgba(14, 33, 23, 0.12);
 }
 
 html, body {
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    font-family: var(--em-font-body);
     background-color: var(--em-surface);
+    color: var(--em-ink);
     overscroll-behavior-y: none;
 }
 
+h1, h2, h3, h4, h5, h6,
+.font-display {
+    font-family: var(--em-font-display);
+    font-optical-sizing: auto;
+    letter-spacing: -0.01em;
+}
+
+.font-mono {
+    font-family: var(--em-font-mono);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
 /* ── Buttons ── */
+.btn {
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    transition: transform 0.1s ease, box-shadow 0.15s ease, background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.btn:active {
+    transform: scale(0.97);
+}
+
 .btn-primary {
-    --bs-btn-bg: #16a34a;
-    --bs-btn-border-color: #16a34a;
-    --bs-btn-hover-bg: #15803d;
-    --bs-btn-hover-border-color: #15803d;
+    --bs-btn-bg: #1f8a4c;
+    --bs-btn-border-color: #1f8a4c;
+    --bs-btn-hover-bg: #1b7a44;
+    --bs-btn-hover-border-color: #1b7a44;
     --bs-btn-active-bg: #166534;
     --bs-btn-active-border-color: #166534;
-    --bs-btn-focus-shadow-rgb: 22, 163, 74;
-    --bs-btn-disabled-bg: #16a34a;
-    --bs-btn-disabled-border-color: #16a34a;
+    --bs-btn-focus-shadow-rgb: 31, 138, 76;
+    --bs-btn-disabled-bg: #1f8a4c;
+    --bs-btn-disabled-border-color: #1f8a4c;
     color: #fff;
 }
 
 .btn-outline-primary {
-    --bs-btn-color: #16a34a;
-    --bs-btn-border-color: #16a34a;
+    --bs-btn-color: #1f8a4c;
+    --bs-btn-border-color: #1f8a4c;
     --bs-btn-hover-color: #fff;
-    --bs-btn-hover-bg: #16a34a;
-    --bs-btn-hover-border-color: #16a34a;
+    --bs-btn-hover-bg: #1f8a4c;
+    --bs-btn-hover-border-color: #1f8a4c;
     --bs-btn-active-color: #fff;
-    --bs-btn-active-bg: #16a34a;
-    --bs-btn-active-border-color: #16a34a;
-    --bs-btn-focus-shadow-rgb: 22, 163, 74;
+    --bs-btn-active-bg: #1f8a4c;
+    --bs-btn-active-border-color: #1f8a4c;
+    --bs-btn-focus-shadow-rgb: 31, 138, 76;
 }
 
 .btn:focus, .btn:active:focus {
-    box-shadow: 0 0 0 0.15rem rgba(22, 163, 74, 0.3);
+    box-shadow: 0 0 0 0.15rem rgba(31, 138, 76, 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .btn:active { transform: none; }
 }
 
 /* ── Sidebar nav ── */
@@ -95,9 +146,9 @@ html, body {
 
 .sidebar .nav-link.active {
     color: #fff;
-    background-color: rgba(34, 197, 94, 0.14);
+    background-color: rgba(47, 158, 92, 0.18);
     box-shadow: inset 3px 0 0 var(--em-leaf);
-    font-weight: 600;
+    font-weight: 700;
 }
 
 /* ── Content ── */
@@ -106,7 +157,7 @@ html, body {
 }
 
 /* ── Stat card accents ── */
-.card-accent-green  { border-top: 3px solid #16a34a; }
+.card-accent-green  { border-top: 3px solid #1f8a4c; }
 .card-accent-blue   { border-top: 3px solid #0ea5e9; }
 .card-accent-amber  { border-top: 3px solid #f59e0b; }
 .card-accent-purple { border-top: 3px solid #8b5cf6; }
@@ -132,8 +183,8 @@ html, body {
 }
 
 .package-type-badge {
-    background-color: rgba(22, 163, 74, 0.1);
-    color: #16a34a;
+    background-color: rgba(31, 138, 76, 0.1);
+    color: #1f8a4c;
     font-weight: 500;
     font-size: 0.75rem;
 }
@@ -163,7 +214,7 @@ html, body {
 
 .role-badge-admin           { background-color: rgba(139, 92, 246, 0.1); color: #7c3aed; }
 .role-badge-businessmanager { background-color: rgba(59, 130, 246, 0.1); color: #2563eb; }
-.role-badge-customer        { background-color: rgba(22, 163, 74, 0.1);  color: #16a34a; }
+.role-badge-customer        { background-color: rgba(31, 138, 76, 0.1);  color: #1f8a4c; }
 .role-badge-unassigned      { background-color: rgba(107, 114, 128, 0.1); color: #6b7280; }
 
 .role-option-dot {
@@ -226,8 +277,8 @@ html, body {
 /* ── Form focus ── */
 .form-control:focus,
 .form-select:focus {
-    border-color: #16a34a;
-    box-shadow: 0 0 0 0.2rem rgba(22, 163, 74, 0.15);
+    border-color: #1f8a4c;
+    box-shadow: 0 0 0 0.2rem rgba(31, 138, 76, 0.15);
 }
 
 /* ── Login page ── */
@@ -238,18 +289,24 @@ html, body {
     justify-content: center;
     background-color: var(--em-surface);
     background-image:
-        radial-gradient(ellipse 55% 55% at 15% 65%, rgba(22, 163, 74, 0.08) 0%, transparent 100%),
-        radial-gradient(ellipse 45% 45% at 85% 20%, rgba(34, 197, 94, 0.06) 0%, transparent 100%);
+        radial-gradient(ellipse 55% 55% at 15% 65%, rgba(31, 138, 76, 0.10) 0%, transparent 100%),
+        radial-gradient(ellipse 45% 45% at 85% 20%, rgba(217, 112, 47, 0.07) 0%, transparent 100%);
     padding: 2rem 1rem;
 }
 
 .login-card {
     background: #fff;
-    border-radius: 16px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 40px rgba(0, 0, 0, 0.07);
+    border-radius: 18px;
+    box-shadow: var(--em-shadow-lg);
     padding: 2.5rem 2.25rem;
     width: 100%;
     max-width: 400px;
+    animation: login-card-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes login-card-in {
+    from { opacity: 0; transform: translateY(14px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .login-brand {
@@ -267,7 +324,8 @@ html, body {
 }
 
 .login-brand-name {
-    font-size: 0.95rem;
+    font-family: var(--em-font-display);
+    font-size: 1.05rem;
     font-weight: 700;
     color: var(--em-text);
     line-height: 1.2;
@@ -280,7 +338,8 @@ html, body {
 }
 
 .login-heading {
-    font-size: 1.35rem;
+    font-family: var(--em-font-display);
+    font-size: 1.55rem;
     font-weight: 700;
     color: var(--em-text);
     margin-bottom: 1.5rem;
@@ -317,7 +376,7 @@ html, body {
     height: 34px;
     flex-shrink: 0;
     border-radius: 50%;
-    background: rgba(34, 197, 94, 0.16);
+    background: rgba(47, 158, 92, 0.16);
     color: var(--em-leaf);
     display: flex;
     align-items: center;
@@ -394,7 +453,7 @@ h1:focus {
 }
 
 .valid.modified:not([type=checkbox]) {
-    outline: 1px solid #16a34a;
+    outline: 1px solid #1f8a4c;
 }
 
 .invalid {
@@ -438,11 +497,14 @@ h1:focus {
 }
 
 .public-header {
-    background-color: var(--em-forest);
-    background-image: radial-gradient(ellipse 70% 100% at 50% -20%, rgba(34, 197, 94, 0.16) 0%, transparent 70%);
+    background-color: rgba(14, 33, 23, 0.92);
+    background-image: radial-gradient(ellipse 70% 100% at 50% -20%, rgba(47, 158, 92, 0.18) 0%, transparent 70%);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     position: sticky;
     top: 0;
     z-index: 10;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .public-header-inner {
@@ -469,9 +531,10 @@ h1:focus {
 }
 
 .public-brand-name {
+    font-family: var(--em-font-display);
     color: #fff;
     font-weight: 700;
-    font-size: 1.05rem;
+    font-size: 1.15rem;
     letter-spacing: -0.01em;
     white-space: nowrap;
 }
@@ -543,9 +606,10 @@ h1:focus {
 }
 
 .public-footer-brand {
+    font-family: var(--em-font-display);
     color: #fff;
     font-weight: 700;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
 }
 
 .public-footer-tagline {
@@ -564,9 +628,9 @@ h1:focus {
 .home-hero {
     background-color: var(--em-surface);
     background-image:
-        radial-gradient(ellipse 55% 65% at 12% 0%, rgba(22, 163, 74, 0.10) 0%, transparent 100%),
-        radial-gradient(ellipse 45% 55% at 90% 10%, rgba(201, 151, 31, 0.08) 0%, transparent 100%);
-    padding: 4rem 1.5rem 3rem;
+        radial-gradient(ellipse 55% 65% at 12% 0%, rgba(31, 138, 76, 0.12) 0%, transparent 100%),
+        radial-gradient(ellipse 45% 55% at 90% 10%, rgba(217, 112, 47, 0.10) 0%, transparent 100%);
+    padding: 4.5rem 1.5rem 3rem;
 }
 
 .home-hero-inner {
@@ -575,15 +639,37 @@ h1:focus {
     text-align: center;
 }
 
+/* Staggered rise — eyebrow, headline, sub and stats land in sequence rather than all at once. */
+.home-hero-eyebrow,
+.home-hero-title,
+.home-hero-sub,
+.home-stats {
+    animation: hero-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.home-hero-eyebrow { animation-delay: 0s; }
+.home-hero-title   { animation-delay: 0.07s; }
+.home-hero-sub     { animation-delay: 0.16s; }
+.home-stats        { animation-delay: 0.26s; }
+
+@keyframes hero-rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .home-hero-eyebrow, .home-hero-title, .home-hero-sub, .home-stats { animation: none; }
+}
+
 .home-hero-eyebrow {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    background: rgba(22, 163, 74, 0.1);
+    background: rgba(31, 138, 76, 0.12);
     color: var(--em-leaf-dark);
     font-size: 0.76rem;
     font-weight: 700;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     padding: 0.4rem 0.9rem;
     border-radius: 999px;
@@ -591,22 +677,37 @@ h1:focus {
 }
 
 .home-hero-title {
-    font-size: clamp(2.25rem, 5vw, 3.5rem);
-    font-weight: 800;
-    line-height: 1.08;
+    font-weight: 700;
+    font-size: clamp(2.5rem, 5.5vw, 4rem);
+    line-height: 1.04;
     letter-spacing: -0.02em;
     color: var(--em-text);
-    margin-bottom: 1.25rem;
+    margin-bottom: 1.35rem;
 }
 
+/* The signature mark: "rescued" reads as ink stamped onto the page at a slight angle —
+   an asymmetric border-radius fakes an imperfect stamp outline without a raster asset. */
 .home-hero-highlight {
     position: relative;
-    color: var(--em-leaf-dark);
-    background-image: linear-gradient(180deg, transparent 72%, var(--em-rescue-soft) 72%);
+    display: inline-block;
+    color: #fffaf2;
+    padding: 0.06em 0.28em 0.1em;
+    z-index: 0;
+}
+
+.home-hero-highlight::before {
+    content: "";
+    position: absolute;
+    inset: 0.1em -0.1em 0em;
+    background: var(--em-rescue);
+    border-radius: 0.9em 0.3em 0.8em 0.35em / 0.55em 0.85em 0.5em 0.9em;
+    transform: rotate(-2.5deg);
+    box-shadow: 0 10px 22px -6px rgba(184, 90, 34, 0.45);
+    z-index: -1;
 }
 
 .home-hero-sub {
-    font-size: 1.05rem;
+    font-size: 1.1rem;
     line-height: 1.6;
     color: var(--em-muted);
     max-width: 560px;
@@ -627,19 +728,21 @@ h1:focus {
 }
 
 .home-stat-value {
-    font-size: 1.9rem;
-    font-weight: 800;
+    font-family: var(--em-font-display);
+    font-size: 2.1rem;
+    font-weight: 600;
     color: var(--em-leaf-dark);
     line-height: 1.1;
+    font-variant-numeric: tabular-nums;
 }
 
 .home-stat-label {
-    font-size: 0.74rem;
+    font-size: 0.72rem;
     font-weight: 600;
     color: var(--em-muted);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-top: 0.25rem;
+    letter-spacing: 0.06em;
+    margin-top: 0.3rem;
 }
 
 /* ── Home browse ── */
@@ -736,7 +839,7 @@ h1:focus {
 .package-card {
     background: #fff;
     border-radius: 14px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--em-shadow-md);
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -746,7 +849,7 @@ h1:focus {
 
 .package-card:hover {
     transform: translateY(-3px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05), 0 16px 32px rgba(0, 0, 0, 0.09);
+    box-shadow: var(--em-shadow-lg);
 }
 
 .package-card-media {
@@ -833,8 +936,9 @@ h1:focus {
 }
 
 .package-card-price {
-    font-size: 1.05rem;
-    font-weight: 800;
+    font-family: var(--em-font-display);
+    font-size: 1.1rem;
+    font-weight: 600;
     color: var(--em-leaf-dark);
 }
 
@@ -929,7 +1033,7 @@ h1:focus {
 .cart-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(11, 31, 19, 0.45);
+    background: rgba(14, 33, 23, 0.45);
     z-index: 45;
     animation: cart-backdrop-in 0.2s ease-out;
 }
@@ -965,7 +1069,7 @@ h1:focus {
 
 .cart-panel-header {
     background: var(--em-forest);
-    background-image: radial-gradient(ellipse 70% 100% at 100% -20%, rgba(34, 197, 94, 0.18) 0%, transparent 70%);
+    background-image: radial-gradient(ellipse 70% 100% at 100% -20%, rgba(47, 158, 92, 0.18) 0%, transparent 70%);
     color: #fff;
     padding: 1.5rem 1.5rem 1.25rem;
     display: flex;
@@ -1222,8 +1326,8 @@ h1:focus {
 .orders-hero {
     background-color: var(--em-surface);
     background-image:
-        radial-gradient(ellipse 50% 60% at 10% 0%, rgba(22, 163, 74, 0.09) 0%, transparent 100%),
-        radial-gradient(ellipse 40% 50% at 92% 15%, rgba(201, 151, 31, 0.07) 0%, transparent 100%);
+        radial-gradient(ellipse 50% 60% at 10% 0%, rgba(31, 138, 76, 0.09) 0%, transparent 100%),
+        radial-gradient(ellipse 40% 50% at 92% 15%, rgba(217, 112, 47, 0.07) 0%, transparent 100%);
     padding: 3rem 1.5rem 2.5rem;
 }
 
@@ -1237,7 +1341,7 @@ h1:focus {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    background: rgba(22, 163, 74, 0.1);
+    background: rgba(31, 138, 76, 0.1);
     color: var(--em-leaf-dark);
     font-size: 0.76rem;
     font-weight: 700;
@@ -1362,7 +1466,7 @@ h1:focus {
     align-items: stretch;
     background: #fff;
     border-radius: 16px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--em-shadow-md);
     animation: card-rise 0.35s ease-out both;
 }
 
@@ -1416,9 +1520,9 @@ h1:focus {
     white-space: nowrap;
 }
 
-.order-status-pending   { background: rgba(201, 151, 31, 0.16); color: var(--em-rescue); }
+.order-status-pending   { background: rgba(217, 112, 47, 0.16); color: var(--em-rescue); }
 .order-status-confirmed { background: rgba(37, 99, 235, 0.1);  color: #2563eb; }
-.order-status-completed { background: rgba(22, 163, 74, 0.1);  color: #16a34a; }
+.order-status-completed { background: rgba(31, 138, 76, 0.1);  color: #1f8a4c; }
 .order-status-cancelled { background: rgba(239, 68, 68, 0.1);  color: #ef4444; }
 .order-status-noshow    { background: rgba(100, 116, 139, 0.14); color: #64748b; }
 
@@ -1482,8 +1586,9 @@ h1:focus {
 }
 
 .order-ticket-total-value {
-    font-size: 1.05rem;
-    font-weight: 800;
+    font-family: var(--em-font-display);
+    font-size: 1.1rem;
+    font-weight: 600;
     color: var(--em-text);
 }
 
@@ -1510,7 +1615,7 @@ h1:focus {
     position: relative;
     width: 0;
     flex-shrink: 0;
-    border-left: 2px dashed rgba(11, 31, 19, 0.15);
+    border-left: 2px dashed rgba(14, 33, 23, 0.15);
 }
 
 .order-ticket-seam::before,
@@ -1532,7 +1637,7 @@ h1:focus {
     width: 128px;
     border-radius: 0 16px 16px 0;
     background: var(--em-forest);
-    background-image: radial-gradient(ellipse 100% 80% at 50% 0%, rgba(34, 197, 94, 0.22) 0%, transparent 70%);
+    background-image: radial-gradient(ellipse 100% 80% at 50% 0%, rgba(47, 158, 92, 0.28) 0%, transparent 70%);
     color: #fff;
     display: flex;
     flex-direction: column;
@@ -1550,11 +1655,13 @@ h1:focus {
     color: rgba(255, 255, 255, 0.55);
 }
 
+/* Monospace, like the code printed on a real receipt stub. */
 .order-ticket-stub-number {
-    font-size: 1.55rem;
-    font-weight: 800;
-    letter-spacing: -0.01em;
-    margin: 0.15rem 0 0.4rem;
+    font-family: var(--em-font-mono);
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    margin: 0.2rem 0 0.4rem;
     font-variant-numeric: tabular-nums;
 }
 
@@ -1598,7 +1705,7 @@ h1:focus {
     width: auto;
     height: 0;
     border-left: none;
-    border-top: 2px dashed rgba(11, 31, 19, 0.15);
+    border-top: 2px dashed rgba(14, 33, 23, 0.15);
 }
 
 .order-ticket--pass .order-ticket-seam::before,
@@ -1653,7 +1760,7 @@ h1:focus {
         width: auto;
         height: 0;
         border-left: none;
-        border-top: 2px dashed rgba(11, 31, 19, 0.15);
+        border-top: 2px dashed rgba(14, 33, 23, 0.15);
     }
 
     .order-ticket-seam::before,
@@ -1685,7 +1792,7 @@ h1:focus {
 .confirm-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(11, 31, 19, 0.45);
+    background: rgba(14, 33, 23, 0.45);
     z-index: 55;
     animation: cart-backdrop-in 0.2s ease-out;
 }
@@ -1770,13 +1877,13 @@ h1:focus {
 }
 
 .order-action-complete {
-    color: #16a34a;
-    border-color: rgba(22, 163, 74, 0.35);
-    background: rgba(22, 163, 74, 0.07);
+    color: #1f8a4c;
+    border-color: rgba(31, 138, 76, 0.35);
+    background: rgba(31, 138, 76, 0.07);
 }
 .order-action-complete:hover {
-    background: #16a34a;
-    border-color: #16a34a;
+    background: #1f8a4c;
+    border-color: #1f8a4c;
     color: #fff;
 }
 
@@ -1812,8 +1919,8 @@ h1:focus {
    stub's own dark-forest pickup pass, not another status transition. */
 .order-action-qr {
     color: var(--em-forest);
-    border-color: rgba(11, 31, 19, 0.25);
-    background: rgba(11, 31, 19, 0.05);
+    border-color: rgba(14, 33, 23, 0.25);
+    background: rgba(14, 33, 23, 0.05);
     text-decoration: none;
 }
 .order-action-qr:hover {
@@ -1824,8 +1931,8 @@ h1:focus {
 
 .order-action-reorder {
     color: var(--em-leaf-dark);
-    border-color: rgba(21, 128, 61, 0.3);
-    background: rgba(21, 128, 61, 0.07);
+    border-color: rgba(27, 122, 68, 0.3);
+    background: rgba(27, 122, 68, 0.07);
 }
 .order-action-reorder:hover:not(:disabled) {
     background: var(--em-leaf-dark);
@@ -1869,17 +1976,35 @@ h1:focus {
 }
 
 .dash-trend-bar-wrap {
+    position: relative;
     display: flex;
     align-items: flex-end;
     flex: 1;
     height: 100%;
+    border-radius: 4px;
+}
+
+.dash-trend-bar-wrap:focus-visible {
+    outline: 2px solid var(--em-leaf-mid);
+    outline-offset: 2px;
+}
+
+/* A faint column behind today's bar, so "where am I in the last 14 days" doesn't require
+   counting bars or reading the axis. */
+.dash-trend-bar-wrap-today::before {
+    content: "";
+    position: absolute;
+    inset: 0 1px;
+    background: rgba(31, 138, 76, 0.08);
+    border-radius: 4px;
 }
 
 .dash-trend-bar {
+    position: relative;
     width: 100%;
     min-height: 3px;
     border-radius: 3px 3px 0 0;
-    transition: height 0.2s ease;
+    transition: height 0.2s ease, filter 0.15s ease;
 }
 
 .dash-trend-bar-orders {
@@ -1888,6 +2013,121 @@ h1:focus {
 
 .dash-trend-bar-kg {
     background: var(--em-rescue);
+}
+
+.dash-trend-bar-wrap:hover .dash-trend-bar,
+.dash-trend-bar-wrap:focus-visible .dash-trend-bar {
+    filter: brightness(1.12);
+}
+
+/* Custom tooltip — replaces a native title="" attribute, which only ever shows up after an
+   inconsistent OS-controlled hover delay (or not at all on touch). This appears immediately
+   and reliably on hover *or* keyboard focus, anchored to the top of the bar's own column so
+   it lands at the same height regardless of how tall that day's bar is. */
+.dash-trend-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translate(-50%, -2px);
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+    background: var(--em-forest);
+    color: #fff;
+    white-space: nowrap;
+    padding: 0.4rem 0.65rem;
+    border-radius: 8px;
+    box-shadow: var(--em-shadow-md);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.dash-trend-tooltip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: var(--em-forest);
+}
+
+.dash-trend-bar-wrap:hover .dash-trend-tooltip,
+.dash-trend-bar-wrap:focus-visible .dash-trend-tooltip {
+    opacity: 1;
+    transform: translate(-50%, -8px);
+}
+
+.dash-trend-chart > .dash-trend-bar-wrap:first-child .dash-trend-tooltip {
+    left: 0;
+    transform: translate(0, -2px);
+}
+
+.dash-trend-chart > .dash-trend-bar-wrap:first-child:hover .dash-trend-tooltip,
+.dash-trend-chart > .dash-trend-bar-wrap:first-child:focus-visible .dash-trend-tooltip {
+    transform: translate(0, -8px);
+}
+
+.dash-trend-chart > .dash-trend-bar-wrap:first-child .dash-trend-tooltip::after {
+    left: 14px;
+    transform: none;
+}
+
+.dash-trend-chart > .dash-trend-bar-wrap:last-child .dash-trend-tooltip {
+    left: auto;
+    right: 0;
+    transform: translate(0, -2px);
+}
+
+.dash-trend-chart > .dash-trend-bar-wrap:last-child:hover .dash-trend-tooltip,
+.dash-trend-chart > .dash-trend-bar-wrap:last-child:focus-visible .dash-trend-tooltip {
+    transform: translate(0, -8px);
+}
+
+.dash-trend-chart > .dash-trend-bar-wrap:last-child .dash-trend-tooltip::after {
+    left: auto;
+    right: 14px;
+    transform: none;
+}
+
+.dash-trend-tooltip-date {
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.dash-trend-tooltip-value {
+    font-family: var(--em-font-mono);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dash-trend-tooltip { transition: none; }
+}
+
+/* ── Dashboard trend chart axis row ── */
+.dash-trend-axis-row {
+    margin-top: -0.5rem;
+    margin-bottom: 0;
+}
+
+.dash-trend-axis-tick {
+    flex: 1;
+    text-align: center;
+    font-size: 0.64rem;
+    font-weight: 500;
+    color: var(--em-muted);
+    white-space: nowrap;
+}
+
+.dash-trend-axis-today {
+    color: var(--em-leaf-dark);
+    font-weight: 700;
 }
 
 /* ── Star rating ── */
@@ -1973,14 +2213,14 @@ h1:focus {
     text-align: left;
     padding: 0;
     cursor: pointer;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--em-shadow-md);
     animation: card-rise 0.35s ease-out both;
     transition: transform 0.15s, box-shadow 0.15s;
 }
 
 .biz-card:hover {
     transform: translateY(-3px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05), 0 16px 32px rgba(0, 0, 0, 0.09);
+    box-shadow: var(--em-shadow-lg);
 }
 
 .biz-card:focus-visible {
@@ -2004,7 +2244,7 @@ h1:focus {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    background: rgba(11, 31, 19, 0.72);
+    background: rgba(14, 33, 23, 0.72);
     color: #fff;
     font-size: 0.7rem;
     font-weight: 700;
@@ -2017,7 +2257,7 @@ h1:focus {
     height: 6px;
     border-radius: 50%;
     background: var(--em-leaf);
-    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.35);
+    box-shadow: 0 0 0 2px rgba(47, 158, 92, 0.35);
 }
 
 .biz-card-rating-badge {
@@ -2051,8 +2291,8 @@ h1:focus {
 }
 
 .biz-card-name {
-    font-size: 1.15rem;
-    font-weight: 800;
+    font-size: 1.2rem;
+    font-weight: 700;
     color: var(--em-text);
     margin: 0.3rem 0 0.35rem;
 }
@@ -2098,8 +2338,9 @@ h1:focus {
 }
 
 .biz-card-from {
-    font-size: 0.92rem;
-    font-weight: 800;
+    font-family: var(--em-font-display);
+    font-size: 1rem;
+    font-weight: 600;
     color: var(--em-leaf-dark);
 }
 
@@ -2180,7 +2421,7 @@ h1:focus {
     flex-shrink: 0;
     border-radius: 50%;
     border: none;
-    background: rgba(11, 31, 19, 0.55);
+    background: rgba(14, 33, 23, 0.55);
     color: #fff;
     display: flex;
     align-items: center;
@@ -2189,7 +2430,7 @@ h1:focus {
 }
 
 .biz-modal-close:hover {
-    background: rgba(11, 31, 19, 0.75);
+    background: rgba(14, 33, 23, 0.75);
 }
 
 .biz-modal-loading {
@@ -2470,7 +2711,7 @@ h1:focus {
     height: 36px;
     flex-shrink: 0;
     border-radius: 50%;
-    background: rgba(34, 197, 94, 0.14);
+    background: rgba(47, 158, 92, 0.14);
     color: var(--em-leaf-dark);
     display: flex;
     align-items: center;
@@ -2514,7 +2755,7 @@ h1:focus {
 .pkg-modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(11, 31, 19, 0.55);
+    background: rgba(14, 33, 23, 0.55);
     z-index: 51;
     animation: cart-backdrop-in 0.2s ease-out;
 }
@@ -2611,7 +2852,7 @@ h1:focus {
 .order-modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(11, 31, 19, 0.55);
+    background: rgba(14, 33, 23, 0.55);
     z-index: 51;
     animation: cart-backdrop-in 0.2s ease-out;
 }
@@ -2762,7 +3003,7 @@ h1:focus {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: radial-gradient(ellipse 70% 60% at 50% 40%, rgba(34, 197, 94, 0.12) 0%, transparent 70%);
+    background: radial-gradient(ellipse 70% 60% at 50% 40%, rgba(47, 158, 92, 0.12) 0%, transparent 70%);
 }
 
 .scan-frame-guide {
@@ -2852,7 +3093,7 @@ h1:focus {
 }
 
 .sidebar-notif-btn:hover {
-    background-color: rgba(34, 197, 94, 0.12);
+    background-color: rgba(47, 158, 92, 0.12);
     color: var(--em-leaf);
 }
 
@@ -3010,7 +3251,7 @@ h1:focus {
     height: 32px;
     border-radius: 50%;
     border: none;
-    background: rgba(11, 31, 19, 0.55);
+    background: rgba(14, 33, 23, 0.55);
     color: #fff;
     display: flex;
     align-items: center;
@@ -3021,7 +3262,7 @@ h1:focus {
 }
 
 .biz-card-fav-btn:hover {
-    background: rgba(11, 31, 19, 0.75);
+    background: rgba(14, 33, 23, 0.75);
     transform: scale(1.06);
 }
 
@@ -3095,7 +3336,7 @@ h1:focus {
     letter-spacing: 0.02em;
     padding: 0.2rem 0.55rem;
     border-radius: 999px;
-    background: rgba(22, 163, 74, 0.1);
+    background: rgba(31, 138, 76, 0.1);
     color: var(--em-leaf-dark);
     white-space: nowrap;
 }
