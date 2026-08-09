@@ -1,0 +1,153 @@
+@page "/businesses/apply"
+@layout PublicLayout
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authorization
+@using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services.Interfaces
+@rendermode InteractiveServer
+@inject BusinessController BusinessController
+@inject IBusinessTypeService BusinessTypeService
+@attribute [Authorize(Roles = $"{AppRoles.Customer},{AppRoles.BusinessManager}")]
+
+<PageTitle>List your business — Eco Meal</PageTitle>
+
+<div class="text-center mb-4 px-3 pt-4">
+    <h1 class="h3 fw-bold mb-1">List your business</h1>
+    <p class="text-muted mb-0">Tell us about your kitchen — an admin will review it before it goes live.</p>
+</div>
+
+<div class="row justify-content-center px-3 pb-4">
+    <div class="col-lg-7 col-xl-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                @if (_submitted)
+                {
+                    <div class="text-center py-4">
+                        <i class="bi bi-check-circle-fill text-success fs-1 d-block mb-3"></i>
+                        <h2 class="h5 fw-bold mb-2">Application submitted!</h2>
+                        <p class="text-muted mb-4">An admin will review "@_submittedName" and let you know once it's approved.</p>
+                        <a href="/" class="btn btn-outline-primary">Back to home</a>
+                    </div>
+                }
+                else if (_businessTypes.Count == 0)
+                {
+                    <div class="d-flex justify-content-center py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <EditForm Model="@_model" OnValidSubmit="Submit" FormName="businessApplyForm">
+                        <DataAnnotationsValidator/>
+                        <div class="mb-3">
+                            <label for="name" class="form-label fw-semibold">Business name</label>
+                            <InputText id="name" class="form-control" placeholder="e.g. Green Bites" @bind-Value="_model.Name"/>
+                            <ValidationMessage For="@(() => _model.Name)" class="validation-message small d-block mt-1"/>
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label fw-semibold">Description</label>
+                            <InputText id="description" class="form-control" placeholder="Short description of the business" @bind-Value="_model.Description"/>
+                            <ValidationMessage For="@(() => _model.Description)" class="validation-message small d-block mt-1"/>
+                        </div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-sm-7">
+                                <label for="address" class="form-label fw-semibold">Address</label>
+                                <InputText id="address" class="form-control" placeholder="Street, City" @bind-Value="_model.Address"/>
+                                <ValidationMessage For="@(() => _model.Address)" class="validation-message small d-block mt-1"/>
+                            </div>
+                            <div class="col-sm-5">
+                                <label for="businessType" class="form-label fw-semibold">Type</label>
+                                <InputSelect id="businessType" class="form-select" @bind-Value="_model.BusinessTypeId">
+                                    @foreach (var type in _businessTypes)
+                                    {
+                                        <option value="@type.Id">@type.Name</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <label for="imageUrl" class="form-label fw-semibold">
+                                Image URL <span class="text-muted fw-normal">(optional)</span>
+                            </label>
+                            <InputText id="imageUrl" class="form-control" placeholder="https://..." @bind-Value="_model.ImageUrl"/>
+                        </div>
+                        @if (_error is not null)
+                        {
+                            <div class="alert alert-danger py-2 small">@_error</div>
+                        }
+                        <button type="submit" class="btn btn-primary w-100 py-2" disabled="@_submitting">
+                            @if (_submitting)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            }
+                            <i class="bi bi-send me-1"></i> Submit for review
+                        </button>
+                    </EditForm>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private BusinessApplyModel _model = new();
+    private List<BusinessType> _businessTypes = [];
+    private bool _submitting;
+    private bool _submitted;
+    private string? _submittedName;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _businessTypes = await BusinessTypeService.GetAllAsync();
+        if (_businessTypes.Count > 0)
+            _model.BusinessTypeId = _businessTypes[0].Id;
+    }
+
+    private async Task Submit()
+    {
+        _submitting = true;
+        _error = null;
+
+        var business = new Business
+        {
+            Name = _model.Name!,
+            Description = _model.Description!,
+            Address = _model.Address!,
+            ImageUrl = _model.ImageUrl,
+            BusinessTypeId = _model.BusinessTypeId,
+        };
+
+        var result = await BusinessController.ApplyAsync(business);
+        _submitting = false;
+
+        if (result.Result is Microsoft.AspNetCore.Mvc.UnauthorizedResult)
+        {
+            _error = "You must be signed in to submit an application.";
+            return;
+        }
+
+        _submittedName = _model.Name;
+        _submitted = true;
+    }
+
+    private class BusinessApplyModel
+    {
+        [Required(ErrorMessage = "Enter a business name.")]
+        public string? Name { get; set; }
+
+        [Required(ErrorMessage = "Enter a short description.")]
+        public string? Description { get; set; }
+
+        [Required(ErrorMessage = "Enter an address.")]
+        public string? Address { get; set; }
+
+        public string? ImageUrl { get; set; }
+
+        public Guid BusinessTypeId { get; set; }
+    }
+}

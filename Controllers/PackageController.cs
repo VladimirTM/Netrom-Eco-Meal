@@ -71,4 +71,16 @@ public class PackageController(IPackageService packageService) : ControllerBase
             return Unauthorized();
         }
     }
+
+    public async Task<ActionResult> HideAsync(Guid packageId, string reason)
+    {
+        await packageService.HideAsync(packageId, reason);
+        return NoContent();
+    }
+
+    public async Task<ActionResult> UnhideAsync(Guid packageId)
+    {
+        await packageService.UnhideAsync(packageId);
+        return NoContent();
+    }
 }

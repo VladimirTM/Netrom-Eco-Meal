@@ -1,0 +1,49 @@
+@* Small modal collecting a free-text reason. Defaults to the customer "report" copy — pass
+   Title/Message/ConfirmLabel to reuse it for a direct admin/manager action like hide or reject. *@
+@if (IsOpen)
+{
+    <div class="confirm-backdrop" @onclick="Cancel"></div>
+    <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="report-dialog-title">
+        <h2 class="confirm-dialog-title" id="report-dialog-title">@(Title ?? $"Report {TargetLabel}")</h2>
+        <p class="confirm-dialog-message">@Message</p>
+        <textarea class="form-control mb-2" rows="3" maxlength="500" placeholder="@Placeholder" @bind="_reason" @bind:event="oninput"></textarea>
+        @if (Error is not null)
+        {
+            <p class="text-danger small mb-0">@Error</p>
+        }
+        <div class="confirm-dialog-actions">
+            <button type="button" class="btn btn-outline-secondary" disabled="@Busy" @onclick="Cancel">Cancel</button>
+            <button type="button" class="btn btn-danger" disabled="@(Busy || string.IsNullOrWhiteSpace(_reason))" @onclick="Submit">
+                @if (Busy)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                }
+                @ConfirmLabel
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public string TargetLabel { get; set; } = "";
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string Message { get; set; } = "Tell us what's wrong — an admin will review it.";
+    [Parameter] public string Placeholder { get; set; } = "What's the issue?";
+    [Parameter] public string ConfirmLabel { get; set; } = "Submit report";
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public EventCallback<string> OnSubmit { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private string _reason = "";
+
+    protected override void OnParametersSet()
+    {
+        if (!IsOpen)
+            _reason = "";
+    }
+
+    private Task Submit() => OnSubmit.InvokeAsync(_reason);
+    private Task Cancel() => OnCancel.InvokeAsync();
+}

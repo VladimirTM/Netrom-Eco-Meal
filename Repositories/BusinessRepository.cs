@@ -10,14 +10,26 @@ namespace Netrom_Eco_Meal.Repositories;
 // AddAsync/DeleteAsync only stage changes — call SaveChangesAsync to persist.
 public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
 {
-     public async Task<List<Business>> GetAllAsync()
-    {
-        return await context.Businesses.Include(b => b.BusinessType).Include(b => b.Staff).ThenInclude(s => s.User).ToListAsync();
-    }
-
-    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, string? favoritedByUserId = null, double? customerLat = null, double? customerLng = null)
+     public async Task<List<Business>> GetAllAsync(bool publicOnly = false)
     {
         var query = context.Businesses.Include(b => b.BusinessType).Include(b => b.Staff).ThenInclude(s => s.User).AsQueryable();
+
+        if (publicOnly)
+            query = query.Where(b => b.Status == BusinessStatuses.Approved && !b.IsHidden);
+
+        return await query.ToListAsync();
+    }
+
+    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, string? favoritedByUserId = null, double? customerLat = null, double? customerLng = null, string? statusFilter = null, bool publicOnly = false)
+    {
+        var query = context.Businesses.Include(b => b.BusinessType).Include(b => b.Staff).ThenInclude(s => s.User).AsQueryable();
+
+        if (publicOnly)
+            query = query.Where(b => b.Status == BusinessStatuses.Approved && !b.IsHidden);
+        else if (!string.IsNullOrWhiteSpace(statusFilter))
+            query = statusFilter == "Hidden"
+                ? query.Where(b => b.IsHidden)
+                : query.Where(b => b.Status == statusFilter && !b.IsHidden);
 
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(b =>

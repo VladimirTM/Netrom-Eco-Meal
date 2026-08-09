@@ -28,12 +28,13 @@ public class PackageServiceTests
         var favoriteRepo = new Mock<IFavoriteRepository>();
         var notificationService = new Mock<INotificationService>();
         var emailSender = new Mock<IAppEmailSender>();
+        var auditLogService = new Mock<IAuditLogService>();
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
         var configuration = new ConfigurationBuilder().Build();
 
         var service = new PackageService(
             repo.Object, businessService.Object, favoriteRepo.Object, notificationService.Object,
-            emailSender.Object, currentUser, configuration);
+            emailSender.Object, currentUser, configuration, auditLogService.Object);
 
         return new Fixture(service, repo, businessService);
     }
@@ -188,5 +189,50 @@ public class PackageServiceTests
 
         Assert.Empty(result);
         f.Repo.Verify(r => r.GetForAnalyticsAsync(null, since), Times.Once);
+    }
+
+    // ---- HideAsync / UnhideAsync -------------------------------------------
+
+    [Fact]
+    public async Task HideAsync_ManagerNotStaffOfBusiness_Throws()
+    {
+        var f = Build(ManagerId, AppRoles.BusinessManager);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        f.Repo.Setup(r => r.GetByIdAsync(package.Id)).ReturnsAsync(package);
+        f.BusinessService.Setup(b => b.IsStaffAsync(businessId, ManagerId)).ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.HideAsync(package.Id, "reason"));
+    }
+
+    [Fact]
+    public async Task HideAsync_Admin_SetsHiddenWithReason()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        f.Repo.Setup(r => r.GetByIdAsync(package.Id)).ReturnsAsync(package);
+
+        await f.Service.HideAsync(package.Id, "Allergen mislabeled");
+
+        Assert.True(package.IsHidden);
+        Assert.Equal("Allergen mislabeled", package.HiddenReason);
+        f.Repo.Verify(r => r.SaveChangesAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task UnhideAsync_Admin_ClearsHiddenState()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        package.IsHidden = true;
+        package.HiddenReason = "Allergen mislabeled";
+        f.Repo.Setup(r => r.GetByIdAsync(package.Id)).ReturnsAsync(package);
+
+        await f.Service.UnhideAsync(package.Id);
+
+        Assert.False(package.IsHidden);
+        Assert.Null(package.HiddenReason);
     }
 }

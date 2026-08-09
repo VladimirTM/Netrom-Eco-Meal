@@ -1,123 +1,30 @@
-@using Netrom_Eco_Meal.Controllers
-@using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services
 @implements IDisposable
-@inject NotificationController NotificationController
-@inject NavigationManager NavigationManager
+@inject NotificationPanelState PanelState
 
-<AnchoredDropdown TriggerClass="@TriggerClass"
-                   PanelClass="notif-dropdown"
-                   Title="Notifications"
-                   IsOpen="_open"
-                   OnToggle="ToggleAsync"
-                   OnClose="() => _open = false">
-    <Trigger>
-        <i class="bi bi-bell"></i>
-        @if (_unreadCount > 0)
-        {
-            <span class="notif-badge">@(_unreadCount > 9 ? "9+" : _unreadCount.ToString())</span>
-        }
-    </Trigger>
-    <Content>
-        <div class="notif-dropdown-header">
-            <span>Notifications</span>
-            @if (_unreadCount > 0)
-            {
-                <button type="button" class="notif-mark-all" @onclick="MarkAllReadAsync">Mark all read</button>
-            }
-        </div>
-        @if (_notifications is null)
-        {
-            <div class="notif-empty">Loading…</div>
-        }
-        else if (_notifications.Count == 0)
-        {
-            <div class="notif-empty">No notifications yet.</div>
-        }
-        else
-        {
-            @foreach (var notification in _notifications)
-            {
-                <button type="button" class="notif-item @(notification.IsRead ? "" : "notif-item-unread")" @onclick="() => OpenAsync(notification)">
-                    <span class="notif-item-dot"></span>
-                    <span class="notif-item-body">
-                        <span class="notif-item-message">@notification.Message</span>
-                        <span class="notif-item-time">@RelativeTime(notification.CreatedAt)</span>
-                    </span>
-                </button>
-            }
-        }
-    </Content>
-</AnchoredDropdown>
+@* Trigger only — the popup itself is NotificationPanel, rendered at the layout's top level so it
+   can't get trapped in the sidebar's stacking context. See NotificationPanelState for why. *@
+<button type="button" class="@TriggerClass" title="Notifications" @onclick="() => PanelState.ToggleAsync()">
+    <i class="bi bi-bell"></i>
+    @if (PanelState.UnreadCount > 0)
+    {
+        <span class="notif-badge">@(PanelState.UnreadCount > 9 ? "9+" : PanelState.UnreadCount.ToString())</span>
+    }
+</button>
 
 @code {
     [Parameter] public string TriggerClass { get; set; } = "notif-bell-btn";
 
-    private bool _open;
-    private int _unreadCount;
-    private List<Notification>? _notifications;
-    // Keeps the badge fresh even while the dropdown stays closed (e.g. a manager waiting on new orders).
-    private Timer? _pollTimer;
-
     protected override async Task OnInitializedAsync()
     {
-        await RefreshUnreadCountAsync();
-        _pollTimer = new Timer(async _ => await InvokeAsync(RefreshUnreadCountAndRenderAsync), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+        PanelState.OnChange += HandleChanged;
+        await PanelState.InitializeAsync();
     }
 
-    private async Task RefreshUnreadCountAndRenderAsync()
-    {
-        await RefreshUnreadCountAsync();
-        StateHasChanged();
-    }
-
-    private async Task RefreshUnreadCountAsync()
-    {
-        _unreadCount = (await NotificationController.GetMyUnreadCountAsync()).Value;
-    }
-
-    private async Task ToggleAsync()
-    {
-        _open = !_open;
-        if (_open)
-        {
-            _notifications = null;
-            _notifications = (await NotificationController.GetMyNotificationsAsync(20)).Value ?? [];
-        }
-    }
-
-    private async Task MarkAllReadAsync()
-    {
-        await NotificationController.MarkAllAsReadAsync();
-        foreach (var notification in _notifications ?? [])
-            notification.IsRead = true;
-        _unreadCount = 0;
-    }
-
-    private async Task OpenAsync(Notification notification)
-    {
-        if (!notification.IsRead)
-        {
-            await NotificationController.MarkAsReadAsync(notification.Id);
-            notification.IsRead = true;
-            _unreadCount = Math.Max(0, _unreadCount - 1);
-        }
-
-        _open = false;
-        if (notification.Url is not null)
-            NavigationManager.NavigateTo(notification.Url);
-    }
-
-    private static string RelativeTime(DateTime utc)
-    {
-        var span = DateTime.UtcNow - utc;
-        if (span.TotalMinutes < 1) return "just now";
-        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes}m ago";
-        if (span.TotalHours < 24) return $"{(int)span.TotalHours}h ago";
-        return $"{(int)span.TotalDays}d ago";
-    }
+    private void HandleChanged() => InvokeAsync(StateHasChanged);
 
     public void Dispose()
     {
-        _pollTimer?.Dispose();
+        PanelState.OnChange -= HandleChanged;
     }
 }

@@ -14,7 +14,8 @@ public class UserService(
     UserManager<ApplicationUser> userManager,
     EcoMealDbContext dbContext,
     IBusinessService businessService,
-    CurrentUserAccessor currentUser) : IUserService
+    CurrentUserAccessor currentUser,
+    IAuditLogService auditLogService) : IUserService
 {
     public async Task<List<UserWithRole>> GetAllAsync()
     {
@@ -86,6 +87,7 @@ public class UserService(
             return false;
 
         var currentRoles = await userManager.GetRolesAsync(user);
+        var previousRole = currentRoles.FirstOrDefault() ?? AppRoles.Customer;
 
         // Never leave the platform with zero admins.
         if (currentRoles.Contains(AppRoles.Admin) && role != AppRoles.Admin)
@@ -98,12 +100,14 @@ public class UserService(
         await userManager.RemoveFromRolesAsync(user, currentRoles);
         await userManager.AddToRoleAsync(user, role);
 
+        await auditLogService.LogAsync(AuditActions.RoleChanged, AuditTargetTypes.User, user.Id, user.Name, $"{previousRole} → {role}");
+
         // Moving away from BusinessManager releases every business they were staff of.
         if (role != AppRoles.BusinessManager)
         {
             var staffedBusinesses = await businessService.GetByStaffUserIdAsync(userId);
             foreach (var business in staffedBusinesses)
-                await businessService.RemoveStaffAsync(business.Id, userId);
+                await businessService.RemoveStaffAsync(business.Id, userId, user.Name);
         }
 
         return true;

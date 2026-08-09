@@ -111,9 +111,9 @@
 
                         @if (order.Payment is not null)
                         {
-                            <span class="badge @(order.Payment.Status == PaymentStatuses.Refunded ? "bg-secondary-subtle text-secondary" : "bg-success-subtle text-success") align-self-start mb-2">
-                                <i class="bi @(order.Payment.Status == PaymentStatuses.Refunded ? "bi-arrow-counterclockwise" : "bi-check-circle")"></i>
-                                @(order.Payment.Status == PaymentStatuses.Refunded ? "Refunded" : "Paid")
+                            <span class="badge @(PaymentStatuses.BadgeClass(order.Payment.Status)) align-self-start mb-2">
+                                <i class="bi @(PaymentStatuses.IconClass(order.Payment.Status))"></i>
+                                @(PaymentStatuses.Label(order.Payment.Status))
                             </span>
                         }
 

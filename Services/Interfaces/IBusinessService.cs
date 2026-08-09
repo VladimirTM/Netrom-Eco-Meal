@@ -3,11 +3,12 @@ using Netrom_Eco_Meal.Models;
 
 namespace Netrom_Eco_Meal.Services.Interfaces;
 
-// Create/delete are admin-only; update is admin or one of the business's own staff.
+// Create/delete are admin-only; update is admin or one of the business's own staff. Apply is
+// open to any signed-in user (self-service signup); Approve/Reject/Hide/Unhide are admin-only.
 public interface IBusinessService
 {
-    public Task<List<Business>> GetAllAsync();
-    public Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, bool favoritesOnly = false, double? customerLat = null, double? customerLng = null);
+    public Task<List<Business>> GetAllAsync(bool publicOnly = false);
+    public Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, bool favoritesOnly = false, double? customerLat = null, double? customerLng = null, string? statusFilter = null, bool publicOnly = false);
     public Task<Business?> GetByIdAsync(Guid id);
     public Task<List<Business>> GetByStaffUserIdAsync(string userId);
     public Task<List<ApplicationUser>> GetStaffAsync(Guid businessId);
@@ -15,6 +16,13 @@ public interface IBusinessService
     public Task AddAsync(Business business);
     public Task UpdateAsync(Business business);
     public Task DeleteAsync(Business business);
-    public Task<bool> AddStaffAsync(Guid businessId, string userId);
-    public Task<bool> RemoveStaffAsync(Guid businessId, string userId);
+    public Task<bool> AddStaffAsync(Guid businessId, string userId, string? userName = null);
+    public Task<bool> RemoveStaffAsync(Guid businessId, string userId, string? userName = null);
+
+    // Self-service business signup — creates a PendingApproval business owned by the caller.
+    public Task<Business> ApplyAsync(Business business);
+    public Task ApproveAsync(Guid businessId);
+    public Task RejectAsync(Guid businessId, string reason);
+    public Task HideAsync(Guid businessId, string reason);
+    public Task UnhideAsync(Guid businessId);
 }

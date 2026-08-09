@@ -7,7 +7,9 @@
 @using Netrom_Eco_Meal.Entities
 @using Netrom_Eco_Meal.Services
 @using Netrom_Eco_Meal.Services.Interfaces
-@rendermode InteractiveServer
+@* prerender: false — a hard navigation would otherwise paint a static copy first, and a click
+   landing before the real circuit swaps in (e.g. a bulk-select checkbox) gets silently lost. *@
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @implements IDisposable
 @inject PackageController PackageController
 @inject IBusinessService BusinessService
@@ -166,6 +168,12 @@
                                         <i class="bi bi-arrow-repeat"></i> Daily
                                     </span>
                                 }
+                                @if (package.IsHidden)
+                                {
+                                    <span class="badge rounded-pill bg-secondary-subtle text-secondary ms-1" title="@package.HiddenReason">
+                                        <i class="bi bi-eye-slash"></i> Hidden
+                                    </span>
+                                }
                             </div>
                             <div class="text-muted small">@package.Description</div>
                         </td>
@@ -186,10 +194,22 @@
                                 @if (canManage)
                                 {
                                     <div class="d-flex gap-2">
-                                        <a href="/packages/edit/@package.Id" class="btn btn-sm btn-outline-primary">
+                                        <a href="/packages/edit/@package.Id" class="btn btn-sm btn-outline-primary" title="Edit">
                                             <i class="bi bi-pencil"></i>
                                         </a>
-                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RequestDelete(package)">
+                                        @if (package.IsHidden)
+                                        {
+                                            <button class="btn btn-sm btn-outline-secondary" title="Unhide" @onclick="() => UnhideAsync(package)">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-sm btn-outline-secondary" title="Hide from storefront" @onclick="() => OpenHidePrompt(package)">
+                                                <i class="bi bi-eye-slash"></i>
+                                            </button>
+                                        }
+                                        <button class="btn btn-sm btn-outline-danger" title="Delete" @onclick="() => RequestDelete(package)">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </div>
@@ -212,6 +232,16 @@
                Busy="@_deleting"
                OnConfirm="ConfirmDeleteAsync"
                OnCancel="() => _pendingDelete = null"/>
+
+<ReportDialog IsOpen="@(_hidePromptPackage is not null)"
+              TargetLabel="@(_hidePromptPackage is null ? "" : _hidePromptPackage.Name)"
+              Title="@(_hidePromptPackage is null ? "" : $"Hide \"{_hidePromptPackage.Name}\"?")"
+              Message="It'll disappear from the customer-facing storefront immediately, but stays intact for you to edit or unhide later."
+              Placeholder="Reason (shown if someone hovers the Hidden badge)"
+              ConfirmLabel="Hide package"
+              Busy="@_hidePromptBusy"
+              OnSubmit="SubmitHidePromptAsync"
+              OnCancel="() => _hidePromptPackage = null"/>
 
 <ConfirmDialog IsOpen="_confirmingDuplicate"
                Title="Duplicate packages?"
@@ -279,6 +309,8 @@
     private Guid? _myBusinessId;
     private Package? _pendingDelete;
     private bool _deleting;
+    private Package? _hidePromptPackage;
+    private bool _hidePromptBusy;
     private int _pageIndex = 1;
     private const int PageSize = 10;
     // Guards every reload trigger (search, filters, paging, post-mutation refresh) so
@@ -486,5 +518,34 @@
         await ReloadAsync();
         _deleting = false;
         _pendingDelete = null;
+    }
+
+    private void OpenHidePrompt(Package package)
+    {
+        if (!_isAdmin && package.BusinessId != _myBusinessId)
+            return;
+
+        _hidePromptPackage = package;
+    }
+
+    private async Task SubmitHidePromptAsync(string reason)
+    {
+        if (_hidePromptPackage is null || string.IsNullOrWhiteSpace(reason))
+            return;
+
+        _hidePromptBusy = true;
+        await PackageController.HideAsync(_hidePromptPackage.Id, reason);
+        await ReloadAsync();
+        _hidePromptBusy = false;
+        _hidePromptPackage = null;
+    }
+
+    private async Task UnhideAsync(Package package)
+    {
+        if (!_isAdmin && package.BusinessId != _myBusinessId)
+            return;
+
+        await PackageController.UnhideAsync(package.Id);
+        await ReloadAsync();
     }
 }

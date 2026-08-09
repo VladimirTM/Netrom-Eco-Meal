@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using Netrom_Eco_Meal.Constants;
 
 namespace Netrom_Eco_Meal.Entities;
 
@@ -12,6 +13,16 @@ public class Business
     // Optional — powers "near me" distance sort and the map view. Null skips both.
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
+    // See Constants.BusinessStatuses. Admin-created businesses default straight to Approved;
+    // self-service applications (SubmittedByUserId set) start at PendingApproval.
+    public string Status { get; set; } = BusinessStatuses.Approved;
+    public string? RejectionReason { get; set; }
+    // Independent of Status — an admin moderation flag that can hide an otherwise-Approved
+    // business from the storefront without touching its approval state.
+    public bool IsHidden { get; set; }
+    public string? HiddenReason { get; set; }
+    // Who submitted this business for approval — null for businesses an admin created directly.
+    public string? SubmittedByUserId { get; set; }
     public Guid BusinessTypeId { get; set; }
     [ForeignKey(nameof(BusinessTypeId))]
     public BusinessType BusinessType { get; set; } = null!;

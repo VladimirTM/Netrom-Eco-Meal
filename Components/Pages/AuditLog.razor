@@ -1,0 +1,161 @@
+@page "/audit-log"
+@using Microsoft.AspNetCore.Authorization
+@using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Controllers
+@rendermode InteractiveServer
+@inject AuditLogController AuditLogController
+@attribute [Authorize(Roles = AppRoles.Admin)]
+
+<PageTitle>Audit Log — Eco Meal</PageTitle>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="h3 fw-bold mb-1">Audit Log</h1>
+        <p class="text-muted small mb-0">Who did what — role changes, business approvals, and moderation actions</p>
+    </div>
+</div>
+
+@if (_paged is not null)
+{
+    <div class="d-flex gap-3 mb-3 flex-wrap">
+        <div class="input-group" style="max-width: 320px;">
+            <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+            <input type="text" class="form-control border-start-0 ps-0" placeholder="Search actor or target…"
+                   @bind="_search" @bind:event="oninput" @bind:after="OnSearchInputAsync"/>
+        </div>
+        <select class="form-select" style="max-width: 220px;" @bind="_actionFilter" @bind:after="FilterChangedAsync">
+            <option value="">All actions</option>
+            @foreach (var action in Actions)
+            {
+                <option value="@action">@DisplayAction(action)</option>
+            }
+        </select>
+        <select class="form-select" style="max-width: 180px;" @bind="_targetTypeFilter" @bind:after="FilterChangedAsync">
+            <option value="">All targets</option>
+            <option value="@AuditTargetTypes.User">User</option>
+            <option value="@AuditTargetTypes.Business">Business</option>
+            <option value="@AuditTargetTypes.Package">Package</option>
+        </select>
+        @if (!string.IsNullOrEmpty(_search) || _actionFilter != "" || _targetTypeFilter != "")
+        {
+            <button class="btn btn-outline-secondary" @onclick="ClearFiltersAsync">
+                <i class="bi bi-x-lg me-1"></i> Clear
+            </button>
+        }
+        <span class="align-self-center text-muted small ms-auto">@_paged.TotalCount result@(_paged.TotalCount == 1 ? "" : "s")</span>
+    </div>
+}
+
+<div class="card border-0 shadow-sm">
+    @if (_paged is null)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (_paged.Items.Count == 0)
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-journal-text fs-1 text-muted d-block mb-3"></i>
+            <p class="text-muted mb-0">@(_paged.TotalCount == 0 && string.IsNullOrEmpty(_search) && _actionFilter == "" && _targetTypeFilter == "" ? "Nothing logged yet." : "No entries match your filters.")</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead>
+                <tr class="border-bottom">
+                    <th class="px-4 py-3 text-uppercase text-muted small fw-semibold">Date</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Actor</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Action</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Target</th>
+                    <th class="py-3 text-uppercase text-muted small fw-semibold">Details</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var entry in _paged.Items)
+                {
+                    <tr>
+                        <td class="px-4 text-muted small">@entry.CreatedAt.ToString("MMM d, yyyy HH:mm")</td>
+                        <td>@entry.ActorName</td>
+                        <td>
+                            <span class="badge rounded-pill px-2 py-1 bg-light text-muted border">@DisplayAction(entry.Action)</span>
+                        </td>
+                        <td>@entry.TargetName</td>
+                        <td class="text-muted small">@entry.Details</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        <Pagination CurrentPage="_paged.PageIndex" TotalPages="_paged.TotalPages" OnPageChange="PageChangedAsync"/>
+    }
+</div>
+
+@code {
+    private static readonly string[] Actions =
+    [
+        AuditActions.RoleChanged, AuditActions.BusinessCreated, AuditActions.BusinessUpdated, AuditActions.BusinessDeleted,
+        AuditActions.BusinessStaffAdded, AuditActions.BusinessStaffRemoved, AuditActions.BusinessApplied, AuditActions.BusinessApproved,
+        AuditActions.BusinessRejected, AuditActions.BusinessHidden, AuditActions.BusinessUnhidden, AuditActions.PackageHidden,
+        AuditActions.PackageUnhidden, AuditActions.ReportDismissed, AuditActions.ReportActionTaken,
+    ];
+
+    private PaginatedList<Netrom_Eco_Meal.Entities.AuditLog>? _paged;
+    private string _search = "";
+    private string _actionFilter = "";
+    private string _targetTypeFilter = "";
+    private int _pageIndex = 1;
+    private const int PageSize = 20;
+    // Guards every reload trigger (search, filters, paging) so overlapping ones cancel each
+    // other instead of using the shared DbContext concurrently.
+    private readonly Debouncer _reloadGate = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPageAsync();
+    }
+
+    private async Task LoadPageAsync()
+    {
+        _paged = (await AuditLogController.GetPagedAsync(_pageIndex, PageSize,
+            _actionFilter == "" ? null : _actionFilter,
+            _targetTypeFilter == "" ? null : _targetTypeFilter,
+            _search == "" ? null : _search)).Value;
+    }
+
+    private Task ReloadAsync(int delayMs = 0) => _reloadGate.DebounceAsync(LoadPageAsync, delayMs);
+
+    private Task OnSearchInputAsync()
+    {
+        _pageIndex = 1;
+        return ReloadAsync(300);
+    }
+
+    private Task FilterChangedAsync()
+    {
+        _pageIndex = 1;
+        return ReloadAsync();
+    }
+
+    private Task PageChangedAsync(int page)
+    {
+        _pageIndex = page;
+        return ReloadAsync();
+    }
+
+    private Task ClearFiltersAsync()
+    {
+        _search = "";
+        _actionFilter = "";
+        _targetTypeFilter = "";
+        return FilterChangedAsync();
+    }
+
+    // Splits "BusinessStaffAdded" -> "Business Staff Added" for display.
+    private static string DisplayAction(string action) =>
+        System.Text.RegularExpressions.Regex.Replace(action, "(?<!^)([A-Z])", " $1");
+}

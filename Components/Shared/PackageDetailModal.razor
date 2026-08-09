@@ -1,6 +1,8 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
+@inject ReportController ReportController
 
 @if (Package is not null)
 {
@@ -65,10 +67,24 @@
                             <i class="bi bi-bag-plus"></i> Add to basket
                         </button>
                     }
+                    <button type="button" class="btn btn-link btn-sm w-100 text-muted" @onclick="() => _reportPromptOpen = true">
+                        <i class="bi bi-flag"></i> Report this package
+                    </button>
                 </Authorized>
             </AuthorizeView>
+
+            @if (_reportSent)
+            {
+                <p class="text-success small text-center mb-0"><i class="bi bi-check-circle-fill"></i> Thanks — an admin will take a look.</p>
+            }
         </div>
     </div>
+
+    <ReportDialog IsOpen="_reportPromptOpen"
+                  TargetLabel="@(Package?.Name ?? "")"
+                  Busy="@_reportBusy"
+                  OnSubmit="SubmitReportAsync"
+                  OnCancel="() => _reportPromptOpen = false"/>
 }
 
 @code {
@@ -78,7 +94,33 @@
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback<Package> OnAddToCart { get; set; }
 
+    private bool _reportPromptOpen;
+    private bool _reportBusy;
+    private bool _reportSent;
+
     private string HeroStyle => string.IsNullOrWhiteSpace(Package?.ImageUrl)
         ? "background-color: var(--em-forest);"
         : $"background-image: url('{Package.ImageUrl}');";
+
+    protected override void OnParametersSet()
+    {
+        // A fresh package selection resets any leftover state from the previous one.
+        if (Package is null)
+        {
+            _reportPromptOpen = false;
+            _reportSent = false;
+        }
+    }
+
+    private async Task SubmitReportAsync(string reason)
+    {
+        if (Package is null || string.IsNullOrWhiteSpace(reason))
+            return;
+
+        _reportBusy = true;
+        await ReportController.SubmitAsync(AuditTargetTypes.Package, Package.Id, reason);
+        _reportBusy = false;
+        _reportPromptOpen = false;
+        _reportSent = true;
+    }
 }

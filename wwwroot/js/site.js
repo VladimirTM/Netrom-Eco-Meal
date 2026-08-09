@@ -19,7 +19,11 @@ window.EcoMeal = {
         let left = anchorRect.right - dropdownWidth;
         left = Math.max(8, Math.min(left, window.innerWidth - dropdownWidth - 8));
 
-        dropdownEl.style.top = Math.max(8, top) + "px";
+        // Belt-and-suspenders on the flip logic above — clamps both edges so an anchor sitting
+        // a few px past the true viewport can't still push the panel off-screen.
+        const clampedTop = Math.max(8, Math.min(top, window.innerHeight - dropdownHeight - 8));
+
+        dropdownEl.style.top = clampedTop + "px";
         dropdownEl.style.left = left + "px";
         dropdownEl.style.visibility = "visible";
     },

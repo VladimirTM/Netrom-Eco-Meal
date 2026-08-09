@@ -67,7 +67,8 @@ Components/
     ├── AnchoredDropdown.razor    # Generic trigger+panel dropdown, JS-positioned to escape overflow clipping
     ├── ConfirmDialog.razor       # Generic confirm/cancel modal
     ├── ForbiddenPanel.razor / NotFoundPanel.razor
-    ├── NotificationBell.razor   # Polling bell dropdown, used in both layouts
+    ├── NotificationBell.razor   # Trigger button only — badge + polling, used in both layouts
+    ├── NotificationPanel.razor  # The actual popup, rendered once at each layout's top level
     ├── OrderDetailModal.razor / PackageDetailModal.razor
     ├── Pagination.razor
     ├── StarRating.razor         # Read-only fractional-fill display + editable 1-5 picker, same component
@@ -161,9 +162,13 @@ One consequence worth knowing: when `NotFoundPage` renders via the Router's in-c
 
 | Layout | Used by | Shell |
 |---|---|---|
-| `PublicLayout` | Home, BusinessDetail, Orders, OrderPickupPass, AccessDenied, NotFound | Sticky header (logo, notification bell, orders link, basket button + badge, dashboard link if staff, logout), `@Body`, footer. Owns the `CartPanel` and its open/closed state |
-| `MainLayout` | Dashboard, Businesses(+Form), Packages(+Form), OrderManagement, Payments, Users, OrderScan, OrderValidate | Fixed left sidebar (`NavMenu`) + `<main>` content area — the classic admin-panel shell |
+| `PublicLayout` | Home, BusinessDetail, BusinessApply, Orders, OrderPickupPass, AccessDenied, NotFound | Sticky header (logo, notification bell, orders link, basket button + badge, dashboard link if staff, "list your business" link for Customer/BusinessManager, logout), `@Body`, footer. Owns the `CartPanel` and `NotificationPanel`, and the cart's open/closed state |
+| `MainLayout` | Dashboard, Businesses(+Form), Packages(+Form), OrderManagement, Payments, Users, Reports, AuditLog, OrderScan, OrderValidate | Fixed left sidebar (`NavMenu`) + `<main>` content area — the classic admin-panel shell. Also owns `NotificationPanel` |
 | `EmptyLayout` | Login, Register | Just `@Body` — no header, no sidebar, no footer; the login/register cards center themselves entirely via `app.css`'s `.login-page`/`.login-card` |
+
+`MainLayout`'s `.page`/`.sidebar` (`MainLayout.razor.css`) are sized `height: 100dvh`, not `100vh` — `vh` is the *largest possible* viewport and ignores transient browser chrome (an address bar, a devtools/automation banner), so a `100vh`-tall sidebar can render a few px taller than what's actually visible, pushing its footer past the real bottom edge. `dvh` tracks the actual visible viewport instead.
+
+**Both layouts render `<NotificationPanel/>` as a sibling of `.sidebar`/`.public-header`, never nested inside either.** `.sidebar` and `.public-header` are both `position: sticky`, and `position: sticky` *always* establishes a new CSS stacking context (unlike `position: relative`, which only does with a non-auto `z-index`) — regardless of `z-index`. A `position: fixed` popup nested inside one of those elements still computes its on-screen coordinates against the viewport correctly, but its paint order gets trapped *inside* that stacking context, so the whole sidebar/header subtree (popup included) paints as one atomic unit at its slot in the DOM — which is before `<main>`. `<main>`'s content then paints on top and visually covers the popup, even though every computed style (`z-index`, `opacity`, `display`) looks completely correct in devtools. This is why `NotificationBell` (the trigger, kept in the sidebar/header) and `NotificationPanel` (the actual popup) are two separate components sharing state through `NotificationPanelState` — see §5 — rather than one component like `ConfirmDialog`/`ReportDialog`, which get away with rendering inline because they're only ever used from page components inside `<main>`, which has no stacking-context-creating ancestor.
 
 ### PublicLayout — the customer chrome
 
@@ -179,6 +184,7 @@ One consequence worth knowing: when `NotFoundPage` renders via the Router's in-c
 </button>
 ...
 <CartPanel @bind-IsOpen="_cartOpen"/>
+<NotificationPanel/>
 
 @code {
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -194,9 +200,11 @@ One consequence worth knowing: when `NotFoundPage` renders via the Router's in-c
 ```
 Both `RestoreAsync` and `InitializeAsync` are deferred to `OnAfterRenderAsync(firstRender)` rather than `OnInitializedAsync` for the same reason: JS interop isn't available until after the component has actually rendered once and the circuit's JS side is attached. `MainLayout` does the identical `ClientTimeZoneService.InitializeAsync()` dance in its own `OnAfterRenderAsync` (it doesn't need `CartService` — staff don't have a customer basket).
 
+**"List your business" link (Phase 9)**: `<AuthorizeView>` around `context.User.IsInRole(AppRoles.Customer) || context.User.IsInRole(AppRoles.BusinessManager)` gates a small icon-only button next to the Dashboard link, pointing at `/businesses/apply` — deliberately excludes `Admin` (they create businesses directly via `/businesses/create`) and anonymous visitors (self-service signup requires being signed in, same as favoriting or leaving a review).
+
 ### NavMenu — role-aware sidebar
 
-Plain `<AuthorizeView Roles="@AppRoles.Admin">` gates the "User Roles" nav link; every other link (Dashboard, Businesses, Packages, Orders) is visible to both `Admin` and `BusinessManager` — the actual data scoping (a manager only sees the business or businesses they're staff of) happens page-side, not by hiding nav links per role. The sidebar footer shows the signed-in user's initial-avatar, email, and a role label resolved by a local `DisplayRole` switch expression, plus the same `NotificationBell` the public header uses (`TriggerClass="sidebar-notif-btn"` swaps only the CSS class, same component).
+Plain `<AuthorizeView Roles="@AppRoles.Admin">` gates the "User Roles", "Reports", and "Audit Log" nav links; every other link (Dashboard, Businesses, Packages, Orders) is visible to both `Admin` and `BusinessManager` — the actual data scoping (a manager only sees the business or businesses they're staff of) happens page-side, not by hiding nav links per role. The sidebar footer shows the signed-in user's initial-avatar, email, and a role label resolved by a local `DisplayRole` switch expression, plus the same `NotificationBell` trigger the public header uses, with `TriggerClass="sidebar-notif-btn"` for the icon — the popup itself renders from `MainLayout`, not from here (§4, §12).
 
 **Business switcher**: for a `BusinessManager`, `AuthorizeView Roles="@AppRoles.BusinessManager"` wraps a block driven by `ManagedBusinessContext.MyBusinesses.Count` — zero businesses renders nothing, one renders a plain "current business" label, and more than one renders an `AnchoredDropdown` (`role-badge`-styled, matching the sidebar's other pill controls) listing every business the manager staffs, with a check mark on `ManagedBusinessContext.SelectedBusinessId`. `NavMenu.OnInitializedAsync` calls `ManagedBusinessContext.EnsureLoadedAsync()` and subscribes to its `OnChange` the same way every other consumer of a cross-cutting client service does (§5) — picking a different business calls `ManagedBusinessContext.SelectAsync`, which persists the choice and fires `OnChange`, and every business-scoped page (Dashboard, Businesses, Packages, PackageForm, PackageTemplates, OrderManagement) re-renders scoped to the new selection without a page navigation.
 
@@ -268,6 +276,24 @@ Two non-obvious bugs shaped this service, both worth knowing before adding anoth
 - **DbContext concurrency**: `NavMenu` (the layout) and the routed page both call `EnsureLoadedAsync`/load their own data from `OnInitializedAsync`, which can run concurrently. If `LoadAsync` queried through the shared per-circuit `EcoMealDbContext` the way most services do, it would race whatever query the routed page is running on that same context and crash the circuit (`InvalidOperationException: A second operation was started...`). It instead opens its own short-lived context via `IDbContextFactory<EcoMealDbContext>` — the identical fix `CartService.RestoreAsync` and `NotificationRepository`'s polling bell already use for the same reason.
 - **Load-task caching, not a bool flag**: `EnsureLoadedAsync() => _loadTask ??= LoadAsync()` caches the in-flight `Task` itself rather than a `bool _loaded` flipped before the awaited load finishes. A bare bool would be a race in this exact layout-and-page-both-call-on-init scenario — if `NavMenu` starts the load and yields at an `await`, and the routed page checks the flag before `NavMenu` resumes, a bool would already read `true` and the page would read `MyBusinesses`/`SelectedBusinessId` before either was populated. Caching the `Task` means every caller, concurrent or not, awaits the same completion.
 
+### NotificationPanelState
+
+```csharp
+public class NotificationPanelState(NotificationController notificationController) : IDisposable
+{
+    public bool IsOpen { get; private set; }
+    public int UnreadCount { get; private set; }
+    public List<Notification>? Notifications { get; private set; }
+    public event Action? OnChange;
+
+    public Task InitializeAsync() { /* cached in-flight Task, same pattern as ManagedBusinessContext */ }
+    public async Task ToggleAsync() { /* flips IsOpen, fetches the list on open */ }
+    public async Task MarkAllReadAsync() { /* ... */ }
+    public async Task MarkAsReadAsync(Notification notification) { /* ... */ }
+}
+```
+Exists to split `NotificationBell` (the trigger button, rendered inside the sidebar footer / public header) from `NotificationPanel` (the actual popup, rendered once at each layout's top level — §4) while keeping them driven by one source of truth. `NotificationBell.OnInitializedAsync` and `NotificationPanel.OnInitializedAsync` both subscribe to `OnChange` and both call `InitializeAsync()` — the cached-task pattern from `ManagedBusinessContext.EnsureLoadedAsync` means whichever runs second just awaits the first's poll-timer setup instead of starting a second timer. Marking a notification read, toggling open/closed, and mark-all-read all live on the service (not on either component) so the trigger's badge count and the panel's list/unread-accent state update in lockstep without a parent/child relationship between the two components — they aren't one, because they can't be (§4).
+
 ---
 
 ## 6. Home Page
@@ -334,6 +360,14 @@ Three independent concerns on one page: the business's live packages, its review
 - **Package list is pre-filtered to live packages** client-side after the paginated fetch (`PickupEnd > DateTime.UtcNow`) and re-sorted by soonest `PickupEnd` — the backend's `GetPagedAsync` for packages doesn't have a "live only" filter of its own, so this page asks for a large page size (100) and filters in memory rather than adding a new backend parameter for a single call site.
 - **"X left" accounts for pending reservations, not just the local cart** — right after loading `_packages`, the page fetches `_reservedByPackage` (one bulk `OrderController.GetPendingReservedQuantitiesAsync` call) and passes each package's reserved total into `CartService.AvailableQuantity(package, reserved)`, both in the package row and in the `PackageDetailModal` parameter. Before this existed, `AvailableQuantity` only knew about the *viewer's own* local cart contents, so a package's displayed count would revert to the full, un-reserved number the moment a Pending order's items left the local cart (e.g. right after checkout) — misleading regardless of whether the reservation was the viewer's own order or someone else's (see §15).
 - `PackageDetailModal` (§12) is the drill-down when a package row is clicked, reusing the same `AddToCart` handler.
+- **Phase 9 visibility gate**: `_business` is only assigned when the fetched business is `{ Status: Approved, IsHidden: false }` — a `PendingApproval`/`Rejected`/hidden business renders the identical `NotFoundPanel` a genuinely deleted one does, rather than a distinct "not available yet" state. This is a deliberate simplification: the applicant never gets a preview link at all (`BusinessApply.razor`, below, shows a plain confirmation instead of redirecting here), and staff/admin already have `/businesses`/`/businesses/edit/{id}` to inspect a business regardless of its status — so this page doesn't need to special-case either audience. The package list also filters out `p.IsHidden` alongside the existing `PickupEnd > now` check.
+- **Report button (Phase 9)**: `AuthorizeView Roles="Customer"` gates a flag-icon button next to Favorite, opening `ReportDialog` (§12) and calling `ReportController.SubmitAsync(AuditTargetTypes.Business, Id, reason)` on submit — success shows the same inline toast (`_toastMessage`) the "added to basket"/"started a new basket" flows already use, rather than a separate confirmation UI. `PackageDetailModal` (§12) carries an identical report action for the package itself, independent of this one.
+
+### BusinessApply — self-service business signup (Phase 9)
+
+**File:** `Components/Pages/BusinessApply.razor` — `@page "/businesses/apply"`, `@layout PublicLayout`, `[Authorize(Roles = "Customer,BusinessManager")]`
+
+A deliberately small form — Name/Description/Address/Type/ImageUrl, the same fields `BusinessForm.razor` exposes minus Location — that calls `BusinessController.ApplyAsync` (not `AddAsync`) on submit. There is **no redirect to a detail page and no "my applications" list** — on success the form is replaced in place by a plain confirmation card ("An admin will review 'X' and let you know once it's approved"), specifically so this page never needs to reason about rendering a `PendingApproval`/`Rejected` business's own detail view (see the Business Detail visibility gate above). The applicant instead learns the outcome via the in-app notification `BusinessService.ApproveAsync`/`RejectAsync` sends server-side. Reuses the same `EditForm`/`DataAnnotationsValidator`/private nested form-model pattern every other admin `EditForm` page in this app uses (§1), just under `PublicLayout` instead of `MainLayout` since the audience is a signed-in customer, not staff.
 
 ---
 
@@ -571,6 +605,8 @@ Sell-through only counts packages whose pickup window has **already closed** —
 
 `Businesses.razor` is the admin/manager list — admins see every business and can create new ones; a `BusinessManager` sees only the business(es) they're staff of (`staffUserId` passed to `BusinessController.GetPagedAsync`) and can edit any of them. Staff are shown as removable chips per row (`business.Staff.OrderBy(s => s.User.Name)`, each with a small `×` calling `BusinessController.RemoveStaffAsync`) plus an admin-only `AnchoredDropdown` "add staff" trigger listing every `BusinessManager` not already on that row — picking one calls `AddStaffAsync` and **deliberately doesn't close the dropdown**, so an admin can add several staff in one open. `BusinessForm.razor` serves both `/businesses/create` (admin-only) and `/businesses/edit/{id}` (admin or one of the business's own staff, via `IsStaffAsync`) behind one component, branching on whether `Id` was supplied (`IsEdit`) — staff assignment itself lives on `Businesses.razor`/`Users.razor`, not on this form.
 
+**Approval & moderation (Phase 9)**: an admin-only Status column/badge plus a status filter dropdown (All/Pending/Approved/Rejected/Hidden — the last two map to `Business.Status`/`Business.IsHidden` respectively, see `BACKEND_ARCHITECTURE.md` §4's `statusFilter` param) sit alongside the existing type filter. Row actions branch on status: a `PendingApproval` row gets Approve (instant, calls `BusinessController.ApproveAsync`) and Reject (opens a reason prompt); a `Rejected` row gets a "reconsider" button reusing the same Approve handler (`ApproveAsync` allows `Rejected → Approved`, not just `PendingApproval → Approved`); an `Approved` row gets Hide/Unhide (Hide opens the same reason prompt as Reject). The reason prompt is `ReportDialog` (§12) reused for both — a `ReasonPromptMode` enum (`Reject`/`Hide`) picks the `Title`/`Message`/`ConfirmLabel` it's given, so despite sharing one modal instance the copy is specific to the action ("Reject '{name}'?" vs. "Hide '{name}'?"), not generic "report" wording. Edit/staff-assignment/delete are unchanged, except Edit and the staff-add dropdown are hidden for anything not currently `Approved` (a pending/rejected business has no live storefront presence yet, so there's nothing to staff).
+
 `BusinessForm.razor`'s optional Location fields (`Latitude`/`Longitude`, both plain `InputNumber`) can be typed in by hand or filled by a "use my location" button next to them:
 ```csharp
 private async Task UseCurrentLocationAsync()
@@ -590,6 +626,9 @@ Same list/form split as Businesses, plus:
 - `PackageForm.razor`'s dietary-tag picker is a checkbox grid over `Constants.DietaryTags.All`, toggling membership in `_model.DietaryTags` (a plain `List<string>`, no multi-select `InputSelect` involved).
 - Cross-field pickup-window validation lives on the private `PackageFormModel : IValidatableObject` (pickup end must be after pickup start **and** in the future) — compared against `NowLocal`, a field the parent component keeps in sync with `ClientTimeZoneService`'s resolved local time, specifically so the "must be in the future" check uses the *viewer's* clock rather than the server's.
 - `Packages.razor` shows a 🔁 "Daily" badge next to any package whose `TemplateId` is set (`BACKEND_ARCHITECTURE.md` §3), plus a "Recurring templates" link to `/packages/templates` alongside the existing "Add Package" button.
+- **Hide/Unhide (Phase 9)**: a per-row toggle next to Edit/Delete — Hide opens `ReportDialog` (§12) with its own Hide-specific `Title`/`Message`/`ConfirmLabel`, not the default report copy; Unhide is instant. A hidden row shows a "Hidden" badge (hover for the reason) next to the Daily badge. Same authorization as every other write on this page — admin, or the package's own business's staff.
+- **`@rendermode` opts out of prerendering** (`new InteractiveServerRenderMode(prerender: false)`, unlike every other page's plain `InteractiveServer`) — with prerendering on, a hard navigation here paints a static, non-interactive copy of the page before the real circuit swaps in, and a click landing in that window (e.g. a bulk-select checkbox, below) is silently lost.
+- **Bulk-select**: a checkbox column (admin/manager rows only, driven by `SelectablePackagesOnPage`) feeds a `HashSet<Guid> _selectedIds` that persists across paging/filtering; a header checkbox reflects/toggles "all selectable on this page" via `AllSelectableOnPageSelected`. One or more selected reveals a toolbar (Duplicate/Adjust quantity/Extend pickup window/Clear selection) above the table, each action confirmed via its own small modal before calling the matching `PackageController.*ManyAsync`.
 
 **Recurring templates** — a "Repeat this every day" checkbox, shown only on **create** (not edit, since a template is derived from one specific package's fields at creation time):
 ```csharp
@@ -646,11 +685,23 @@ A manager's `businessId` (both for the paged list and for `ExportHref` above) co
 
 **File:** `Components/Pages/Payments.razor` — `@page "/payments"`, manager/admin payout ledger.
 
-Deliberately **not** a new backend surface — it calls the exact same `OrderController.GetOrdersForManagementPagedAsync` `OrderManagement.razor` does (same `ManagedBusinessContext`/`_businessFilter` scoping split, same `Debouncer`-gated reload, same `ForbiddenPanel` fallback for a staffless manager), just reading `order.Payment` off each row instead of rendering the status-change action buttons. Two stat cards up top — "Collected (this page)" / "Refunded (this page)" — are computed client-side from the currently-loaded page (`_paged.Items.Where(o => o.Payment is not null).Sum(...)`), not a separate aggregate query; "this page" in the label is accurate, not a rounding shortcut — switching pages recomputes both from whatever page just loaded. No write actions live here at all — refunds only ever happen as a side effect of `OrderService.ApplyStatusChangeAsync`'s Cancelled transition (`BACKEND_ARCHITECTURE.md` §5), never a button on this page.
+Deliberately **not** a new backend surface — it calls the exact same `OrderController.GetOrdersForManagementPagedAsync` `OrderManagement.razor` does (same `ManagedBusinessContext`/`_businessFilter` scoping split, same `Debouncer`-gated reload, same `ForbiddenPanel` fallback for a staffless manager), just reading `order.Payment` off each row instead of rendering the status-change action buttons. Stat cards up top — "Collected (this page)" / "Refunded (this page)", plus a third "Refund failed (this page)" count that only renders when non-zero — are computed client-side from the currently-loaded page (`_paged.Items.Where(...).Sum(...)`/`.Count(...)`), not a separate aggregate query; "this page" in the label is accurate, not a rounding shortcut — switching pages recomputes all three from whatever page just loaded. No write actions live here at all — refunds (and the occasional `RefundFailed`) only ever happen as a side effect of `OrderService.ApplyStatusChangeAsync`'s Cancelled transition (`BACKEND_ARCHITECTURE.md` §5), never a button on this page.
 
 ### Users
 
 Admin-only role management. Two independent `AnchoredDropdown`s per row (role, and — only for `BusinessManager` rows — business assignment), deliberately mutually exclusive (closing one when the other opens, so only one is ever open at a time). The business column is the same removable-chips-plus-add-dropdown shape `Businesses.razor`'s Staff column uses (§11 above), just inverted — one row per user, chips for every business they're staff of (`AssignedBusinesses(user.Id)`), and an "add business" `AnchoredDropdown` listing every business not already assigned that **stays open across multiple picks**, same as the Staff column. Both call the same `BusinessController.AddStaffAsync`/`RemoveStaffAsync` `Businesses.razor` does — there's exactly one staff-assignment backend surface, just two admin entry points into it (by business, or by user). Role changes and business (re)assignments both re-fetch the user list afterward, since `UserService.UpdateRoleAsync` can auto-release every business a user staffed server-side as a side effect of a role change away from `BusinessManager` (see `BACKEND_ARCHITECTURE.md` §7) — the UI has no way to know that happened without asking again.
+
+### Reports (Phase 9)
+
+**File:** `Components/Pages/Reports.razor` — `@page "/reports"`, admin-only, `MainLayout`.
+
+Lists only `Report`s with `Status == Open` (`ReportController.GetOpenAsync`) — resolved ones simply drop off the list rather than being shown greyed-out, since there's no "resolved reports" view in this app; the audit log (below) is where a resolved report's outcome lives on afterward. Two actions per row, both `ConfirmDialog`-gated rather than instant, since both are effectively irreversible from this page (dismissing closes the report for good; taking action hides a live business/package): Dismiss just closes the report, "Hide target" calls `ReportController.TakeActionAsync(reportId, report.Reason)` — **reusing the report's own `Reason` as the hide reason** rather than prompting the admin for a second one, since re-typing the same text they're already reading in the row would be pure friction. The list is reloaded (not patched in place) after either action, matching the pattern every other admin list page in this app uses after a mutation.
+
+### Audit Log (Phase 9)
+
+**File:** `Components/Pages/AuditLog.razor` — `@page "/audit-log"`, admin-only, `MainLayout`.
+
+The same paginated-list shape as every other admin table page (`Debouncer`-gated search + filter reload, `Pagination` component) — search matches actor/target name, plus dropdown filters for action and target type. `DisplayAction` is the one page-local formatting helper: a regex (`(?<!^)([A-Z])` → `" $1"`) splits a PascalCase `Constants.AuditActions` value like `BusinessStaffAdded` into "Business Staff Added" for display, rather than maintaining a second parallel list of display strings alongside the constants. Purely a read-only view — there is no way to create, edit, or delete an entry from the UI, matching `IAuditLogService.LogAsync` never being exposed on a controller as a standalone write (`BACKEND_ARCHITECTURE.md` §3/§5).
 
 ---
 
@@ -658,10 +709,11 @@ Admin-only role management. Two independent `AnchoredDropdown`s per row (role, a
 
 | Component | Role |
 |---|---|
-| `AnchoredDropdown` | Generic trigger + floating panel. `OnAfterRenderAsync` calls `EcoMeal.positionDropdown(anchorRef, panelRef)` **once per open** (`_positionedForCurrentOpen` guard prevents repositioning on every re-render, which would make it visibly jump while scrolling) — see §14 for the JS side. Used for both the Businesses/Users manager-assignment pickers and `NotificationBell` |
+| `AnchoredDropdown` | Generic trigger + floating panel, for triggers whose on-screen position genuinely varies (a table row that can be anywhere depending on scroll/paging). `OnAfterRenderAsync` calls `EcoMeal.positionDropdown(anchorRef, panelRef)` on **every** render while open, not just the first — content that loads in async can grow the panel past its first, smaller measurement, and a stale position clips it against the viewport edge; repositioning is idempotent (no visible jump) since nothing else re-renders this subtree on a bare scroll. `positionDropdown` itself clamps against both the top and bottom edges (not just top), since a `100dvh`-sized anchor (§4) can still measure a few px past the visible viewport on some browsers. See §14 for the JS side. Used for the Businesses/Users manager-assignment pickers. Not suitable for the notification popup even with perfect positioning math, since its trigger lives inside a `position: sticky` ancestor — see `NotificationBell`/`NotificationPanel` below and §4 |
 | `ConfirmDialog` | Generic confirm/cancel modal — delete confirmations, the cross-business "start a new basket?" prompt, cancel-order confirmations. `Busy` disables both buttons and swaps the confirm label for a spinner mid-request |
+| `ReportDialog` (Phase 9) | Same `.confirm-backdrop`/`.confirm-dialog` shell as `ConfirmDialog` (both capped at `max-height: calc(100vh - 3rem)` with `overflow-y: auto`, so a tall message/reason can't push the buttons off a short viewport), plus a required reason `<textarea>` — the Submit button stays disabled until non-whitespace text is entered. Optional `Title`/`Message`/`Placeholder`/`ConfirmLabel` parameters default to the customer-facing report copy ("Report {TargetLabel}" / "Submit report"), used as-is by the report action on `BusinessDetail.razor`/`PackageDetailModal.razor` (submits via `ReportController.SubmitAsync`). The admin-facing Reject/Hide actions on `Businesses.razor`/`Packages.razor` (§11) pass their own copy instead ("Hide '{name}'?" / "Hide package", etc.) — those two call sites never touch `ReportController` at all, they just borrow the modal shape for its `EventCallback<string>` |
 | `ForbiddenPanel` / `NotFoundPanel` | Inline empty-state panels — the former for "wrong role," the latter for "this specific entity no longer exists" (distinct from the global 404 route, used by edit pages when a fetched-by-ID entity comes back null) |
-| `NotificationBell` | `AnchoredDropdown`-based. A `System.Threading.Timer` polls `GetMyUnreadCountAsync` every 30 seconds regardless of whether the dropdown is open, so the badge count stays fresh for e.g. a manager waiting on new orders; opening the dropdown separately fetches the actual list (`GetMyNotificationsAsync(20)`) on demand rather than keeping 20 rows in memory at all times |
+| `NotificationBell` / `NotificationPanel` | Split into a trigger (`NotificationBell`, rendered inside the sidebar footer / public header) and the popup itself (`NotificationPanel`, rendered once from each layout's top level, outside the sidebar/header entirely) sharing state through `NotificationPanelState` (§5) — not one component, because one component can't render in two DOM locations at once, and the popup *has* to live outside the sidebar/header's subtree (§4). Styled as a centered modal (`.notif-panel`, `position: fixed; top/left: 50%; transform: translate(-50%,-50%)`, `max-height: calc(100vh - 3rem)` with internal scroll) — the same family as `ConfirmDialog`/`ReportDialog`, chosen after a corner-pinned/`AnchoredDropdown`-based panel kept re-clipping against the sidebar's edge across several earlier fixes; centering plus a viewport-fraction max-height can't clip against any edge, on any screen size. A `System.Threading.Timer` on `NotificationPanelState` polls `GetMyUnreadCountAsync` every 30 seconds regardless of whether the panel is open, so the badge count stays fresh for e.g. a manager waiting on new orders; opening the panel separately fetches the actual list (`GetMyNotificationsAsync(20)`) on demand rather than keeping 20 rows in memory at all times. Unread items get a `--em-rescue` left accent bar rather than the generic dot the shared dropdowns use |
 | `OrderDetailModal` / `PackageDetailModal` | Drill-down modals from a ticket/row click — same visual shell (`biz-modal-*`/`pkg-modal-*` CSS classes), one shows order line items + status, the other a package's full description/tags/price with an "Add to basket" action |
 | `Pagination` | Renders nothing at all when `TotalPages <= 1` — every paged list page is written to just drop the component in unconditionally rather than wrapping it in its own visibility check |
 | `StarRating` | One component, two modes: `Editable=false` renders a fractional-fill overlay (two stacked 5-star rows, the top one clipped to `Value/5 * 100%` width) for display; `Editable=true` renders a real 1-5 click/hover picker. Both business cards and the review form use the same component, just with different parameters |
@@ -710,7 +762,7 @@ Dietary tag badges
 
 ### Modal family
 
-`PackageDetailModal`/`OrderDetailModal`/`BusinessDetail`'s own inline modal-like sections all share a `biz-modal-*`/`pkg-modal-*` class vocabulary (hero image banner, eyebrow label, fact-grid rows with an icon + label + value) — one visual grammar reused across three different data shapes rather than three bespoke modal designs.
+`PackageDetailModal`/`OrderDetailModal`/`BusinessDetail`'s own inline modal-like sections all share a `biz-modal-*`/`pkg-modal-*` class vocabulary (hero image banner, eyebrow label, fact-grid rows with an icon + label + value) — one visual grammar reused across three different data shapes rather than three bespoke modal designs. `ConfirmDialog`, `ReportDialog`, and the notification popup (`NotificationPanel`) form a second, simpler family: a `position: fixed`, viewport-centered card over a click-to-dismiss backdrop, capped at `max-height: calc(100vh - 3rem)` with internal scroll so tall content can't push controls off a short viewport.
 
 ---
 
@@ -722,7 +774,7 @@ Three distinct patterns, escalating in complexity:
 
 ```js
 window.EcoMeal = {
-    positionDropdown(anchorEl, dropdownEl) { /* fixed-position math, flips upward if not enough room below */ },
+    positionDropdown(anchorEl, dropdownEl) { /* fixed-position math, flips upward if not enough room below, clamps both edges */ },
     timeZone() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; } },
     geo: { getPosition() { /* navigator.geolocation → {lat, lng} Promise; resolves null, never rejects */ } },
     map: {

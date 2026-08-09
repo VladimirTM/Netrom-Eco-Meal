@@ -105,12 +105,15 @@ number and a "kg of food saved" figure for that order.
 `/orders` lists everything you've ever ordered, with a lifetime stats header (orders placed,
 portions rescued, kitchens visited, kg saved) and filter chips for each status: All, Pending,
 Confirmed, Completed, NoShow, Cancelled. Each order renders as a ticket card — click anywhere
-on it to open the full detail view, including a payment badge ("Paid" or "Refunded") when
-applicable and the pickup window formatted as e.g. "Aug 8 · 14:00–16:00" (or spanning two dates
-if the window crosses midnight).
+on it to open the full detail view, including a payment badge ("Paid", "Refunded", or — if the
+automatic refund itself failed — "Refund failed") when applicable, and the pickup window
+formatted as e.g. "Aug 8 · 14:00–16:00" (or spanning two dates if the window crosses midnight).
 
 - **Pending** orders can be cancelled — the kitchen hasn't confirmed yet, so cancelling issues
   an automatic refund. A confirmation dialog ("Cancel order?") double-checks before it's final.
+  If the refund itself fails (a Stripe-side error), the order still cancels — you'll see a
+  "Refund failed" badge instead of "Refunded", plus a note in the cancellation email that the
+  team will follow up.
 - **Confirmed** orders show a **Show QR code** link to your pickup pass, and can also still be
   cancelled (also refunded) if your plans change.
 - **Completed**, **Cancelled**, and **NoShow** orders show an **Order again** button instead —
@@ -147,15 +150,34 @@ to 600 characters), then **Submit review**. Submitting again after you already h
 that kitchen updates it in place — the button relabels to **Update review** and there's no way
 to end up with two.
 
+### Report a kitchen or package
+
+If something looks wrong with a kitchen or a specific package — inaccurate info, a stale photo,
+a food-safety concern — use the **flag icon** next to the Favorite button on a kitchen's page, or
+**Report this package** at the bottom of a package's detail popup. Both open the same small form:
+type what's wrong and **Submit report**. There's no status to track afterward — an admin reviews
+it and either dismisses it or takes action, and you'll see the effect (the listing disappearing,
+for example) rather than a direct reply.
+
+### List your own business
+
+Running a kitchen and want to join the platform? Click the **shop icon** in the header (next to
+Dashboard, if you have one) to open `/businesses/apply`. Fill in name, description, address,
+type, and an optional image URL, then **Submit for review** — you'll see a confirmation message
+immediately, and an admin reviews the application separately; there's no application-status page
+to check back on. If it's approved, you'll get a notification and can then be added as staff (an
+admin does this) to start managing it; if it isn't, the notification explains why.
+
 ### Notifications
 
 The **bell icon** in the header shows an unread-count badge (capped at "9+") that refreshes
-every 30 seconds even while the dropdown is closed. Opening it lists your recent notifications
+every 30 seconds even while the panel is closed. Opening it lists your recent notifications
 with relative timestamps ("just now", "5m ago", "2h ago", "3d ago"); a **Mark all read** button
 appears whenever you have unread ones. Clicking any notification marks it read and navigates
 you straight to the relevant order or kitchen. This covers order confirmations/cancellations/
-no-shows, pickup reminders shortly before a window closes, and back-in-stock alerts for
-kitchens you've favorited — each with a matching email sent in parallel.
+no-shows, pickup reminders shortly before a window closes, back-in-stock alerts for kitchens
+you've favorited, and — if you've applied to list a business — its approval or rejection, each
+with a matching email sent in parallel.
 
 ---
 
@@ -227,7 +249,7 @@ removes packages that already exist.
 `/orders/manage` is your order queue — searchable by order number or customer name, and
 filterable by status (All, Pending, Confirmed, Completed, NoShow, Cancelled). Each row shows
 the order number, customer, line items, total, pickup window, status, and payment badge
-("Paid"/"Refunded", blank if unpaid yet).
+("Paid"/"Refunded"/"Refund failed", blank if unpaid yet).
 
 Action buttons follow the same state machine customers see from the other side:
 
@@ -276,9 +298,10 @@ days:
   the exact hour range and count.
 
 `/payments` is the money version, scoped the same way: every order for your business with its
-payment status (Unpaid/Paid/Refunded), amount, and paid/refunded timestamps, plus two totals —
-"Collected" and "Refunded" — for whatever page of results you're currently looking at (not a
-platform-wide total).
+payment status (Unpaid/Paid/Refunded/Refund failed), amount, and paid/refunded timestamps, plus
+two totals — "Collected" and "Refunded" — for whatever page of results you're currently looking
+at (not a platform-wide total). A third "Refund failed" tile appears next to them whenever the
+current page has at least one, so a failed automatic refund can't go unnoticed.
 
 ---
 
@@ -310,6 +333,46 @@ managers to add" once every manager is already staffed), or remove them with the
 chip. A business can have several staff, and the same manager can staff more than one business.
 Deleting a business asks first, warning that it and its full package/order history are
 permanently removed.
+
+### Review business applications
+
+Customers and Business Managers can apply to list a business themselves at `/businesses/apply`
+(see [List your own business](#list-your-own-business)) instead of you creating it directly.
+Applications show up right in `/businesses`' usual table with a **Pending** status badge — use
+the **status filter** dropdown (All / Pending approval / Approved / Rejected / Hidden) to see
+just them. A pending row gets two buttons: a green check to **Approve** it outright, or a red ✕
+to **Reject** it, which asks for a short reason first (shown to the applicant, and visible as a
+tooltip on the Rejected badge afterward). Approving or rejecting notifies whoever applied.
+Approval doesn't automatically make them staff — add them via the Staff column or `/users` the
+same way you would for any manager. Changed your mind about a rejected application? Its row gets
+a **reconsider** button (↺) that approves it after all.
+
+### Moderate businesses and packages
+
+Sometimes a listing needs to come down without a full delete — an out-of-date photo, an
+unverified claim, anything you'd want fixable rather than gone for good. On an **Approved**
+row in `/businesses`, the eye-slash button **hides** it (asks for a reason first) — it
+disappears from the customer-facing storefront immediately but stays fully intact for you to
+edit; the eye button **unhides** it again once whatever prompted it is resolved. The **Hidden**
+filter in the status dropdown shows every currently-hidden business. `/packages` has the
+identical hide/unhide toggle per row, scoped to one package instead of a whole business — a
+hidden package shows a **Hidden** badge (hover for the reason) next to its Daily badge, if any.
+
+Customers can also flag a business or package themselves (see [Report a kitchen or
+package](#report-a-kitchen-or-package)) — open reports land on `/reports`, admin-only. Each row
+shows what was reported, why, who reported it, and when. **Dismiss** closes the report with no
+action taken; **Hide target** hides the business or package using the reporter's own reason (you
+don't have to retype it) and closes the report. Resolved reports drop off this list — their
+outcome is recorded in the audit log instead.
+
+### Audit log
+
+`/audit-log` is the record of every sensitive action taken across the platform: role changes,
+businesses created/edited/deleted, staff added/removed, applications submitted/approved/
+rejected, and every hide/unhide — who did it, when, to what, and any reason given. Search by
+actor or target name, or filter by action type or target type (User/Business/Package). It's
+read-only — there's no way to edit or delete an entry, and nothing here is ever written except
+as a side effect of an action actually happening elsewhere in the app.
 
 ### Manage packages and orders anywhere
 

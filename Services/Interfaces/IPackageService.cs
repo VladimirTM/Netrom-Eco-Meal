@@ -21,4 +21,9 @@ public interface IPackageService
     // Raw package + order graph behind the Dashboard's business analytics card — aggregated
     // client-side since it needs the viewer's local timezone for hour bucketing.
     public Task<List<Package>> GetForAnalyticsAsync(Guid? businessId, DateTime since);
+
+    // Moderation — hides a package from the storefront without deleting it. Same
+    // admin-or-own-business-staff authorization as the write methods above.
+    public Task HideAsync(Guid packageId, string reason);
+    public Task UnhideAsync(Guid packageId);
 }

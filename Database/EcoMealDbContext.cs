@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Entities;
 
 namespace Netrom_Eco_Meal.Database;
@@ -25,10 +26,18 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<PackageTemplate> PackageTemplates { get; set; }
     public DbSet<Payment> Payments { get; set; }
     public DbSet<PendingCheckout> PendingCheckouts { get; set; }
+    public DbSet<AuditLog> AuditLogs { get; set; }
+    public DbSet<Report> Reports { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // Explicit DB-level default so a NOT NULL backfill on existing rows lands on "Approved"
+        // (matching the CLR default) instead of Postgres substituting an empty string.
+        modelBuilder.Entity<Business>()
+            .Property(b => b.Status)
+            .HasDefaultValue(BusinessStatuses.Approved);
 
         // A business can have several staff, and a staff member can be assigned to several
         // businesses — only the (BusinessId, UserId) pair itself needs to stay unique.
@@ -84,6 +93,14 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
         // Newest-first lookups for a user's bell dropdown are the only query pattern.
         modelBuilder.Entity<Notification>()
             .HasIndex(n => new { n.UserId, n.CreatedAt });
+
+        // Newest-first is the only read pattern for the admin audit log table.
+        modelBuilder.Entity<AuditLog>()
+            .HasIndex(a => a.CreatedAt);
+
+        // The reports queue only ever filters by status ("Open" by default).
+        modelBuilder.Entity<Report>()
+            .HasIndex(r => r.Status);
 
         // Optimistic concurrency so two managers confirming the same package can't oversell stock.
         modelBuilder.Entity<Package>()

@@ -1,0 +1,77 @@
+@using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services
+@implements IDisposable
+@inject NotificationPanelState PanelState
+@inject NavigationManager NavigationManager
+
+@* Rendered once at the layout's top level, not inside NotificationBell — a trigger nested in
+   .sidebar/.public-header traps a fixed popup under <main> (sticky ancestors always create a
+   stacking context). Centered like ConfirmDialog/ReportDialog, which don't have this problem. *@
+@if (PanelState.IsOpen)
+{
+    <div class="notif-panel-backdrop" @onclick="() => PanelState.Close()"></div>
+    <div class="notif-panel" role="dialog" aria-modal="true" aria-label="Notifications">
+        <div class="notif-panel-header">
+            <span>Notifications</span>
+            @if (PanelState.UnreadCount > 0)
+            {
+                <button type="button" class="notif-mark-all" @onclick="() => PanelState.MarkAllReadAsync()">Mark all read</button>
+            }
+        </div>
+        <div class="notif-panel-list">
+            @if (PanelState.Notifications is null)
+            {
+                <div class="notif-empty">Loading…</div>
+            }
+            else if (PanelState.Notifications.Count == 0)
+            {
+                <div class="notif-empty">
+                    <i class="bi bi-check2-circle"></i>
+                    You're all caught up.
+                </div>
+            }
+            else
+            {
+                @foreach (var notification in PanelState.Notifications)
+                {
+                    <button type="button" class="notif-item @(notification.IsRead ? "" : "notif-item-unread")" @onclick="() => OpenAsync(notification)">
+                        <span class="notif-item-message">@notification.Message</span>
+                        <span class="notif-item-time">@RelativeTime(notification.CreatedAt)</span>
+                    </button>
+                }
+            }
+        </div>
+    </div>
+}
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        PanelState.OnChange += HandleChanged;
+        await PanelState.InitializeAsync();
+    }
+
+    private void HandleChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task OpenAsync(Notification notification)
+    {
+        await PanelState.MarkAsReadAsync(notification);
+        PanelState.Close();
+        if (notification.Url is not null)
+            NavigationManager.NavigateTo(notification.Url);
+    }
+
+    private static string RelativeTime(DateTime utc)
+    {
+        var span = DateTime.UtcNow - utc;
+        if (span.TotalMinutes < 1) return "just now";
+        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes}m ago";
+        if (span.TotalHours < 24) return $"{(int)span.TotalHours}h ago";
+        return $"{(int)span.TotalDays}d ago";
+    }
+
+    public void Dispose()
+    {
+        PanelState.OnChange -= HandleChanged;
+    }
+}

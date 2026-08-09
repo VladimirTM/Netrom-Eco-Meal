@@ -14,6 +14,7 @@
 @inject ReviewController ReviewController
 @inject FavoriteController FavoriteController
 @inject OrderController OrderController
+@inject ReportController ReportController
 @inject CartService CartService
 @inject ClientTimeZoneService ClientTimeZoneService
 
@@ -40,14 +41,19 @@ else
                     <span class="biz-modal-eyebrow">@_business!.BusinessType.Name</span>
                     <div class="d-flex align-items-start justify-content-between gap-2">
                         <h1 class="biz-modal-title" id="biz-modal-title">@_business.Name</h1>
-                        <AuthorizeView Roles="@AppRoles.Customer" Context="favAuth">
-                            <Authorized>
-                                <button type="button" class="biz-modal-fav-btn @(_isFavorite ? "biz-modal-fav-active" : "")" @onclick="ToggleFavoriteAsync">
-                                    <i class="bi @(_isFavorite ? "bi-heart-fill" : "bi-heart")"></i>
-                                    @(_isFavorite ? "Favorited" : "Favorite")
-                                </button>
-                            </Authorized>
-                        </AuthorizeView>
+                        <div class="d-flex align-items-center gap-2">
+                            <AuthorizeView Roles="@AppRoles.Customer" Context="favAuth">
+                                <Authorized>
+                                    <button type="button" class="biz-modal-fav-btn @(_isFavorite ? "biz-modal-fav-active" : "")" @onclick="ToggleFavoriteAsync">
+                                        <i class="bi @(_isFavorite ? "bi-heart-fill" : "bi-heart")"></i>
+                                        @(_isFavorite ? "Favorited" : "Favorite")
+                                    </button>
+                                    <button type="button" class="biz-modal-fav-btn" title="Report this kitchen" @onclick="() => _reportPromptOpen = true">
+                                        <i class="bi bi-flag"></i>
+                                    </button>
+                                </Authorized>
+                            </AuthorizeView>
+                        </div>
                     </div>
                     <div class="biz-modal-meta">
                         <span class="biz-modal-address"><i class="bi bi-geo-alt-fill"></i>@_business.Address</span>
@@ -205,6 +211,12 @@ else
                      OnClose="() => _selectedPackage = null"
                      OnAddToCart="AddToCart"/>
 
+<ReportDialog IsOpen="_reportPromptOpen"
+              TargetLabel="@(_business?.Name ?? "")"
+              Busy="@_reportBusy"
+              OnSubmit="SubmitReportAsync"
+              OnCancel="() => _reportPromptOpen = false"/>
+
 <ConfirmDialog IsOpen="@(_pendingSwitch is not null)"
                Title="Start a new basket?"
                Message="@SwitchMessage"
@@ -235,6 +247,8 @@ else
     private Package? _selectedPackage;
     private bool _isFavorite;
     private Dictionary<Guid, int> _reservedByPackage = [];
+    private bool _reportPromptOpen;
+    private bool _reportBusy;
 
     private double AverageRating => _reviews.Count == 0 ? 0 : _reviews.Average(r => r.Rating);
 
@@ -254,7 +268,10 @@ else
     protected override async Task OnParametersSetAsync()
     {
         _loading = true;
-        _business = (await BusinessController.GetByIdAsync(Id)).Value;
+        var business = (await BusinessController.GetByIdAsync(Id)).Value;
+        // A pending/rejected application or a hidden business isn't a public storefront page —
+        // the admin/staff-facing views (/businesses, /businesses/edit/{id}) cover those instead.
+        _business = business is { Status: BusinessStatuses.Approved, IsHidden: false } ? business : null;
         _loading = false;
 
         if (_business is null)
@@ -268,7 +285,7 @@ else
 
         var paged = (await PackageController.GetPagedAsync(1, 100, null, Id, null)).Value;
         _packages = paged?.Items
-            .Where(p => p.PickupEnd > DateTime.UtcNow)
+            .Where(p => p.PickupEnd > DateTime.UtcNow && !p.IsHidden)
             .OrderBy(p => p.PickupEnd)
             .ToList() ?? [];
         _reservedByPackage = (await OrderController.GetPendingReservedQuantitiesAsync(_packages.Select(p => p.Id))).Value ?? [];
@@ -313,6 +330,20 @@ else
     private async Task ToggleFavoriteAsync()
     {
         _isFavorite = (await FavoriteController.ToggleFavoriteAsync(Id)).Value;
+    }
+
+    private async Task SubmitReportAsync(string reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            return;
+
+        _reportBusy = true;
+        await ReportController.SubmitAsync(AuditTargetTypes.Business, Id, reason);
+        _reportBusy = false;
+        _reportPromptOpen = false;
+
+        _toastMessage = "Thanks — an admin will take a look.";
+        _toastToken = Guid.NewGuid();
     }
 
     private async Task ConfirmSwitchBasketAsync()

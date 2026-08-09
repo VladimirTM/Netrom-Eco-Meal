@@ -16,7 +16,10 @@ main {
 @media (min-width: 641px) {
     .page {
         flex-direction: row;
+        /* dvh tracks the actual visible viewport — vh ignores transient browser chrome (an
+           address bar, a devtools banner), which can push a bottom-anchored child off-edge. */
         height: 100vh;
+        height: 100dvh;
         overflow: hidden;
     }
 
@@ -27,6 +30,7 @@ main {
     .sidebar {
         width: 240px;
         height: 100vh;
+        height: 100dvh;
         position: sticky;
         top: 0;
         display: flex;

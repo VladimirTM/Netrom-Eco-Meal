@@ -202,8 +202,9 @@ public class OrderService(
         foreach (var order in staleOrders)
         {
             order.StatusId = cancelledStatus.Id;
-            await RefundIfPaidAsync(order);
-            var message = $"Order #{order.OrderNumber:000} at {order.Business.Name} was automatically cancelled because it wasn't confirmed in time.";
+            var refundFailed = await RefundIfPaidAsync(order);
+            var message = $"Order #{order.OrderNumber:000} at {order.Business.Name} was automatically cancelled because it wasn't confirmed in time."
+                + (refundFailed ? " We couldn't process your refund automatically — we'll follow up." : "");
             await notificationService.CreateAsync(order.UserId, message, "/orders");
             await SendCustomerEmailAsync(order, "Order cancelled", message, "/orders");
         }
@@ -282,22 +283,25 @@ public class OrderService(
     }
 
     // Best-effort, same reasoning as SendCustomerEmailAsync — a Stripe outage shouldn't block the
-    // cancellation itself; the order still needs to come off the books either way.
-    private async Task RefundIfPaidAsync(Order order)
+    // cancellation; returns true on failure so the caller can surface it instead of a silent "Paid".
+    private async Task<bool> RefundIfPaidAsync(Order order)
     {
         var payment = await dbContext.Payments.FirstOrDefaultAsync(p => p.OrderId == order.Id && p.Status == PaymentStatuses.Succeeded);
         if (payment?.StripePaymentIntentId is null)
-            return;
+            return false;
 
         try
         {
             await stripeGateway.RefundAsync(payment.StripePaymentIntentId);
             payment.Status = PaymentStatuses.Refunded;
             payment.RefundedAt = DateTime.UtcNow;
+            return false;
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to refund payment {PaymentId} for order #{OrderNumber:000}.", payment.Id, order.OrderNumber);
+            payment.Status = PaymentStatuses.RefundFailed;
+            return true;
         }
     }
 
@@ -366,8 +370,7 @@ public class OrderService(
         // Refund on Cancelled, whichever state it came from — but deliberately not on NoShow: the
         // customer already reserved/held the food and didn't collect it, so the kept charge is the
         // no-show fee FEATURE_IDEAS.md calls for, with no extra fee-specific code needed.
-        if (statusName == OrderStatuses.Cancelled)
-            await RefundIfPaidAsync(order);
+        var refundFailed = statusName == OrderStatuses.Cancelled && await RefundIfPaidAsync(order);
 
         order.StatusId = targetStatus.Id;
 
@@ -385,7 +388,8 @@ public class OrderService(
         {
             OrderStatuses.Confirmed => ($"Order #{order.OrderNumber:000} at {order.Business.Name} was confirmed — show your QR code at pickup.", $"/orders/pickup/{order.Id}", "Order confirmed"),
             OrderStatuses.Completed => ($"Order #{order.OrderNumber:000} at {order.Business.Name} is complete — thanks for rescuing food!", "/orders", "Order complete"),
-            OrderStatuses.Cancelled => ($"Order #{order.OrderNumber:000} at {order.Business.Name} was cancelled.", "/orders", "Order cancelled"),
+            OrderStatuses.Cancelled => ($"Order #{order.OrderNumber:000} at {order.Business.Name} was cancelled."
+                + (refundFailed ? " We couldn't process your refund automatically — we'll follow up." : ""), "/orders", "Order cancelled"),
             OrderStatuses.NoShow => ($"Order #{order.OrderNumber:000} at {order.Business.Name} was marked as a no-show — the pickup window closed without it being picked up.", "/orders", "Missed pickup"),
             _ => (null, null, null),
         };

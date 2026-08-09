@@ -42,13 +42,14 @@ public static class DbSeeder
         var adminEmail = configuration["SeedAdmin:Email"];
         var adminPassword = configuration["SeedAdmin:Password"];
 
+        ApplicationUser? adminUser = null;
         if (string.IsNullOrWhiteSpace(adminEmail) || string.IsNullOrWhiteSpace(adminPassword))
         {
             logger.LogWarning("SeedAdmin:Email/SeedAdmin:Password are not configured — no admin account will be seeded.");
         }
         else
         {
-            await GetOrCreateUserAsync(userManager, adminEmail, "Admin", AppRoles.Admin, adminPassword, logger);
+            adminUser = await GetOrCreateUserAsync(userManager, adminEmail, "Admin", AppRoles.Admin, adminPassword, logger);
         }
 
         var demoCustomer = await GetOrCreateUserAsync(userManager, DemoCustomerEmail, "Demo Customer", AppRoles.Customer, DemoCustomerPassword, logger);
@@ -64,8 +65,16 @@ public static class DbSeeder
         await SeedPackageTemplateAsync(db);
         await SeedBusinessStaffAsync(db, demoManager?.Id, demoManager2?.Id);
 
+        if (demoCustomer is not null)
+            await SeedApprovalDemoBusinessesAsync(db, demoCustomer.Id);
+
+        await SeedModerationDemoDataAsync(db);
+
         if (demoCustomer is not null && demoManager is not null)
             await SeedDemoActivityAsync(db, demoCustomer, demoManager.Id);
+
+        if (demoCustomer is not null)
+            await SeedReportsAndAuditLogAsync(db, demoCustomer, adminUser, demoManager?.Id, demoManager2?.Id);
     }
 
     // Shared by the admin account above and the demo customer/manager below — same
@@ -379,6 +388,127 @@ public static class DbSeeder
         if (added)
             await db.SaveChangesAsync();
     }
+
+    // Demonstrates the Phase 9 self-service application flow — a pending application and a
+    // rejected one so the admin's approval queue (Businesses.razor) isn't empty on a fresh DB.
+    private static async Task SeedApprovalDemoBusinessesAsync(EcoMealDbContext db, string demoCustomerId)
+    {
+        var pendingId = new Guid("44444444-0000-0000-0000-000000000013");
+        var rejectedId = new Guid("44444444-0000-0000-0000-000000000014");
+        if (await db.Businesses.AnyAsync(b => b.Id == pendingId || b.Id == rejectedId)) return;
+
+        var restaurant = new Guid("11111111-0000-0000-0000-000000000001");
+        var foodTruck  = new Guid("11111111-0000-0000-0000-000000000005");
+
+        db.Businesses.AddRange(
+            new Business
+            {
+                Id = pendingId, Name = "Golazo Grill",
+                Description = "A second street-food truck applying to join the lineup.",
+                Address = "Strada Torontalului 12, Timișoara", BusinessTypeId = foodTruck,
+                Status = BusinessStatuses.PendingApproval, SubmittedByUserId = demoCustomerId,
+            },
+            new Business
+            {
+                Id = rejectedId, Name = "Offside Kitchen",
+                Description = "A restaurant application that couldn't be verified.",
+                Address = "Unverified address, Timișoara", BusinessTypeId = restaurant,
+                Status = BusinessStatuses.Rejected, SubmittedByUserId = demoCustomerId,
+                RejectionReason = "Address could not be verified — please resubmit with a valid street address.",
+            });
+
+        await db.SaveChangesAsync();
+    }
+
+    // Marks one existing business and one existing package as moderated, so /businesses and
+    // /packages already show a Hidden badge and an Unhide action on a fresh DB. Backfill-only —
+    // never re-hides something an admin has since unhidden.
+    private static async Task SeedModerationDemoDataAsync(EcoMealDbContext db)
+    {
+        var fanZoneGrill = await db.Businesses.FindAsync(new Guid("44444444-0000-0000-0000-000000000012"));
+        if (fanZoneGrill is not null && !fanZoneGrill.IsHidden && fanZoneGrill.HiddenReason is null)
+        {
+            fanZoneGrill.IsHidden = true;
+            fanZoneGrill.HiddenReason = "Awaiting an updated food safety certificate.";
+        }
+
+        var redCardPastryBox = await db.Packages.FindAsync(new Guid("55555555-0000-0000-0000-000000000016"));
+        if (redCardPastryBox is not null && !redCardPastryBox.IsHidden && redCardPastryBox.HiddenReason is null)
+        {
+            redCardPastryBox.IsHidden = true;
+            redCardPastryBox.HiddenReason = "Reported for inaccurate allergen labeling — under review.";
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    // Populates /reports and /audit-log with a history consistent with everything else this file
+    // seeds (the staff assignments, the rejected application, the hidden business/package above).
+    // Guarded on Reports so it only ever runs once, same as SeedDemoActivityAsync below.
+    private static async Task SeedReportsAndAuditLogAsync(EcoMealDbContext db, ApplicationUser demoCustomer, ApplicationUser? adminUser, string? demoManagerId, string? demoManager2Id)
+    {
+        if (await db.Reports.AnyAsync()) return;
+
+        var now = DateTime.UtcNow;
+        var actorId = adminUser?.Id ?? demoCustomer.Id;
+        var actorName = adminUser?.Name ?? "Admin";
+
+        var fanZoneGrillId = new Guid("44444444-0000-0000-0000-000000000012");
+        var foodTruckMundialId = new Guid("44444444-0000-0000-0000-000000000011");
+        var redCardPastryBoxId = new Guid("55555555-0000-0000-0000-000000000016");
+        var yellowCardSurpriseBagId = new Guid("55555555-0000-0000-0000-000000000015");
+        var stadionulId = DemoManagedBusinessId;
+        var varBistroId = DemoSecondBusinessId;
+        var golazoGrillId = new Guid("44444444-0000-0000-0000-000000000013");
+        var offsideKitchenId = new Guid("44444444-0000-0000-0000-000000000014");
+
+        const string menuPhotosReason = "Menu photos look reused from another truck.";
+        const string nutsReason = "Description doesn't mention it contains nuts.";
+        const string priceReason = "Price seems high for the portion size.";
+        const string truckLocationReason = "Truck wasn't at the listed pickup location yesterday.";
+        const string rejectionReason = "Address could not be verified — please resubmit with a valid street address.";
+        const string businessHiddenReason = "Awaiting an updated food safety certificate.";
+        const string packageHiddenReason = "Reported for inaccurate allergen labeling — under review.";
+
+        db.Reports.AddRange(
+            new Report { Id = Guid.NewGuid(), ReporterUserId = demoCustomer.Id, TargetType = AuditTargetTypes.Business, TargetId = fanZoneGrillId, Reason = menuPhotosReason, Status = ReportStatuses.ActionTaken, CreatedAt = now.AddDays(-2).AddHours(-1), ResolvedAt = now.AddDays(-2), ResolvedByUserId = actorId },
+            new Report { Id = Guid.NewGuid(), ReporterUserId = demoCustomer.Id, TargetType = AuditTargetTypes.Package, TargetId = redCardPastryBoxId, Reason = nutsReason, Status = ReportStatuses.ActionTaken, CreatedAt = now.AddDays(-3).AddHours(-1), ResolvedAt = now.AddDays(-3), ResolvedByUserId = actorId },
+            new Report { Id = Guid.NewGuid(), ReporterUserId = demoCustomer.Id, TargetType = AuditTargetTypes.Package, TargetId = yellowCardSurpriseBagId, Reason = priceReason, Status = ReportStatuses.Dismissed, CreatedAt = now.AddDays(-1).AddHours(-2), ResolvedAt = now.AddDays(-1), ResolvedByUserId = actorId },
+            new Report { Id = Guid.NewGuid(), ReporterUserId = demoCustomer.Id, TargetType = AuditTargetTypes.Business, TargetId = foodTruckMundialId, Reason = truckLocationReason, Status = ReportStatuses.Open, CreatedAt = now.AddHours(-6) }
+        );
+
+        var entries = new List<AuditLog>
+        {
+            Entry(demoCustomer.Id, demoCustomer.Name, AuditActions.BusinessApplied, AuditTargetTypes.Business, golazoGrillId, "Golazo Grill", null, now.AddDays(-6)),
+            Entry(demoCustomer.Id, demoCustomer.Name, AuditActions.BusinessApplied, AuditTargetTypes.Business, offsideKitchenId, "Offside Kitchen", null, now.AddDays(-6).AddMinutes(10)),
+            Entry(actorId, actorName, AuditActions.BusinessRejected, AuditTargetTypes.Business, offsideKitchenId, "Offside Kitchen", rejectionReason, now.AddDays(-5)),
+        };
+
+        if (demoManagerId is not null)
+        {
+            entries.Add(Entry(actorId, actorName, AuditActions.BusinessStaffAdded, AuditTargetTypes.Business, stadionulId, "Stadionul de Gusturi", "Added Demo Manager as staff", now.AddDays(-5).AddHours(1)));
+            entries.Add(Entry(actorId, actorName, AuditActions.BusinessStaffAdded, AuditTargetTypes.Business, varBistroId, "VAR Bistro", "Added Demo Manager as staff", now.AddDays(-5).AddHours(1).AddMinutes(5)));
+        }
+        if (demoManager2Id is not null)
+            entries.Add(Entry(actorId, actorName, AuditActions.BusinessStaffAdded, AuditTargetTypes.Business, stadionulId, "Stadionul de Gusturi", "Added Demo Manager Two as staff", now.AddDays(-5).AddHours(1).AddMinutes(10)));
+
+        entries.Add(Entry(actorId, actorName, AuditActions.PackageHidden, AuditTargetTypes.Package, redCardPastryBoxId, "Red Card Pastry Box", packageHiddenReason, now.AddDays(-3)));
+        entries.Add(Entry(actorId, actorName, AuditActions.ReportActionTaken, AuditTargetTypes.Package, redCardPastryBoxId, "Red Card Pastry Box", nutsReason, now.AddDays(-3)));
+        entries.Add(Entry(actorId, actorName, AuditActions.BusinessHidden, AuditTargetTypes.Business, fanZoneGrillId, "Fan Zone Grill", businessHiddenReason, now.AddDays(-2)));
+        entries.Add(Entry(actorId, actorName, AuditActions.ReportActionTaken, AuditTargetTypes.Business, fanZoneGrillId, "Fan Zone Grill", menuPhotosReason, now.AddDays(-2)));
+        entries.Add(Entry(actorId, actorName, AuditActions.ReportDismissed, AuditTargetTypes.Package, yellowCardSurpriseBagId, "Yellow Card Surprise Bag", priceReason, now.AddDays(-1)));
+
+        db.AuditLogs.AddRange(entries);
+
+        await db.SaveChangesAsync();
+    }
+
+    private static AuditLog Entry(string actorId, string actorName, string action, string targetType, Guid targetId, string targetName, string? details, DateTime createdAt) =>
+        new()
+        {
+            Id = Guid.NewGuid(), ActorUserId = actorId, ActorName = actorName, Action = action,
+            TargetType = targetType, TargetId = targetId.ToString(), TargetName = targetName, Details = details, CreatedAt = createdAt,
+        };
 
     // Gives the demo customer/manager accounts a lived-in history — orders in every status,
     // spread across the last 14 days so the dashboard trend chart and CSV export have something

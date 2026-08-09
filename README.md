@@ -23,6 +23,8 @@ is just the capability summary.
 - Check out via Stripe Checkout, and track past orders with pickup windows on `/orders`
 - Show a QR pickup pass for a confirmed order, scanned by the business at collection
 - Leave a star rating and comment on a business once you've ordered from it
+- Report a business or package that looks wrong, and apply to list your own business for
+  admin review on `/businesses/apply`
 
 **BusinessManager** — staff of one or more businesses (assigned by an Admin), scoped to
 whichever one they pick in the sidebar switcher:
@@ -37,7 +39,7 @@ whichever one they pick in the sidebar switcher:
 - Staffing more than one business surfaces a switcher in the sidebar to pick which one is
   "current" for every page above — staffing just one skips the switcher entirely
 
-**Admin** — full access, plus the only role that can create businesses:
+**Admin** — full access, plus the only role that can create businesses directly:
 
 - Create and edit any business on `/businesses`, including assigning staff (any number of
   managers, and a manager can staff more than one business) and an optional lat/lng location
@@ -45,6 +47,10 @@ whichever one they pick in the sidebar switcher:
 - Review and manage orders across every business on `/orders/manage`
 - Promote or demote users between Customer, BusinessManager and Admin on `/users`
 - See store-wide stats on `/dashboard` and every payment across every business on `/payments`
+- Approve or reject self-service business applications on `/businesses`, hide/unhide a
+  business or package without deleting it, and review customer reports on `/reports`
+- See who did what — role changes, business create/edit/delete/staffing, approvals,
+  moderation — on `/audit-log`
 
 ## Stack
 
@@ -124,7 +130,10 @@ default) and checkout shows a friendly "payments aren't configured yet" error in
 raw SDK exception; every other part of the app (browsing, order history, everything but
 actually checking out) still works with zero Stripe setup. Cancelling a paid order (manually
 or via the stale-Pending sweep) automatically refunds the charge; a `NoShow` deliberately
-does **not** — the kept charge doubles as the no-show fee.
+does **not** — the kept charge doubles as the no-show fee. If the refund itself fails (a
+Stripe-side error), the order still cancels but the payment is flagged `RefundFailed` instead
+of silently staying `Paid` — surfaced as a distinct badge everywhere payment status shows up,
+plus a note in the customer's cancellation email.
 
 ## Running with Docker
 
@@ -205,6 +214,12 @@ instead of an empty app:
 This activity is only ever seeded once, the first time the app starts against a genuinely
 empty database — unlike the reference/demo-catalog data above, it won't touch orders
 placed for real afterward.
+
+It also seeds trust & safety demo data so `/businesses`, `/reports`, and `/audit-log` aren't
+empty on a fresh database: a `PendingApproval` and a `Rejected` business application (both
+submitted by the demo customer), one existing demo business and one existing demo package
+marked hidden with a reason, four `Report`s (open, dismissed, and two actioned), and an
+audit-log history consistent with all of it.
 
 ## Running tests
 

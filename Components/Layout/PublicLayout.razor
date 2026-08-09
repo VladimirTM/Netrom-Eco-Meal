@@ -35,6 +35,12 @@
                         {
                             <a href="/dashboard" class="btn btn-outline-light btn-sm px-3">Dashboard</a>
                         }
+                        @if (context.User.IsInRole(AppRoles.Customer) || context.User.IsInRole(AppRoles.BusinessManager))
+                        {
+                            <a href="/businesses/apply" class="btn btn-outline-light btn-sm px-3" title="List your business">
+                                <i class="bi bi-shop-window"></i>
+                            </a>
+                        }
                         @* Clears the localStorage cart so it doesn't leak into the next session. *@
                         <form method="post" action="api/auth/logout">
                             <AntiforgeryToken />
@@ -78,6 +84,9 @@
 </div>
 
 <CartPanel @bind-IsOpen="_cartOpen"/>
+
+@* Outside .public-header on purpose — see NotificationPanel's own comment for why. *@
+<NotificationPanel/>
 
 @code {
     private bool _cartOpen;

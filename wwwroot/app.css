@@ -161,6 +161,7 @@ h1, h2, h3, h4, h5, h6,
 .card-accent-blue   { border-top: 3px solid #0ea5e9; }
 .card-accent-amber  { border-top: 3px solid #f59e0b; }
 .card-accent-purple { border-top: 3px solid #8b5cf6; }
+.card-accent-red    { border-top: 3px solid #dc3545; }
 
 .bg-sky-subtle    { background-color: rgba(14, 165, 233, 0.1); }
 .text-sky         { color: #0ea5e9; }
@@ -1813,6 +1814,8 @@ h1:focus {
     padding: 1.75rem;
     width: calc(100% - 2rem);
     max-width: 380px;
+    max-height: calc(100vh - 3rem);
+    overflow-y: auto;
     z-index: 56;
     animation: confirm-dialog-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -3147,65 +3150,108 @@ h1:focus {
     box-shadow: 0 0 0 2px #14532d;
 }
 
-.notif-dropdown {
+/* Transparent click-outside-to-close layer — same role as .role-dropdown-backdrop, its own
+   class only because the panel it pairs with isn't an AnchoredDropdown. */
+.notif-panel-backdrop {
     position: fixed;
-    z-index: 21;
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 28px rgba(0, 0, 0, 0.14);
-    padding: 0;
-    width: 320px;
-    max-width: calc(100vw - 16px);
-    max-height: min(420px, calc(100vh - 16px));
-    overflow-y: auto;
-    animation: role-dropdown-in 0.12s ease-out;
+    inset: 0;
+    z-index: 55;
+    background: rgba(14, 33, 23, 0.45);
+    animation: cart-backdrop-in 0.2s ease-out;
 }
 
-.notif-dropdown-header {
-    position: sticky;
-    top: 0;
+/* Centered like ConfirmDialog/ReportDialog, not anchored near the trigger — the trigger sits in
+   a cramped corner in both layouts, and a trigger-relative position is what kept re-clipping
+   against the sidebar's edge across several earlier fixes. Centering plus a viewport-fraction
+   max-height (with internal scroll) can't clip against any edge, on any screen size. Rendered from
+   NotificationPanel.razor at the layout's top level, NOT nested in .sidebar/.public-header — see
+   FRONTEND_ARCHITECTURE.md §4 for why (position: sticky always creates a stacking context, which
+   traps a fixed-position descendant's paint order under <main> regardless of z-index). */
+.notif-panel {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 56;
+    width: 400px;
+    max-width: calc(100% - 2rem);
+    max-height: calc(100vh - 3rem);
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: var(--em-shadow-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: notif-panel-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes notif-panel-in {
+    from { opacity: 0; transform: translate(-50%, -46%) scale(0.97); }
+    to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .notif-panel-backdrop, .notif-panel { animation: none; }
+}
+
+.notif-panel-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.75rem 1rem;
-    background: #fff;
-    border-bottom: 1px solid #f1f5f2;
-    font-size: 0.82rem;
+    padding: 0.85rem 1.1rem;
+    background: var(--em-forest);
+    color: #fff;
+    font-family: var(--em-font-display);
     font-weight: 700;
-    color: var(--em-text);
+    font-size: 0.95rem;
+    flex-shrink: 0;
 }
 
 .notif-mark-all {
     border: none;
     background: none;
-    color: var(--em-leaf-dark);
+    color: rgba(255, 255, 255, 0.75);
+    font-family: var(--em-font-body);
     font-size: 0.72rem;
     font-weight: 700;
     padding: 0;
 }
 
 .notif-mark-all:hover {
+    color: #fff;
     text-decoration: underline;
 }
 
+.notif-panel-list {
+    overflow-y: auto;
+}
+
 .notif-empty {
-    padding: 1.5rem 1rem;
+    padding: 2.25rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
     text-align: center;
     color: var(--em-muted);
-    font-size: 0.82rem;
+    font-size: 0.85rem;
+}
+
+.notif-empty i {
+    font-size: 1.4rem;
+    color: var(--em-leaf);
 }
 
 .notif-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.6rem;
+    display: block;
     width: 100%;
     border: none;
+    border-left: 3px solid transparent;
     background: none;
-    padding: 0.7rem 1rem;
+    padding: 0.75rem 1.1rem;
     text-align: left;
-    border-bottom: 1px solid #f5f7f6;
-    transition: background-color 0.15s;
+    border-bottom: 1px solid #f1f5f2;
+    transition: background-color 0.15s, border-color 0.15s;
 }
 
 .notif-item:last-child {
@@ -3216,27 +3262,12 @@ h1:focus {
     background-color: var(--em-surface);
 }
 
-.notif-item-dot {
-    width: 8px;
-    height: 8px;
-    margin-top: 0.3rem;
-    border-radius: 50%;
-    flex-shrink: 0;
-    background: transparent;
-}
-
-.notif-item-unread .notif-item-dot {
-    background: var(--em-leaf);
-}
-
-.notif-item-body {
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-    min-width: 0;
+.notif-item-unread {
+    border-left-color: var(--em-rescue);
 }
 
 .notif-item-message {
+    display: block;
     font-size: 0.82rem;
     color: var(--em-text);
     line-height: 1.4;
@@ -3247,6 +3278,8 @@ h1:focus {
 }
 
 .notif-item-time {
+    display: block;
+    margin-top: 0.2rem;
     font-size: 0.7rem;
     color: var(--em-muted);
 }

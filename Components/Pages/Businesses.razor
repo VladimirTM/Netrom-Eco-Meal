@@ -49,7 +49,17 @@
                 <option value="@t.Id">@t.Name</option>
             }
         </select>
-        @if (!string.IsNullOrEmpty(_search) || _typeFilter != "")
+        @if (_isAdmin)
+        {
+            <select class="form-select" style="max-width: 200px;" @bind="_statusFilter" @bind:after="FilterChangedAsync">
+                <option value="">All statuses</option>
+                <option value="@BusinessStatuses.PendingApproval">Pending approval</option>
+                <option value="@BusinessStatuses.Approved">Approved</option>
+                <option value="@BusinessStatuses.Rejected">Rejected</option>
+                <option value="Hidden">Hidden</option>
+            </select>
+        }
+        @if (!string.IsNullOrEmpty(_search) || _typeFilter != "" || _statusFilter != "")
         {
             <button class="btn btn-outline-secondary" @onclick="ClearFiltersAsync">
                 <i class="bi bi-x-lg me-1"></i> Clear
@@ -91,6 +101,7 @@
                     <th class="py-3 text-uppercase text-muted small fw-semibold">Type</th>
                     @if (_isAdmin)
                     {
+                        <th class="py-3 text-uppercase text-muted small fw-semibold">Status</th>
                         <th class="py-3 text-uppercase text-muted small fw-semibold">Staff</th>
                     }
                     @if (_isAdmin || _isBusinessManager)
@@ -102,7 +113,8 @@
                 <tbody>
                 @foreach (var business in _paged.Items)
                 {
-                    var canEdit = _isAdmin || (_isBusinessManager && business.Staff.Any(s => s.UserId == _currentUserId));
+                    var canEdit = business.Status == BusinessStatuses.Approved &&
+                                  (_isAdmin || (_isBusinessManager && business.Staff.Any(s => s.UserId == _currentUserId)));
                     <tr>
                         <td class="px-4 fw-semibold">@business.Name</td>
                         <td class="text-muted">@business.Description</td>
@@ -114,6 +126,11 @@
                         </td>
                         @if (_isAdmin)
                         {
+                            <td>
+                                <span class="badge rounded-pill px-3 py-2 @StatusBadgeClass(business)" title="@StatusTitle(business)">
+                                    @StatusLabel(business)
+                                </span>
+                            </td>
                             <td class="position-relative">
                                 <div class="d-flex flex-wrap align-items-center gap-1">
                                     @foreach (var staff in business.Staff.OrderBy(s => s.User.Name))
@@ -121,51 +138,84 @@
                                         <span class="badge rounded-pill px-2 py-1 role-badge role-badge-businessmanager d-inline-flex align-items-center gap-1">
                                             @staff.User.Name
                                             <button type="button" class="btn-close" style="font-size:0.55rem;" title="Remove staff"
-                                                    @onclick="() => RemoveStaffAsync(business, staff.UserId)"></button>
+                                                    @onclick="() => RemoveStaffAsync(business, staff.UserId, staff.User.Name)"></button>
                                         </span>
                                     }
-                                    <AnchoredDropdown TriggerClass="role-badge role-badge-unassigned"
-                                                      Title="Add staff"
-                                                      IsOpen="@(_openStaffDropdownBusinessId == business.Id)"
-                                                      OnToggle="@(() => ToggleStaffDropdown(business.Id))"
-                                                      OnClose="CloseStaffDropdown">
-                                        <Trigger>
-                                            <i class="bi bi-plus-lg"></i>
-                                        </Trigger>
-                                        <Content>
-                                            @{
-                                                var assignedIds = business.Staff.Select(s => s.UserId).ToHashSet();
-                                                var available = _businessManagers.Where(m => !assignedIds.Contains(m.Id)).ToList();
-                                            }
-                                            @if (available.Count == 0)
-                                            {
-                                                <div class="role-option text-muted">No more managers to add</div>
-                                            }
-                                            @foreach (var manager in available)
-                                            {
-                                                <button type="button" class="role-option" @onclick="() => AddStaffAsync(business, manager.Id)">
-                                                    <span class="role-option-dot" style="background-color:#2563eb"></span>
-                                                    @manager.Name
-                                                </button>
-                                            }
-                                        </Content>
-                                    </AnchoredDropdown>
+                                    @if (business.Status == BusinessStatuses.Approved)
+                                    {
+                                        <AnchoredDropdown TriggerClass="role-badge role-badge-unassigned"
+                                                          Title="Add staff"
+                                                          IsOpen="@(_openStaffDropdownBusinessId == business.Id)"
+                                                          OnToggle="@(() => ToggleStaffDropdown(business.Id))"
+                                                          OnClose="CloseStaffDropdown">
+                                            <Trigger>
+                                                <i class="bi bi-plus-lg"></i>
+                                            </Trigger>
+                                            <Content>
+                                                @{
+                                                    var assignedIds = business.Staff.Select(s => s.UserId).ToHashSet();
+                                                    var available = _businessManagers.Where(m => !assignedIds.Contains(m.Id)).ToList();
+                                                }
+                                                @if (available.Count == 0)
+                                                {
+                                                    <div class="role-option text-muted">No more managers to add</div>
+                                                }
+                                                @foreach (var manager in available)
+                                                {
+                                                    <button type="button" class="role-option" @onclick="() => AddStaffAsync(business, manager.Id, manager.Name)">
+                                                        <span class="role-option-dot" style="background-color:#2563eb"></span>
+                                                        @manager.Name
+                                                    </button>
+                                                }
+                                            </Content>
+                                        </AnchoredDropdown>
+                                    }
                                 </div>
                             </td>
                         }
                         @if (_isAdmin || _isBusinessManager)
                         {
                             <td>
-                                <div class="d-flex gap-2">
+                                <div class="d-flex gap-2 flex-wrap">
+                                    @if (_isAdmin && business.Status == BusinessStatuses.PendingApproval)
+                                    {
+                                        <button class="btn btn-sm btn-outline-success" title="Approve" @onclick="() => ApproveAsync(business)">
+                                            <i class="bi bi-check-lg"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger" title="Reject" @onclick="() => OpenReasonPrompt(business, ReasonPromptMode.Reject)">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    }
+                                    @if (_isAdmin && business.Status == BusinessStatuses.Rejected)
+                                    {
+                                        <button class="btn btn-sm btn-outline-success" title="Reconsider — approve after all" @onclick="() => ApproveAsync(business)">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
+                                    }
                                     @if (canEdit)
                                     {
-                                        <a href="/businesses/edit/@business.Id" class="btn btn-sm btn-outline-primary">
+                                        <a href="/businesses/edit/@business.Id" class="btn btn-sm btn-outline-primary" title="Edit">
                                             <i class="bi bi-pencil"></i>
                                         </a>
                                     }
+                                    @if (_isAdmin && business.Status == BusinessStatuses.Approved)
+                                    {
+                                        @if (business.IsHidden)
+                                        {
+                                            <button class="btn btn-sm btn-outline-secondary" title="Unhide" @onclick="() => UnhideAsync(business)">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-sm btn-outline-secondary" title="Hide from storefront" @onclick="() => OpenReasonPrompt(business, ReasonPromptMode.Hide)">
+                                                <i class="bi bi-eye-slash"></i>
+                                            </button>
+                                        }
+                                    }
                                     @if (_isAdmin)
                                     {
-                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RequestDelete(business)">
+                                        <button class="btn btn-sm btn-outline-danger" title="Delete" @onclick="() => RequestDelete(business)">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     }
@@ -189,6 +239,17 @@
                OnConfirm="ConfirmDeleteAsync"
                OnCancel="() => _pendingDelete = null"/>
 
+<ReportDialog IsOpen="@(_reasonPromptBusiness is not null)"
+              TargetLabel="@(_reasonPromptBusiness is null ? "" : _reasonPromptBusiness.Name)"
+              Title="@ReasonPromptTitle"
+              Message="@ReasonPromptMessage"
+              Placeholder="@ReasonPromptPlaceholder"
+              ConfirmLabel="@ReasonPromptConfirmLabel"
+              Busy="@_reasonPromptBusy"
+              Error="@_reasonPromptError"
+              OnSubmit="SubmitReasonPromptAsync"
+              OnCancel="CloseReasonPrompt"/>
+
 @code {
     // Full, unfiltered list — kept only for cross-page checks (my business, manager assigned
     // elsewhere) that a single paginated page can't answer on its own.
@@ -198,6 +259,7 @@
     private List<Services.Interfaces.UserWithRole> _businessManagers = [];
     private string _search = "";
     private string _typeFilter = "";
+    private string _statusFilter = "";
     private string? _currentUserId;
     private bool _isAdmin;
     private bool _isBusinessManager;
@@ -210,6 +272,30 @@
     // Guards every reload trigger (search, filters, paging, post-mutation refresh) so
     // overlapping ones cancel each other instead of using the shared DbContext concurrently.
     private readonly Debouncer _reloadGate = new();
+
+    private enum ReasonPromptMode { Reject, Hide }
+    private ReasonPromptMode _reasonPromptModeValue;
+    private Business? _reasonPromptBusiness;
+    private bool _reasonPromptBusy;
+    private string? _reasonPromptError;
+
+    private string ReasonPromptTitle => _reasonPromptBusiness is null
+        ? ""
+        : _reasonPromptModeValue == ReasonPromptMode.Reject
+            ? $"Reject \"{_reasonPromptBusiness.Name}\"?"
+            : $"Hide \"{_reasonPromptBusiness.Name}\"?";
+
+    private string ReasonPromptMessage => _reasonPromptModeValue == ReasonPromptMode.Reject
+        ? "The applicant will see this reason, and it stays visible as a tooltip on the Rejected badge."
+        : "It'll disappear from the customer-facing storefront immediately, but stays intact for you to edit or unhide later.";
+
+    private string ReasonPromptPlaceholder => _reasonPromptModeValue == ReasonPromptMode.Reject
+        ? "Why is this application being rejected?"
+        : "Reason (shown if someone hovers the Hidden badge)";
+
+    private string ReasonPromptConfirmLabel => _reasonPromptModeValue == ReasonPromptMode.Reject
+        ? "Reject application"
+        : "Hide business";
 
     protected override async Task OnInitializedAsync()
     {
@@ -231,14 +317,15 @@
     {
         Guid? typeId = Guid.TryParse(_typeFilter, out var id) ? id : null;
         var staffUserId = _isBusinessManager ? _currentUserId : null;
-        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId, staffUserId)).Value;
+        var statusFilter = _isAdmin && _statusFilter != "" ? _statusFilter : null;
+        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId, staffUserId, statusFilter: statusFilter)).Value;
 
         // A mutation (e.g. deleting the last item on the last page) can shrink TotalPages below
         // the page we're currently viewing — re-fetch the now-last valid page instead of showing empty.
         if (_paged is not null && _paged.Items.Count == 0 && _pageIndex > _paged.TotalPages)
         {
             _pageIndex = _paged.TotalPages;
-            _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId, staffUserId)).Value;
+            _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId, staffUserId, statusFilter: statusFilter)).Value;
         }
     }
 
@@ -264,8 +351,9 @@
 
     private Task ClearFiltersAsync()
     {
-        _search     = "";
-        _typeFilter = "";
+        _search       = "";
+        _typeFilter   = "";
+        _statusFilter = "";
         return FilterChangedAsync();
     }
 
@@ -301,11 +389,11 @@
     }
 
     // Deliberately doesn't close the dropdown — an admin can add several staff in one open.
-    private async Task AddStaffAsync(Business business, string userId)
+    private async Task AddStaffAsync(Business business, string userId, string userName)
     {
         _assignError = null;
 
-        var result = await BusinessController.AddStaffAsync(business.Id, userId);
+        var result = await BusinessController.AddStaffAsync(business.Id, userId, userName);
         if (result is ConflictResult)
             _assignError = "That staff assignment already exists. Please try again.";
 
@@ -313,13 +401,92 @@
         await ReloadAsync();
     }
 
-    private async Task RemoveStaffAsync(Business business, string userId)
+    private async Task RemoveStaffAsync(Business business, string userId, string userName)
     {
         _assignError = null;
 
-        await BusinessController.RemoveStaffAsync(business.Id, userId);
+        await BusinessController.RemoveStaffAsync(business.Id, userId, userName);
 
         businesses = (await BusinessController.GetAllAsync()).Value;
         await ReloadAsync();
     }
+
+    private async Task ApproveAsync(Business business)
+    {
+        if (!_isAdmin)
+            return;
+
+        await BusinessController.ApproveAsync(business.Id);
+        businesses = (await BusinessController.GetAllAsync()).Value;
+        await ReloadAsync();
+    }
+
+    private async Task UnhideAsync(Business business)
+    {
+        if (!_isAdmin)
+            return;
+
+        await BusinessController.UnhideAsync(business.Id);
+        businesses = (await BusinessController.GetAllAsync()).Value;
+        await ReloadAsync();
+    }
+
+    private void OpenReasonPrompt(Business business, ReasonPromptMode mode)
+    {
+        if (!_isAdmin)
+            return;
+
+        _reasonPromptBusiness = business;
+        _reasonPromptModeValue = mode;
+        _reasonPromptError = null;
+    }
+
+    private void CloseReasonPrompt()
+    {
+        _reasonPromptBusiness = null;
+        _reasonPromptError = null;
+    }
+
+    private async Task SubmitReasonPromptAsync(string reason)
+    {
+        if (_reasonPromptBusiness is null || string.IsNullOrWhiteSpace(reason))
+            return;
+
+        _reasonPromptBusy = true;
+        _reasonPromptError = null;
+
+        if (_reasonPromptModeValue == ReasonPromptMode.Reject)
+            await BusinessController.RejectAsync(_reasonPromptBusiness.Id, reason);
+        else
+            await BusinessController.HideAsync(_reasonPromptBusiness.Id, reason);
+
+        businesses = (await BusinessController.GetAllAsync()).Value;
+        await ReloadAsync();
+
+        _reasonPromptBusy = false;
+        _reasonPromptBusiness = null;
+    }
+
+    private static string StatusLabel(Business business) => business switch
+    {
+        { Status: BusinessStatuses.PendingApproval } => "Pending",
+        { Status: BusinessStatuses.Rejected } => "Rejected",
+        { IsHidden: true } => "Hidden",
+        _ => "Approved"
+    };
+
+    private static string StatusBadgeClass(Business business) => business switch
+    {
+        { Status: BusinessStatuses.PendingApproval } => "role-badge role-badge-businessmanager",
+        { Status: BusinessStatuses.Rejected } => "bg-danger-subtle text-danger",
+        { IsHidden: true } => "bg-secondary-subtle text-secondary",
+        _ => "bg-success-subtle text-success"
+    };
+
+    private static string? StatusTitle(Business business) => business switch
+    {
+        { Status: BusinessStatuses.Rejected, RejectionReason: { } reason } => reason,
+        { IsHidden: true, HiddenReason: { } reason } => reason,
+        _ => null
+    };
 }

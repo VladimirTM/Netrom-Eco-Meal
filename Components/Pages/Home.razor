@@ -257,8 +257,10 @@
         _businessTypes = await BusinessTypeService.GetAllAsync();
 
         var packages = (await PackageController.GetAllAsync()).Value;
-        // Only count packages still orderable today — DbSeeder keeps seed data's window fresh.
-        _livePackages = packages?.Where(p => p.PickupEnd > DateTime.UtcNow).ToList() ?? [];
+        var publicBusinessIds = (await BusinessController.GetAllAsync(publicOnly: true)).Value?.Select(b => b.Id).ToHashSet() ?? [];
+        // Only count packages still orderable today, not hidden, and from a publicly visible
+        // business — DbSeeder keeps seed data's window fresh.
+        _livePackages = packages?.Where(p => p.PickupEnd > DateTime.UtcNow && !p.IsHidden && publicBusinessIds.Contains(p.BusinessId)).ToList() ?? [];
         _livePackagesByBusiness = _livePackages.GroupBy(p => p.BusinessId).ToDictionary(g => g.Key, g => g.ToList());
         _reservedByPackage = (await OrderController.GetPendingReservedQuantitiesAsync(_livePackages.Select(p => p.Id))).Value ?? [];
         _totalKgSaved = (await OrderController.GetTotalKgSavedAsync()).Value;
@@ -272,7 +274,7 @@
     private async Task LoadPageAsync()
     {
         Guid? typeId = Guid.TryParse(_businessTypeFilter, out var id) ? id : null;
-        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId, sortBy: _sortBy, favoritesOnly: _favoritesOnly, customerLat: _customerLat, customerLng: _customerLng)).Value;
+        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId, sortBy: _sortBy, favoritesOnly: _favoritesOnly, customerLat: _customerLat, customerLng: _customerLng, publicOnly: true)).Value;
 
         // Only fetch reviews for the businesses actually shown on this page, not the whole table.
         var businessIds = _paged?.Items.Select(b => b.Id).ToList() ?? [];
@@ -360,7 +362,7 @@
 
         if (_mapBusinesses is null)
         {
-            var all = (await BusinessController.GetAllAsync()).Value ?? [];
+            var all = (await BusinessController.GetAllAsync(publicOnly: true)).Value ?? [];
             _mapBusinesses = all.Where(b => b.Latitude.HasValue && b.Longitude.HasValue).ToList();
         }
 

@@ -1,3 +1,4 @@
+using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Models;
 using Netrom_Eco_Meal.Repositories.Interfaces;
@@ -14,7 +15,8 @@ public class PackageService(
     INotificationService notificationService,
     IAppEmailSender emailSender,
     CurrentUserAccessor currentUser,
-    IConfiguration configuration) : IPackageService
+    IConfiguration configuration,
+    IAuditLogService auditLogService) : IPackageService
 {
     // Same fallback/config-key convention as AuthService.BaseUrl — used to build an absolute
     // link for the back-in-stock email CTA.
@@ -143,6 +145,36 @@ public class PackageService(
         }
 
         return await packageRepository.GetForAnalyticsAsync(businessId, since);
+    }
+
+    public async Task HideAsync(Guid packageId, string reason)
+    {
+        var package = await packageRepository.GetByIdAsync(packageId);
+        if (package is null)
+            return;
+
+        await EnsureCanManageBusinessAsync(package.BusinessId);
+
+        package.IsHidden = true;
+        package.HiddenReason = reason;
+        await packageRepository.SaveChangesAsync();
+
+        await auditLogService.LogAsync(AuditActions.PackageHidden, AuditTargetTypes.Package, package.Id.ToString(), package.Name, reason);
+    }
+
+    public async Task UnhideAsync(Guid packageId)
+    {
+        var package = await packageRepository.GetByIdAsync(packageId);
+        if (package is null)
+            return;
+
+        await EnsureCanManageBusinessAsync(package.BusinessId);
+
+        package.IsHidden = false;
+        package.HiddenReason = null;
+        await packageRepository.SaveChangesAsync();
+
+        await auditLogService.LogAsync(AuditActions.PackageUnhidden, AuditTargetTypes.Package, package.Id.ToString(), package.Name);
     }
 
     private async Task EnsureCanManageBusinessAsync(Guid businessId)
