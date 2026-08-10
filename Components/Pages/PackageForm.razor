@@ -345,13 +345,13 @@
         [Required(ErrorMessage = "Enter a short description.")]
         public string? Description { get; set; }
 
-        [Range(0.01, 10000, ErrorMessage = "Price must be greater than 0.")]
+        [Range(0.01, 10000, ErrorMessage = "Price must be between 0.01 and 10,000.")]
         public decimal Price { get; set; }
 
-        [Range(1, 1000, ErrorMessage = "Quantity must be at least 1.")]
+        [Range(1, 1000, ErrorMessage = "Quantity must be between 1 and 1,000.")]
         public int Quantity { get; set; } = 1;
 
-        [Range(0.01, 100, ErrorMessage = "Weight must be greater than 0.")]
+        [Range(0.01, 100, ErrorMessage = "Weight must be between 0.01 and 100.")]
         public decimal WeightKg { get; set; } = 1;
 
         public List<string> DietaryTags { get; set; } = [];

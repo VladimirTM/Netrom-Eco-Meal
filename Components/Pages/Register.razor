@@ -22,12 +22,12 @@
             <div class="mb-3">
                 <label class="form-label fw-semibold" for="register-name">Full name</label>
                 <input id="register-name" class="form-control" type="text" name="name" required
-                       placeholder="Jane Doe" autocomplete="name"/>
+                       placeholder="Jane Doe" autocomplete="name" value="@Name"/>
             </div>
             <div class="mb-3">
                 <label class="form-label fw-semibold" for="register-email">Email</label>
                 <input id="register-email" class="form-control" type="email" name="email" required
-                       placeholder="you@example.com" autocomplete="email"/>
+                       placeholder="you@example.com" autocomplete="email" value="@Email"/>
             </div>
             <div class="mb-4">
                 <label class="form-label fw-semibold" for="register-password">Password</label>
@@ -53,4 +53,10 @@
 
     [SupplyParameterFromQuery]
     public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Name { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Email { get; set; }
 }

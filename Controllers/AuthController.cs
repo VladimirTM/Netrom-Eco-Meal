@@ -33,13 +33,15 @@ public class AuthController(IAuthService authService) : ControllerBase
     [ManualValidateAntiforgeryToken]
     public async Task<IActionResult> RegisterAsync([FromForm] RegisterRequest request, [FromForm] string name, [FromForm] string? returnUrl)
     {
+        var refill = $"&name={Uri.EscapeDataString(name ?? "")}&email={Uri.EscapeDataString(request.Email ?? "")}";
+
         if (!ModelState.IsValid || string.IsNullOrWhiteSpace(name))
-            return LocalRedirect($"/account/register?error={Uri.EscapeDataString("Fill in your name, email, and password.")}&returnUrl={returnUrl}");
+            return LocalRedirect($"/account/register?error={Uri.EscapeDataString("Fill in your name, email, and password.")}{refill}&returnUrl={returnUrl}");
 
         var outcome = await authService.RegisterAsync(request, name);
 
         if (outcome.Error is not null)
-            return LocalRedirect($"/account/register?error={Uri.EscapeDataString(outcome.Error)}&returnUrl={returnUrl}");
+            return LocalRedirect($"/account/register?error={Uri.EscapeDataString(outcome.Error)}{refill}&returnUrl={returnUrl}");
 
         // Info set (no error) means RequireConfirmedAccount left the user signed out — show the
         // "check your email" message on the login page instead of continuing to returnUrl.
@@ -58,10 +60,10 @@ public class AuthController(IAuthService authService) : ControllerBase
         return LocalRedirect(returnUrl ?? "/account/login");
     }
 
-    // ---- In-process only below: no HTTP verb attribute, so MVC never routes to these — called
+    // In-process only below: no HTTP verb attribute, so MVC never routes to these — called
     // directly by ConfirmEmail/ForgotPassword/ResetPassword the same way OrderController etc. are
     // injected into other pages. They don't touch the auth cookie, so they don't need the real
-    // HTTP round trip login/register/logout require. ----
+    // HTTP round trip login/register/logout require.
 
     public async Task<string?> ConfirmEmailAsync(string userId, string token) =>
         await authService.ConfirmEmailAsync(userId, token);

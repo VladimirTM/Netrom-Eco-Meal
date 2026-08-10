@@ -99,8 +99,12 @@ dotnet user-secrets set "Email:Smtp:Username" "..."
 dotnet user-secrets set "Email:Smtp:Password" "..."
 dotnet user-secrets set "Email:Smtp:EnableSsl" "true"
 dotnet user-secrets set "Email:FromAddress" "no-reply@ecomeal.local"
-dotnet user-secrets set "App:BaseUrl" "http://localhost:5000"   # used to build links in emails
 ```
+
+`App:BaseUrl` (used to build links in confirmation/reset emails) already defaults to
+`http://localhost:5116` via `appsettings.Development.json`, matching the `dotnet run`
+dev port — only override it with `dotnet user-secrets set "App:BaseUrl" "..."` if you're
+running on a different port or URL.
 
 Leave `Email:Smtp:Host` unset (the default) and every email is logged instead of sent —
 handy for local dev without a real mailbox. `docker-compose.test.yml` instead points it at

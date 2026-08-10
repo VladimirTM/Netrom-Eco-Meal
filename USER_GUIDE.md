@@ -343,9 +343,11 @@ the **status filter** dropdown (All / Pending approval / Approved / Rejected / H
 just them. A pending row gets two buttons: a green check to **Approve** it outright, or a red ✕
 to **Reject** it, which asks for a short reason first (shown to the applicant, and visible as a
 tooltip on the Rejected badge afterward). Approving or rejecting notifies whoever applied.
-Approval doesn't automatically make them staff — add them via the Staff column or `/users` the
-same way you would for any manager. Changed your mind about a rejected application? Its row gets
-a **reconsider** button (↺) that approves it after all.
+Approving also promotes the applicant to Business Manager (if they aren't already an Admin or
+Business Manager) and staffs them on the newly-approved business automatically — otherwise
+they'd have no way to reach `/businesses/edit/{id}` to actually manage what they just applied
+for. Changed your mind about a rejected application? Its row gets a **reconsider** button (↺)
+that approves it after all, with the same auto-staffing.
 
 ### Moderate businesses and packages
 

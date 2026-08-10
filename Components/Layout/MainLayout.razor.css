@@ -7,6 +7,11 @@
 main {
     flex: 1;
     background-color: #f4f9f5;
+    /* Without this, a flex item won't shrink below its content's intrinsic width — a wide table
+       inside would push main (and the whole page) wider than the viewport instead of letting
+       .table-responsive's own overflow-x:auto handle it. Applies in both the stacked (mobile)
+       and side-by-side (desktop) layouts below, so it isn't gated behind the media query. */
+    min-width: 0;
 }
 
 .sidebar {
