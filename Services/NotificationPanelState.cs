@@ -29,13 +29,23 @@ public class NotificationPanelState(NotificationController notificationControlle
     private async Task LoadAsync()
     {
         await RefreshUnreadCountAsync();
-        _pollTimer = new Timer(async _ => await RefreshUnreadCountAndNotifyAsync(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+        _pollTimer = new Timer(async _ => await SafeRefreshUnreadCountAndNotifyAsync(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
     }
 
-    private async Task RefreshUnreadCountAndNotifyAsync()
+    // The Timer callback is effectively an async void running on a raw ThreadPool thread — any
+    // exception that escapes it (e.g. a transient DB blip, or the circuit tearing down mid-poll)
+    // is unobserved and crashes the whole process, not just this circuit. Must never rethrow.
+    private async Task SafeRefreshUnreadCountAndNotifyAsync()
     {
-        await RefreshUnreadCountAsync();
-        OnChange?.Invoke();
+        try
+        {
+            await RefreshUnreadCountAsync();
+            OnChange?.Invoke();
+        }
+        catch (Exception)
+        {
+            // Best-effort poll — next tick in 30s will retry. Nothing to surface a failure to here.
+        }
     }
 
     private async Task RefreshUnreadCountAsync()

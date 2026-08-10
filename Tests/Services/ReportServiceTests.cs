@@ -1,5 +1,6 @@
 using Moq;
 using Netrom_Eco_Meal.Constants;
+using Netrom_Eco_Meal.Database;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Repositories.Interfaces;
 using Netrom_Eco_Meal.Services;
@@ -10,23 +11,25 @@ namespace Netrom_Eco_Meal.Tests.Services;
 
 // Covers ReportService's authorization (submit is open to any signed-in user; dismiss/take-action
 // are admin-only) and the take-action -> hide-the-target wiring. IReportRepository and the
-// Business/Package services it delegates to are mocked.
+// Business/Package services it delegates to are mocked. EcoMealDbContext is a real
+// InMemory-backed instance since TakeActionAsync wraps its writes in a DB transaction.
 public class ReportServiceTests
 {
     private const string AdminId = "admin-1";
     private const string CustomerId = "customer-1";
 
-    private sealed record Fixture(ReportService Service, Mock<IReportRepository> Repo, Mock<IBusinessService> BusinessService, Mock<IPackageService> PackageService);
+    private sealed record Fixture(ReportService Service, Mock<IReportRepository> Repo, Mock<IBusinessService> BusinessService, Mock<IPackageService> PackageService, EcoMealDbContext Db);
 
     private static Fixture Build(string? userId, params string[] roles)
     {
+        var db = InMemoryDb.Create();
         var repo = new Mock<IReportRepository>();
         var businessService = new Mock<IBusinessService>();
         var packageService = new Mock<IPackageService>();
         var auditLog = new Mock<IAuditLogService>();
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
-        var service = new ReportService(repo.Object, businessService.Object, packageService.Object, auditLog.Object, currentUser);
-        return new Fixture(service, repo, businessService, packageService);
+        var service = new ReportService(repo.Object, businessService.Object, packageService.Object, auditLog.Object, db, currentUser);
+        return new Fixture(service, repo, businessService, packageService, db);
     }
 
     [Fact]

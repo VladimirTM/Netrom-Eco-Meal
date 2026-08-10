@@ -338,11 +338,13 @@ else
             return;
 
         _reportBusy = true;
-        await ReportController.SubmitAsync(AuditTargetTypes.Business, Id, reason);
+        var result = await ReportController.SubmitAsync(AuditTargetTypes.Business, Id, reason);
         _reportBusy = false;
         _reportPromptOpen = false;
 
-        _toastMessage = "Thanks — an admin will take a look.";
+        _toastMessage = result is UnauthorizedResult
+            ? "You must be signed in to report something."
+            : "Thanks — an admin will take a look.";
         _toastToken = Guid.NewGuid();
     }
 

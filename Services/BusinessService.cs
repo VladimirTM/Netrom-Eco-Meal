@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Entities;
@@ -9,6 +10,7 @@ namespace Netrom_Eco_Meal.Services;
 
 public class BusinessService(
     IBusinessRepository businessRepository,
+    UserManager<ApplicationUser> userManager,
     CurrentUserAccessor currentUser,
     IAuditLogService auditLogService,
     INotificationService notificationService) : IBusinessService
@@ -162,8 +164,33 @@ public class BusinessService(
         await auditLogService.LogAsync(AuditActions.BusinessApproved, AuditTargetTypes.Business, business.Id.ToString(), business.Name);
 
         if (business.SubmittedByUserId is not null)
+        {
+            await GrantApplicantAccessAsync(business, business.SubmittedByUserId);
+
             await notificationService.CreateAsync(business.SubmittedByUserId,
                 $"Your business \"{business.Name}\" was approved! You can now manage it from the Businesses page.", $"/businesses/edit/{business.Id}");
+        }
+    }
+
+    // Approval alone leaves the applicant unable to reach /businesses/edit/{id} — that page requires
+    // the Admin or BusinessManager role plus staff membership, neither of which a self-service
+    // applicant (often a plain Customer) has yet.
+    private async Task GrantApplicantAccessAsync(Business business, string applicantUserId)
+    {
+        var applicant = await userManager.FindByIdAsync(applicantUserId);
+        if (applicant is null)
+            return;
+
+        var roles = await userManager.GetRolesAsync(applicant);
+        if (!roles.Contains(AppRoles.Admin) && !roles.Contains(AppRoles.BusinessManager))
+        {
+            await userManager.RemoveFromRolesAsync(applicant, roles);
+            await userManager.AddToRoleAsync(applicant, AppRoles.BusinessManager);
+            await auditLogService.LogAsync(AuditActions.RoleChanged, AuditTargetTypes.User, applicant.Id, applicant.Name,
+                $"{roles.FirstOrDefault() ?? AppRoles.Customer} → {AppRoles.BusinessManager}");
+        }
+
+        await AddStaffAsync(business.Id, applicant.Id, applicant.Name);
     }
 
     public async Task RejectAsync(Guid businessId, string reason)
@@ -190,7 +217,7 @@ public class BusinessService(
         await EnsureAdminAsync();
 
         var business = await businessRepository.GetByIdAsync(businessId);
-        if (business is null)
+        if (business is null || business.Status != BusinessStatuses.Approved)
             return;
 
         business.IsHidden = true;
@@ -208,7 +235,7 @@ public class BusinessService(
         await EnsureAdminAsync();
 
         var business = await businessRepository.GetByIdAsync(businessId);
-        if (business is null)
+        if (business is null || business.Status != BusinessStatuses.Approved)
             return;
 
         business.IsHidden = false;

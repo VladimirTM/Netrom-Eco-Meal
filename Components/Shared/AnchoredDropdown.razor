@@ -25,12 +25,22 @@
 
     private ElementReference _anchorRef;
     private ElementReference _panelRef;
+    private bool _positionedForCurrentOpen;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Reposition on every render while open — content that loads in async (e.g. the
-        // notification list) can grow the panel past its first, smaller measurement.
-        if (IsOpen)
+        // Position once per open, not on every re-render, so it doesn't jump while scrolling.
+        // (The one consumer that used to load content async after opening — the notification
+        // list — no longer uses AnchoredDropdown; see NotificationPanel. The remaining consumers
+        // all render from data already loaded before open, so a single position is correct.)
+        if (IsOpen && !_positionedForCurrentOpen)
+        {
+            _positionedForCurrentOpen = true;
             await JS.InvokeVoidAsync("EcoMeal.positionDropdown", _anchorRef, _panelRef);
+        }
+        else if (!IsOpen)
+        {
+            _positionedForCurrentOpen = false;
+        }
     }
 }

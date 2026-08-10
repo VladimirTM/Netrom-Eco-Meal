@@ -1,5 +1,6 @@
 @page "/reports"
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Mvc
 @using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Services.Interfaces
@@ -15,6 +16,11 @@
         <p class="text-muted small mb-0">Open reports from customers about businesses and packages</p>
     </div>
 </div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
 
 <div class="card border-0 shadow-sm">
     @if (_reports is null)
@@ -98,6 +104,7 @@
     private ReportView? _pendingDismiss;
     private ReportView? _pendingAction;
     private bool _busy;
+    private string? _error;
 
     protected override async Task OnInitializedAsync()
     {
@@ -115,7 +122,11 @@
             return;
 
         _busy = true;
-        await ReportController.DismissAsync(_pendingDismiss.Report.Id);
+        _error = null;
+        var result = await ReportController.DismissAsync(_pendingDismiss.Report.Id);
+        if (result is UnauthorizedResult)
+            _error = "You're no longer allowed to manage reports.";
+
         await LoadAsync();
         _busy = false;
         _pendingDismiss = null;
@@ -127,7 +138,11 @@
             return;
 
         _busy = true;
-        await ReportController.TakeActionAsync(_pendingAction.Report.Id, _pendingAction.Report.Reason);
+        _error = null;
+        var result = await ReportController.TakeActionAsync(_pendingAction.Report.Id, _pendingAction.Report.Reason);
+        if (result is UnauthorizedResult)
+            _error = "You're no longer allowed to manage reports.";
+
         await LoadAsync();
         _busy = false;
         _pendingAction = null;

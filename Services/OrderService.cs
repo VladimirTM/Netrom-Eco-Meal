@@ -16,6 +16,7 @@ public class OrderService(
     INotificationService notificationService,
     IAppEmailSender emailSender,
     IStripeGateway stripeGateway,
+    IAuditLogService auditLogService,
     EcoMealDbContext dbContext,
     CurrentUserAccessor currentUser,
     IConfiguration configuration,
@@ -383,6 +384,20 @@ public class OrderService(
             // Another confirm/cancel changed a package's stock (xmin token) — don't oversell.
             throw new InvalidOperationException("Stock for this order just changed — please refresh and try again.");
         }
+
+        var auditAction = statusName switch
+        {
+            OrderStatuses.Confirmed => AuditActions.OrderConfirmed,
+            OrderStatuses.Completed => AuditActions.OrderCompleted,
+            OrderStatuses.Cancelled => AuditActions.OrderCancelled,
+            OrderStatuses.NoShow => AuditActions.OrderNoShow,
+            _ => null,
+        };
+        // No-ops for system-driven transitions (background sweeps, LogAsync's own "no signed-in
+        // actor" check) — only ever writes an entry for an actual admin/manager/customer action.
+        if (auditAction is not null)
+            await auditLogService.LogAsync(auditAction, AuditTargetTypes.Order, order.Id.ToString(), $"Order #{order.OrderNumber:000}",
+                refundFailed ? $"{currentStatusName} → {statusName} (refund failed)" : $"{currentStatusName} → {statusName}");
 
         var (message, url, emailSubject) = statusName switch
         {

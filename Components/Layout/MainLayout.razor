@@ -1,4 +1,5 @@
 ﻿@inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Authorization
 @using Netrom_Eco_Meal.Services
 @inject ClientTimeZoneService ClientTimeZoneService
 
@@ -14,8 +15,13 @@
     </main>
 </div>
 
-@* Outside .sidebar on purpose — see NotificationPanel's own comment for why. *@
-<NotificationPanel/>
+@* Outside .sidebar on purpose — see NotificationPanel's own comment for why. Gated behind
+   AuthorizeView so it doesn't start its 30s polling timer for an anonymous circuit. *@
+<AuthorizeView>
+    <Authorized>
+        <NotificationPanel/>
+    </Authorized>
+</AuthorizeView>
 
 @* Required by the framework; styled globally in app.css, not CSS-isolated. *@
 <div id="blazor-error-ui" data-nosnippet>

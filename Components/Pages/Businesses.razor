@@ -304,7 +304,10 @@
         _isAdmin = authState.User.IsInRole(AppRoles.Admin);
         _isBusinessManager = authState.User.IsInRole(AppRoles.BusinessManager);
 
-        businesses    = (await BusinessController.GetAllAsync()).Value;
+        // Only admins get the full unfiltered list — it includes other applicants' Pending/Rejected
+        // businesses and rejection reasons, which a BusinessManager (staff at just one or a few
+        // approved businesses) has no business seeing.
+        businesses    = _isAdmin ? (await BusinessController.GetAllAsync()).Value : [];
         businessTypes = await BusinessTypeService.GetAllAsync();
 
         if (_isAdmin)

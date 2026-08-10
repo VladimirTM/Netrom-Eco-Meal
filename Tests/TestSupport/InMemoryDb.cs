@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Netrom_Eco_Meal.Database;
 
 namespace Netrom_Eco_Meal.Tests.TestSupport;
@@ -14,6 +15,12 @@ public static class InMemoryDb
     {
         var options = new DbContextOptionsBuilder<EcoMealDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            // The InMemory provider doesn't actually enforce transactional atomicity, and by
+            // default treats BeginTransactionAsync as an error rather than a silent no-op —
+            // ReportService.TakeActionAsync (and anything else that wraps writes in a real
+            // transaction against Postgres) would otherwise fail here even though the
+            // underlying writes still happen and are what these tests assert on.
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
 
         var context = new EcoMealDbContext(options);

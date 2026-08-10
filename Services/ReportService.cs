@@ -1,4 +1,6 @@
+using Microsoft.EntityFrameworkCore;
 using Netrom_Eco_Meal.Constants;
+using Netrom_Eco_Meal.Database;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Repositories.Interfaces;
 using Netrom_Eco_Meal.Services.Interfaces;
@@ -10,6 +12,7 @@ public class ReportService(
     IBusinessService businessService,
     IPackageService packageService,
     IAuditLogService auditLogService,
+    EcoMealDbContext dbContext,
     CurrentUserAccessor currentUser) : IReportService
 {
     public async Task SubmitAsync(string targetType, Guid targetId, string reason)
@@ -64,6 +67,12 @@ public class ReportService(
         if (report is null || report.Status != ReportStatuses.Open)
             return;
 
+        // Hiding the target, resolving the report, and the audit log entry are each their own
+        // SaveChangesAsync — wrap them in one transaction so a failure partway through (e.g. a
+        // concurrent admin resolving the same report) can't leave the target hidden but the
+        // report still showing as Open.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+
         if (report.TargetType == AuditTargetTypes.Business)
             await businessService.HideAsync(report.TargetId, actionReason);
         else
@@ -73,6 +82,8 @@ public class ReportService(
 
         await ResolveAsync(report, ReportStatuses.ActionTaken);
         await auditLogService.LogAsync(AuditActions.ReportActionTaken, report.TargetType, report.TargetId.ToString(), targetName, actionReason);
+
+        await transaction.CommitAsync();
     }
 
     private async Task ResolveAsync(Report report, string status)

@@ -32,6 +32,7 @@ public class OrderServiceTests
         Mock<INotificationService> NotificationService,
         Mock<IAppEmailSender> EmailSender,
         Mock<IStripeGateway> StripeGateway,
+        Mock<IAuditLogService> AuditLogService,
         EcoMealDbContext Db);
 
     private static Fixture Build(string? userId, params string[] roles)
@@ -43,14 +44,15 @@ public class OrderServiceTests
         var notificationService = new Mock<INotificationService>();
         var emailSender = new Mock<IAppEmailSender>();
         var stripeGateway = new Mock<IStripeGateway>();
+        var auditLogService = new Mock<IAuditLogService>();
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
         var configuration = new ConfigurationBuilder().Build();
 
         var service = new OrderService(
             orderRepo.Object, packageRepo.Object, businessService.Object, notificationService.Object,
-            emailSender.Object, stripeGateway.Object, db, currentUser, configuration, NullLogger<OrderService>.Instance);
+            emailSender.Object, stripeGateway.Object, auditLogService.Object, db, currentUser, configuration, NullLogger<OrderService>.Instance);
 
-        return new Fixture(service, orderRepo, packageRepo, businessService, notificationService, emailSender, stripeGateway, db);
+        return new Fixture(service, orderRepo, packageRepo, businessService, notificationService, emailSender, stripeGateway, auditLogService, db);
     }
 
     // ---- PlaceOrderAsync ---------------------------------------------------

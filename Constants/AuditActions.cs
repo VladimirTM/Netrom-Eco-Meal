@@ -18,4 +18,8 @@ public static class AuditActions
     public const string PackageUnhidden = "PackageUnhidden";
     public const string ReportDismissed = "ReportDismissed";
     public const string ReportActionTaken = "ReportActionTaken";
+    public const string OrderConfirmed = "OrderConfirmed";
+    public const string OrderCompleted = "OrderCompleted";
+    public const string OrderCancelled = "OrderCancelled";
+    public const string OrderNoShow = "OrderNoShow";
 }

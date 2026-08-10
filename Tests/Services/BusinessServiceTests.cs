@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Identity;
 using Moq;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Repositories.Interfaces;
@@ -17,16 +18,23 @@ public class BusinessServiceTests
     private const string AdminId = "admin-1";
     private const string ManagerId = "manager-1";
 
-    private sealed record Fixture(BusinessService Service, Mock<IBusinessRepository> Repo, Mock<IAuditLogService> AuditLog, Mock<INotificationService> Notification);
+    private sealed record Fixture(BusinessService Service, Mock<IBusinessRepository> Repo, Mock<UserManager<ApplicationUser>> UserManager, Mock<IAuditLogService> AuditLog, Mock<INotificationService> Notification);
+
+    private static Mock<UserManager<ApplicationUser>> MockUserManager()
+    {
+        var store = new Mock<IUserStore<ApplicationUser>>();
+        return new Mock<UserManager<ApplicationUser>>(store.Object, null!, null!, null!, null!, null!, null!, null!, null!);
+    }
 
     private static Fixture Build(string? userId, params string[] roles)
     {
         var repo = new Mock<IBusinessRepository>();
+        var userManager = MockUserManager();
         var auditLog = new Mock<IAuditLogService>();
         var notification = new Mock<INotificationService>();
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
-        var service = new BusinessService(repo.Object, currentUser, auditLog.Object, notification.Object);
-        return new Fixture(service, repo, auditLog, notification);
+        var service = new BusinessService(repo.Object, userManager.Object, currentUser, auditLog.Object, notification.Object);
+        return new Fixture(service, repo, userManager, auditLog, notification);
     }
 
     [Fact]
@@ -169,6 +177,48 @@ public class BusinessServiceTests
         Assert.Equal(Constants.BusinessStatuses.Approved, business.Status);
         f.Repo.Verify(r => r.SaveChangesAsync(), Times.Once);
         f.Notification.Verify(n => n.CreateAsync(ManagerId, It.IsAny<string>(), It.IsAny<string?>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ApproveAsync_PromotesCustomerApplicantToBusinessManagerAndAddsThemAsStaff()
+    {
+        var f = Build(AdminId, Constants.AppRoles.Admin);
+        var business = TestData.Business();
+        business.Status = Constants.BusinessStatuses.PendingApproval;
+        business.SubmittedByUserId = ManagerId;
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.AddStaffAsync(business.Id, ManagerId)).ReturnsAsync(true);
+
+        var applicant = TestData.User(ManagerId, "Jane Applicant");
+        f.UserManager.Setup(m => m.FindByIdAsync(ManagerId)).ReturnsAsync(applicant);
+        f.UserManager.Setup(m => m.GetRolesAsync(applicant)).ReturnsAsync([Constants.AppRoles.Customer]);
+        f.UserManager.Setup(m => m.AddToRoleAsync(applicant, Constants.AppRoles.BusinessManager)).ReturnsAsync(IdentityResult.Success);
+
+        await f.Service.ApproveAsync(business.Id);
+
+        f.UserManager.Verify(m => m.RemoveFromRolesAsync(applicant, It.Is<IEnumerable<string>>(r => r.Contains(Constants.AppRoles.Customer))), Times.Once);
+        f.UserManager.Verify(m => m.AddToRoleAsync(applicant, Constants.AppRoles.BusinessManager), Times.Once);
+        f.Repo.Verify(r => r.AddStaffAsync(business.Id, ManagerId), Times.Once);
+    }
+
+    [Fact]
+    public async Task ApproveAsync_ExistingBusinessManagerApplicant_OnlyAddedAsStaffNotRepromoted()
+    {
+        var f = Build(AdminId, Constants.AppRoles.Admin);
+        var business = TestData.Business();
+        business.Status = Constants.BusinessStatuses.PendingApproval;
+        business.SubmittedByUserId = ManagerId;
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.AddStaffAsync(business.Id, ManagerId)).ReturnsAsync(true);
+
+        var applicant = TestData.User(ManagerId, "Jane Applicant");
+        f.UserManager.Setup(m => m.FindByIdAsync(ManagerId)).ReturnsAsync(applicant);
+        f.UserManager.Setup(m => m.GetRolesAsync(applicant)).ReturnsAsync([Constants.AppRoles.BusinessManager]);
+
+        await f.Service.ApproveAsync(business.Id);
+
+        f.UserManager.Verify(m => m.AddToRoleAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>()), Times.Never);
+        f.Repo.Verify(r => r.AddStaffAsync(business.Id, ManagerId), Times.Once);
     }
 
     [Fact]

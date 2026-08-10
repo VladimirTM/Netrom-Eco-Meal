@@ -85,8 +85,14 @@
 
 <CartPanel @bind-IsOpen="_cartOpen"/>
 
-@* Outside .public-header on purpose — see NotificationPanel's own comment for why. *@
-<NotificationPanel/>
+@* Outside .public-header on purpose — see NotificationPanel's own comment for why. Gated behind
+   AuthorizeView like NotificationBell above — an anonymous visitor has no bell to open it with,
+   so there's no reason to start its 30s polling timer for them. *@
+<AuthorizeView>
+    <Authorized>
+        <NotificationPanel/>
+    </Authorized>
+</AuthorizeView>
 
 @code {
     private bool _cartOpen;

@@ -74,6 +74,11 @@
     </div>
 }
 
+@if (_bulkError is not null && _bulkMode == BulkMode.None)
+{
+    <div class="alert alert-danger" role="alert">@_bulkError</div>
+}
+
 @if (_selectedIds.Count > 0)
 {
     <div class="card border-0 shadow-sm bulk-toolbar mb-3">
@@ -404,11 +409,25 @@
     private async Task DuplicateSelectedAsync()
     {
         _bulkBusy = true;
-        await PackageController.DuplicateManyAsync(_selectedIds.ToList());
-        _bulkBusy = false;
-        _confirmingDuplicate = false;
-        _selectedIds.Clear();
-        await ReloadAsync();
+        _bulkError = null;
+        try
+        {
+            await PackageController.DuplicateManyAsync(_selectedIds.ToList());
+            _selectedIds.Clear();
+            await ReloadAsync();
+        }
+        catch (Exception)
+        {
+            // e.g. a selected package's business no longer matches the caller's access — close the
+            // dialog so the page-level alert (ConfirmDialog has no error slot of its own) is visible,
+            // instead of leaving the spinner stuck forever with no feedback.
+            _bulkError = "Couldn't duplicate the selected packages. Please refresh and try again.";
+        }
+        finally
+        {
+            _bulkBusy = false;
+            _confirmingDuplicate = false;
+        }
     }
 
     private async Task ApplyBulkModalAsync()
@@ -427,15 +446,26 @@
         _bulkBusy = true;
         _bulkError = null;
 
-        if (_bulkMode == BulkMode.AdjustQuantity)
-            await PackageController.AdjustQuantityManyAsync(_selectedIds.ToList(), _bulkQuantityDelta);
-        else
-            await PackageController.ExtendPickupWindowManyAsync(_selectedIds.ToList(), _bulkExtendHours);
+        try
+        {
+            if (_bulkMode == BulkMode.AdjustQuantity)
+                await PackageController.AdjustQuantityManyAsync(_selectedIds.ToList(), _bulkQuantityDelta);
+            else
+                await PackageController.ExtendPickupWindowManyAsync(_selectedIds.ToList(), _bulkExtendHours);
 
-        _bulkBusy = false;
-        _bulkMode = BulkMode.None;
-        _selectedIds.Clear();
-        await ReloadAsync();
+            _bulkMode = BulkMode.None;
+            _selectedIds.Clear();
+            await ReloadAsync();
+        }
+        catch (Exception)
+        {
+            // Same reasoning as DuplicateSelectedAsync — don't leave the modal stuck busy with no feedback.
+            _bulkError = "Couldn't apply this to the selected packages. Please refresh and try again.";
+        }
+        finally
+        {
+            _bulkBusy = false;
+        }
     }
 
     private async Task LoadPageAsync()
