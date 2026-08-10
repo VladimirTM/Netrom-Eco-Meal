@@ -25,4 +25,9 @@ public interface IBusinessService
     public Task RejectAsync(Guid businessId, string reason);
     public Task HideAsync(Guid businessId, string reason);
     public Task UnhideAsync(Guid businessId);
+
+    // Admin or one of the business's own staff, same as UpdateAsync.
+    public Task SetHoursAsync(Guid businessId, List<BusinessHours> hours);
+    public Task<BusinessClosure> AddClosureAsync(Guid businessId, DateOnly startDate, DateOnly endDate, string? reason);
+    public Task<bool> RemoveClosureAsync(Guid businessId, Guid closureId);
 }

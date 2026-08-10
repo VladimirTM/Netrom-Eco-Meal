@@ -28,6 +28,8 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<PendingCheckout> PendingCheckouts { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
     public DbSet<Report> Reports { get; set; }
+    public DbSet<BusinessHours> BusinessHours { get; set; }
+    public DbSet<BusinessClosure> BusinessClosures { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -101,6 +103,23 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
         // The reports queue only ever filters by status ("Open" by default).
         modelBuilder.Entity<Report>()
             .HasIndex(r => r.Status);
+
+        // One row per weekday per business — SetHoursAsync always replaces the full set together.
+        modelBuilder.Entity<BusinessHours>()
+            .HasIndex(h => new { h.BusinessId, h.DayOfWeek })
+            .IsUnique();
+
+        modelBuilder.Entity<BusinessHours>()
+            .HasOne(h => h.Business)
+            .WithMany(b => b.Hours)
+            .HasForeignKey(h => h.BusinessId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<BusinessClosure>()
+            .HasOne(c => c.Business)
+            .WithMany(b => b.Closures)
+            .HasForeignKey(c => c.BusinessId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // Optimistic concurrency so two managers confirming the same package can't oversell stock.
         modelBuilder.Entity<Package>()

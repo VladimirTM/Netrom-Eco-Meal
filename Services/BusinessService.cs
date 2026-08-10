@@ -70,9 +70,7 @@ public class BusinessService(
         if (businessFromDb is null)
             return;
 
-        var (isAdmin, userId) = await currentUser.GetCurrentUserAsync();
-        if (!isAdmin && (userId is null || !await businessRepository.IsStaffAsync(businessFromDb.Id, userId)))
-            throw new UnauthorizedAccessException("You can only edit your own business.");
+        await EnsureStaffOrAdminAsync(businessFromDb.Id);
 
         UpdateBusiness(business, businessFromDb);
         await businessRepository.SaveChangesAsync();
@@ -250,6 +248,65 @@ public class BusinessService(
         var (isAdmin, _) = await currentUser.GetCurrentUserAsync();
         if (!isAdmin)
             throw new UnauthorizedAccessException("Only an admin can perform this action.");
+    }
+
+    // Shared by UpdateAsync and the hours/closures editors below — any of a business's own staff
+    // can manage it, not just an admin.
+    private async Task EnsureStaffOrAdminAsync(Guid businessId)
+    {
+        var (isAdmin, userId) = await currentUser.GetCurrentUserAsync();
+        if (!isAdmin && (userId is null || !await businessRepository.IsStaffAsync(businessId, userId)))
+            throw new UnauthorizedAccessException("You can only edit your own business.");
+    }
+
+    public async Task SetHoursAsync(Guid businessId, List<BusinessHours> hours)
+    {
+        var business = await businessRepository.GetByIdAsync(businessId);
+        if (business is null)
+            return;
+
+        await EnsureStaffOrAdminAsync(businessId);
+
+        await businessRepository.SetHoursAsync(businessId, hours);
+
+        await auditLogService.LogAsync(AuditActions.BusinessHoursUpdated, AuditTargetTypes.Business, businessId.ToString(), business.Name);
+    }
+
+    public async Task<BusinessClosure> AddClosureAsync(Guid businessId, DateOnly startDate, DateOnly endDate, string? reason)
+    {
+        var business = await businessRepository.GetByIdAsync(businessId);
+        if (business is null)
+            throw new InvalidOperationException("Business not found.");
+
+        await EnsureStaffOrAdminAsync(businessId);
+
+        var closure = await businessRepository.AddClosureAsync(new BusinessClosure
+        {
+            BusinessId = businessId,
+            StartDate = startDate,
+            EndDate = endDate,
+            Reason = reason,
+        });
+
+        await auditLogService.LogAsync(AuditActions.BusinessClosureAdded, AuditTargetTypes.Business, businessId.ToString(), business.Name,
+            $"{startDate:MMM d, yyyy}–{endDate:MMM d, yyyy}" + (string.IsNullOrWhiteSpace(reason) ? "" : $": {reason}"));
+
+        return closure;
+    }
+
+    public async Task<bool> RemoveClosureAsync(Guid businessId, Guid closureId)
+    {
+        var business = await businessRepository.GetByIdAsync(businessId);
+        if (business is null)
+            return false;
+
+        await EnsureStaffOrAdminAsync(businessId);
+
+        var removed = await businessRepository.RemoveClosureAsync(businessId, closureId);
+        if (removed)
+            await auditLogService.LogAsync(AuditActions.BusinessClosureRemoved, AuditTargetTypes.Business, businessId.ToString(), business.Name);
+
+        return removed;
     }
 
     private static void UpdateBusiness(Business business, Business businessToUpdate)

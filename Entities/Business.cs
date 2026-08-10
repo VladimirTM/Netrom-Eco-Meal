@@ -31,4 +31,6 @@ public class Business
     public ICollection<Order> Orders { get; set; } = [];
     public ICollection<Review> Reviews { get; set; } = [];
     public ICollection<Favorite> Favorites { get; set; } = [];
+    public ICollection<BusinessHours> Hours { get; set; } = [];
+    public ICollection<BusinessClosure> Closures { get; set; } = [];
 }

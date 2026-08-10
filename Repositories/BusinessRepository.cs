@@ -12,7 +12,10 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
 {
      public async Task<List<Business>> GetAllAsync(bool publicOnly = false)
     {
-        var query = context.Businesses.Include(b => b.BusinessType).Include(b => b.Staff).ThenInclude(s => s.User).AsQueryable();
+        // AsSplitQuery — Staff/Hours/Closures are three collection navigations, and one JOINed
+        // query would otherwise multiply their rows together per business.
+        var query = context.Businesses.Include(b => b.BusinessType).Include(b => b.Staff).ThenInclude(s => s.User)
+            .Include(b => b.Hours).Include(b => b.Closures).AsSplitQuery().AsQueryable();
 
         if (publicOnly)
             query = query.Where(b => b.Status == BusinessStatuses.Approved && !b.IsHidden);
@@ -22,7 +25,9 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
 
     public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, string? favoritedByUserId = null, double? customerLat = null, double? customerLng = null, string? statusFilter = null, bool publicOnly = false)
     {
-        var query = context.Businesses.Include(b => b.BusinessType).Include(b => b.Staff).ThenInclude(s => s.User).AsQueryable();
+        // Same AsSplitQuery reasoning as GetAllAsync.
+        var query = context.Businesses.Include(b => b.BusinessType).Include(b => b.Staff).ThenInclude(s => s.User)
+            .Include(b => b.Hours).Include(b => b.Closures).AsSplitQuery().AsQueryable();
 
         if (publicOnly)
             query = query.Where(b => b.Status == BusinessStatuses.Approved && !b.IsHidden);
@@ -73,7 +78,8 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
 
     public async Task<Business?> GetByIdAsync(Guid id)
     {
-        return await context.Businesses.Include(b => b.Staff).ThenInclude(s => s.User).Include(b => b.BusinessType).FirstOrDefaultAsync(o => o.Id == id);
+        return await context.Businesses.Include(b => b.Staff).ThenInclude(s => s.User).Include(b => b.BusinessType)
+            .Include(b => b.Hours).Include(b => b.Closures).AsSplitQuery().FirstOrDefaultAsync(o => o.Id == id);
     }
 
     public async Task<List<Business>> GetByStaffUserIdAsync(string userId)
@@ -141,5 +147,39 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
     public async Task SaveChangesAsync()
     {
         await context.SaveChangesAsync();
+    }
+
+    public async Task SetHoursAsync(Guid businessId, List<BusinessHours> hours)
+    {
+        var existing = await context.BusinessHours.Where(h => h.BusinessId == businessId).ToListAsync();
+        context.BusinessHours.RemoveRange(existing);
+
+        foreach (var entry in hours)
+        {
+            entry.Id = Guid.NewGuid();
+            entry.BusinessId = businessId;
+        }
+        await context.BusinessHours.AddRangeAsync(hours);
+
+        await context.SaveChangesAsync();
+    }
+
+    public async Task<BusinessClosure> AddClosureAsync(BusinessClosure closure)
+    {
+        closure.Id = Guid.NewGuid();
+        await context.BusinessClosures.AddAsync(closure);
+        await context.SaveChangesAsync();
+        return closure;
+    }
+
+    public async Task<bool> RemoveClosureAsync(Guid businessId, Guid closureId)
+    {
+        var closure = await context.BusinessClosures.FirstOrDefaultAsync(c => c.Id == closureId && c.BusinessId == businessId);
+        if (closure is null)
+            return false;
+
+        context.BusinessClosures.Remove(closure);
+        await context.SaveChangesAsync();
+        return true;
     }
 }

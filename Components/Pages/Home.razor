@@ -4,6 +4,7 @@
 @using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Models
 @using Netrom_Eco_Meal.Services
 @using Netrom_Eco_Meal.Services.Interfaces
 @rendermode InteractiveServer
@@ -15,6 +16,7 @@
 @inject FavoriteController FavoriteController
 @inject IBusinessTypeService BusinessTypeService
 @inject CartService CartService
+@inject ClientTimeZoneService ClientTimeZoneService
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
 
@@ -193,7 +195,13 @@
                         </AuthorizeView>
                     </div>
                     <div class="biz-card-body">
-                        <span class="biz-card-type">@business.BusinessType.Name</span>
+                        <div class="d-flex align-items-center justify-content-between">
+                            <span class="biz-card-type">@business.BusinessType.Name</span>
+                            @if (IsClosedNow(business))
+                            {
+                                <span class="biz-card-closed-badge">Closed now</span>
+                            }
+                        </div>
                         <h2 class="biz-card-name">@business.Name</h2>
                         <div class="biz-card-address"><i class="bi bi-geo-alt-fill"></i>@business.Address</div>
                         @if (DistanceLabel(business) is { } distance)
@@ -267,9 +275,14 @@
         _favoriteBusinessIds = (await FavoriteController.GetMyFavoriteBusinessIdsAsync()).Value ?? [];
 
         CartService.OnChange += HandleCartChanged;
+        ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
 
         await LoadPageAsync();
     }
+
+    // Same local-time convention PickupLabel uses for pickup windows — no per-business timezone.
+    private bool IsClosedNow(Business business) =>
+        BusinessHoursStatus.IsOpenNow(business.Hours, business.Closures, ClientTimeZoneService.ToLocal(DateTime.UtcNow)) == false;
 
     private async Task LoadPageAsync()
     {
@@ -421,8 +434,11 @@
 
     private void HandleCartChanged() => InvokeAsync(StateHasChanged);
 
+    private void HandleTimeZoneChanged() => InvokeAsync(StateHasChanged);
+
     public void Dispose()
     {
         CartService.OnChange -= HandleCartChanged;
+        ClientTimeZoneService.OnChange -= HandleTimeZoneChanged;
     }
 }

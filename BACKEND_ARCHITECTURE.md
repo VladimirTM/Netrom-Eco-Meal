@@ -41,7 +41,7 @@ Netrom-Eco-Meal/
 │   └── *.cs                      # Business logic, DI-registered Scoped (2 are BackgroundService/plain classes — see §5)
 ├── Controllers/                 # ApiController classes — mostly in-process façades, see §6
 ├── Constants/                   # Fixed string values, enums-as-strings, small pure helpers
-├── Models/                      # PaginatedList<T>, Debouncer, GeoDistance (Debouncer is frontend-facing, see FRONTEND_ARCHITECTURE.md)
+├── Models/                      # PaginatedList<T>, Debouncer, GeoDistance, BusinessHoursStatus (Debouncer is frontend-facing, see FRONTEND_ARCHITECTURE.md)
 ├── Migrations/                  # EF-generated migration history
 ├── Components/                  # Blazor UI — see FRONTEND_ARCHITECTURE.md
 ├── wwwroot/                     # Static assets — see FRONTEND_ARCHITECTURE.md
@@ -49,6 +49,8 @@ Netrom-Eco-Meal/
 ```
 
 `Program.cs` wires every layer with plain `AddScoped<TInterface, TImplementation>()` calls — no assembly scanning, no MediatR, no separate composition-root project.
+
+Logging goes through Serilog rather than the default `Microsoft.Extensions.Logging` console provider: a minimal bootstrap logger (`Log.Logger = new LoggerConfiguration()...CreateBootstrapLogger()`) covers anything that fails before the host itself is up, then `builder.Host.UseSerilog(...)` replaces it with the real configuration-driven one (`ReadFrom.Configuration` — see §10 — plus `FromLogContext`/`WithMachineName`/`WithEnvironmentName`/`WithThreadId` enrichers). `app.UseSerilogRequestLogging()` is the first middleware in the pipeline, so it wraps and times every request including the `UseExceptionHandler("/Error")` re-execution for unhandled exceptions further down. `DbSeeder`'s own `ILoggerFactory`-sourced logger and every ASP.NET Core/EF Core framework log line flow through the same sinks — there's no second logging pipeline to keep in sync.
 
 ---
 
@@ -101,6 +103,8 @@ ApplicationUser (IdentityUser)
   └──< PendingCheckout ──── Business  (no FK/nav to Order — bridges checkout to Stripe; see §3 PendingCheckout)
 
 Business ──< BusinessStaff >── ApplicationUser  (many-to-many: staff a business, unique on (BusinessId, UserId))
+Business ──< BusinessHours            (0..7 rows, one per DayOfWeek, unique on (BusinessId, DayOfWeek))
+Business ──< BusinessClosure          (0..N holiday date-range overrides)
 Order ──── Status                     (Pending | Confirmed | Completed | Cancelled | NoShow)
 PackageTemplate ──< Package           (0..N generated instances, one per calendar day)
 
@@ -143,9 +147,13 @@ public class Business
     public ICollection<Order> Orders { get; set; } = [];
     public ICollection<Review> Reviews { get; set; } = [];
     public ICollection<Favorite> Favorites { get; set; } = [];
+    public ICollection<BusinessHours> Hours { get; set; } = [];
+    public ICollection<BusinessClosure> Closures { get; set; } = [];
 }
 ```
 `Staff` is the many-to-many side of `BusinessStaff` (below) — a business can have several staff, and a single staff member can be staff of more than one business. There's no cap and no "primary" staffer; `IBusinessService.IsStaffAsync` is the one authorization check every write path (`BusinessService`, `PackageService`, `PackageTemplateService`, `OrderService`) uses to ask "can this user act on this business."
+
+`Hours`/`Closures` back the weekly-schedule + holiday-closure feature (below) — both loaded via `AsSplitQuery()` on every `BusinessRepository.GetAllAsync`/`GetPagedAsync`/`GetByIdAsync` call alongside `Staff`, since three separate `Include`d collections on one query would otherwise multiply rows together (the "cartesian explosion" EF Core's `MultipleCollectionIncludeWarning` warns about for this shape — caught in practice via Serilog's request-scoped EF Core warning logging, see §10).
 
 `Latitude`/`Longitude` are both nullable — set by hand or via a browser-geolocation "use my location" button on `BusinessForm.razor`, read by `BusinessRepository.GetPagedAsync`'s `BusinessSortOptions.Distance` sort and `Home.razor`'s map view (see the Pagination Helper note in §4).
 
@@ -164,6 +172,35 @@ public class BusinessStaff
 }
 ```
 The join table behind `Business.Staff` — replaced an earlier `Business.ManagerId` nullable-FK design that capped a manager at one business. Unique index on `(BusinessId, UserId)` (`EcoMealDbContext.OnModelCreating`) so the same pairing can't be added twice; both FKs cascade-delete, so removing a business or a user account cleans up their staff rows instead of leaving orphans or blocking the delete. Admin-only to add/remove (`Businesses.razor`'s and `Users.razor`'s staff chip UI, both calling `BusinessController.AddStaffAsync`/`RemoveStaffAsync` — see §11 in `FRONTEND_ARCHITECTURE.md`).
+
+#### BusinessHours / BusinessClosure
+```csharp
+public class BusinessHours
+{
+    public Guid Id { get; set; }
+    public required Guid BusinessId { get; set; }
+    public required DayOfWeek DayOfWeek { get; set; }
+    public bool IsClosed { get; set; }
+    public TimeOnly? OpenTime { get; set; }   // null when IsClosed
+    public TimeOnly? CloseTime { get; set; }  // null when IsClosed
+    public Business Business { get; set; } = null!;
+}
+
+public class BusinessClosure
+{
+    public Guid Id { get; set; }
+    public required Guid BusinessId { get; set; }
+    public required DateOnly StartDate { get; set; }
+    public required DateOnly EndDate { get; set; }   // inclusive
+    public string? Reason { get; set; }
+    public Business Business { get; set; } = null!;
+}
+```
+`BusinessHours` is a fixed weekly schedule — up to one row per `DayOfWeek` (unique index on `(BusinessId, DayOfWeek)`), always written as a complete replacement of the week rather than a per-day upsert: `IBusinessService.SetHoursAsync` → `IBusinessRepository.SetHoursAsync` deletes every existing row for the business and re-inserts whatever list it's given. A business with zero `BusinessHours` rows means "hours never configured" — distinct from every day being marked `IsClosed`, and treated as "unknown" (not "closed") by the open/closed calculation below. `BusinessClosure` is the opposite shape: an open-ended list of independent date ranges a manager adds/removes one at a time (`AddClosureAsync`/`RemoveClosureAsync`), each overriding `BusinessHours` for its `[StartDate, EndDate]` window regardless of what that weekday's hours say — used for vacations/one-off closures rather than the recurring weekly pattern.
+
+Both are cascade-deleted with their `Business` (`EcoMealDbContext.OnModelCreating`). Authorization mirrors `UpdateAsync`: admin or one of the business's own staff (`BusinessService.EnsureStaffOrAdminAsync`, factored out of the staff-or-admin check `UpdateAsync` already had).
+
+`Models.BusinessHoursStatus` is the pure open/closed calculation both `Home.razor`'s card badge and `BusinessDetail.razor`'s hours panel call — `IsOpenNow(hours, closures, localNow)` returns `null` (unknown, hide the indicator) when `hours` is empty, `false` when an active `BusinessClosure` covers `localNow`'s date or today's `BusinessHours` row is missing/closed/outside its open–close window, `true` otherwise. It takes the already-loaded collections rather than a `Business`/DbContext, so it's covered by plain unit tests (`Tests/Models/BusinessHoursStatusTests.cs`) with no database involved — including the overnight-window case (`CloseTime < OpenTime`, e.g. 22:00–02:00) where a naive `>= open && < close` check would wrongly read "closed" for the stretch after midnight. `localNow` is the viewer's browser-local time via `ClientTimeZoneService`, same convention `PickupLabel` already uses for pickup windows — this app has no per-business timezone field, so a business's hours are assumed to mean the same local time as everything else it shows.
 
 #### BusinessType / PackageType / Status
 ```csharp
@@ -780,14 +817,15 @@ var generated = await templateService.GenerateDueInstancesAsync();
    - `WeightKg`, `DietaryTags`, and `Business.Latitude`/`Longitude` are **backfill-only** — only set if currently `0`/empty/`null` — since the seeder can't distinguish "never set" from "an admin/manager deliberately cleared it," so it defaults to filling in demo data either way rather than guessing.
 5. **Demo business staff** (`SeedBusinessStaffAsync`) — staffs the demo managers across the demo businesses, reconciled by `(BusinessId, UserId)` pair like the steps above: the first demo manager staffs both Stadionul de Gusturi and VAR Bistro (one staffer, several businesses), and the second demo manager joins the first at Stadionul de Gusturi (several staff, one business) — a fresh database demonstrates both shapes of the many-to-many without an admin having to click through `/businesses` first.
 6. **Demo recurring template** (`SeedPackageTemplateAsync`) — turns the demo-staffed business's "Golden Boot Surprise Bag" package into a `PackageTemplate` (fixed GUID, same idempotency check as the lookup tables) so `/packages/templates` and the 🔁 "Daily" badge aren't empty on a fresh database. Runs once; `PackageTemplateGenerationService` (§8) owns that package's future daily instances from there.
-7. **Demo customer/manager activity** (`SeedDemoActivityAsync`) — **only on a genuinely fresh database** (`if (await db.Orders.AnyAsync()) return;`, unlike the reconcile-on-every-run steps above), creates seven orders spanning every status (`Pending`/`Confirmed`/`Completed`×3/`Cancelled`/`NoShow`) across the last 14 days for the demo customer/manager accounts from point 2, plus favorites, reviews, and notifications. Since every real `Order` now only exists once its Stripe payment is confirmed (§3), each seeded order also gets a matching `Payment` row — `Refunded` for the cancelled one (mirroring `OrderService.RefundIfPaidAsync`), left `Succeeded` for the no-show (that's what makes the no-show fee real, per FEATURE_IDEAS.md's Phase 7). This exists so every feature (dashboard trend chart, CSV export, reorder, the notification bell, QR pickup, reviews, the `NoShow` badge, the `/payments` ledger) has real data to look at immediately after a fresh `docker compose up`, without manually clicking through the app first. Because it's gated on "no orders exist yet" rather than reconciled like steps 3–5, it never touches orders placed by real usage afterward.
+7. **Demo business hours & closures** (`SeedBusinessHoursAsync`, `SeedBusinessClosuresAsync`) — a full weekly `BusinessHours` schedule per demo business, varied by type (restaurants closed one weekday, bakeries/cafes mornings-to-evening, groceries long hours every day, food trucks evenings only), plus two `BusinessClosure` rows: one covering today (so the holiday-closure banner is visible immediately) and one starting a few weeks out (so removing a not-yet-active closure is demoable without it affecting "closed now"). Both gated on the relevant table being empty, so neither re-runs once seeded.
+8. **Demo customer/manager activity** (`SeedDemoActivityAsync`) — **only on a genuinely fresh database** (`if (await db.Orders.AnyAsync()) return;`, unlike the reconcile-on-every-run steps above), creates seven orders spanning every status (`Pending`/`Confirmed`/`Completed`×3/`Cancelled`/`NoShow`) across the last 14 days for the demo customer/manager accounts from point 2, plus favorites, reviews, and notifications. Since every real `Order` now only exists once its Stripe payment is confirmed (§3), each seeded order also gets a matching `Payment` row — `Refunded` for the cancelled one (mirroring `OrderService.RefundIfPaidAsync`), left `Succeeded` for the no-show (that's what makes the no-show fee real, per FEATURE_IDEAS.md's Phase 7). This exists so every feature (dashboard trend chart, CSV export, reorder, the notification bell, QR pickup, reviews, the `NoShow` badge, the `/payments` ledger) has real data to look at immediately after a fresh `docker compose up`, without manually clicking through the app first. Because it's gated on "no orders exist yet" rather than reconciled like steps 3–5, it never touches orders placed by real usage afterward.
 
    The same method also adds 9 **historical** packages (fixed GUIDs, `PickupStart`/`PickupEnd` already in the past across the last several days/hours rather than "today") each with a `Completed` order for less than its full quantity, plus their own `Payment` rows — purely so the Phase 8 Business Analytics card has a non-trivial sell-through rate (~70%, not 0% or 100%) and a multi-bar hourly chart to show immediately. Unlike the packages from point 4, these never appear on the live storefront (their pickup window has already closed) — they only surface in order history and dashboard analytics.
 
-8. **Phase 9 approval/moderation demo data** (`SeedApprovalDemoBusinessesAsync`, `SeedModerationDemoDataAsync`, `SeedReportsAndAuditLogAsync`) — so the approval queue, moderation state, `/reports`, and `/audit-log` aren't empty on a fresh database:
+9. **Phase 9 approval/moderation demo data** (`SeedApprovalDemoBusinessesAsync`, `SeedModerationDemoDataAsync`, `SeedReportsAndAuditLogAsync`) — so the approval queue, moderation state, `/reports`, and `/audit-log` aren't empty on a fresh database:
    - Two extra businesses with fixed GUIDs, submitted by the demo customer: "Golazo Grill" (`PendingApproval`) and "Offside Kitchen" (`Rejected`, with a `RejectionReason`) — reconciled like point 4 (idempotent add-if-missing by ID), not gated on "fresh database only."
    - One existing demo business ("Fan Zone Grill") and one existing demo package ("Red Card Pastry Box") are backfilled `IsHidden = true` with a `HiddenReason`, chosen specifically because neither is referenced by any order/favorite/review seed data elsewhere — so marking them hidden can't break another feature's demo data. Backfill-only (checked via `HiddenReason is null`), same reasoning as `WeightKg`/`DietaryTags` in point 4.
-   - `SeedReportsAndAuditLogAsync` is gated on "no `Report` rows exist yet" (same fresh-database-only shape as point 7) and inserts four `Report`s (one of each: `Open`, two `ActionTaken`, one `Dismissed`) plus a matching, internally-consistent `AuditLog` history (`BusinessApplied` ×2, `BusinessRejected`, `BusinessStaffAdded` ×3 mirroring point 5's staffing, `PackageHidden`/`BusinessHidden`, `ReportActionTaken` ×2, `ReportDismissed`) — every entry corresponds to something this file actually seeded elsewhere, not synthetic filler. Actor defaults to the seeded admin account if one exists, falling back to the demo customer otherwise so the entries never end up with a dangling `ActorUserId`.
+   - `SeedReportsAndAuditLogAsync` is gated on "no `Report` rows exist yet" (same fresh-database-only shape as point 8) and inserts four `Report`s (one of each: `Open`, two `ActionTaken`, one `Dismissed`) plus a matching, internally-consistent `AuditLog` history (`BusinessApplied` ×2, `BusinessRejected`, `BusinessStaffAdded` ×3 mirroring point 5's staffing, `PackageHidden`/`BusinessHidden`, `ReportActionTaken` ×2, `ReportDismissed`) — every entry corresponds to something this file actually seeded elsewhere, not synthetic filler. Actor defaults to the seeded admin account if one exists, falling back to the demo customer otherwise so the entries never end up with a dangling `ActorUserId`.
 
 This reconciliation approach — add-if-missing, refresh-if-stale, backfill-if-empty, never overwrite a live/customized value — is what lets the exact same seeder run unconditionally on every container start (see `docker-compose.test.yml`) without ever fighting real usage data.
 
@@ -805,6 +843,8 @@ This reconciliation approach — add-if-missing, refresh-if-stale, backfill-if-e
 | `Email:FromAddress` / `Email:FromName` | user-secrets / docker-compose env | The `From:` header on outgoing emails; defaults to `no-reply@ecomeal.local` / `Eco Meal` |
 | `Stripe:SecretKey` | user-secrets / docker-compose env (`Stripe__SecretKey`) | A Stripe **test-mode** secret key (`sk_test_...`). Empty by default — `StripeGateway.EnsureConfigured` then turns any checkout attempt into "payments aren't configured yet" instead of an SDK exception, so the app still runs (browsing, orders history, everything but actually checking out) with zero Stripe setup |
 | `Stripe:Currency` | user-secrets / docker-compose env (`Stripe__Currency`) | Lowercase ISO currency code passed to Stripe Checkout; defaults to `ron` |
+| `Serilog:MinimumLevel:Default` / `:Override:*` | `appsettings.json` / `appsettings.{Environment}.json` | Read by `builder.Host.UseSerilog(...)`'s `ReadFrom.Configuration` in `Program.cs`. Base config sets `Default: Information`; `appsettings.Development.json` overrides it to `Debug`. Both override `Microsoft.AspNetCore`/`Microsoft.EntityFrameworkCore` down to `Warning` so framework noise doesn't drown out app-level logs |
+| `Serilog:WriteTo` | `appsettings.json` | Sink list — a `Console` sink with a compact `[HH:mm:ss LVL] Message` template by default. Adding a file/aggregator sink is a config-only change (plus the matching `Serilog.Sinks.*` NuGet package), no code change needed |
 | `Logging:LogLevel` | `appsettings.json` | Standard ASP.NET Core logging config; `Microsoft.AspNetCore` pinned to `Warning` to keep request-pipeline noise out of the console in Development |
 
 No `appsettings.Production.json` exists — the only environment-specific file is `appsettings.Development.json`, which layers in the seed-admin credentials for local dev so a fresh `dotnet run` against an empty DB has a working login without extra setup. `docker-compose.test.yml` is explicitly documented (README) as a local test/demo harness, not a production deployment (fixed DB password, HTTP only) — it also bundles a `mailpit` container and points `Email:Smtp:Host` at it, so every email the app sends is visible at `http://localhost:8025` with zero real SMTP setup.
@@ -824,6 +864,8 @@ Two kinds of tests, deliberately using different EF Core providers for different
 - **`Services/PackageServiceTests.cs`** — covers the Phase 8 additions: the bulk-action toolbar (`DuplicateManyAsync`/`AdjustQuantityManyAsync`/`ExtendPickupWindowManyAsync`, including that a manager not staffed to *every* affected package's business throws and saves nothing) and `GetForAnalyticsAsync`'s admin-vs-manager scoping, plus Phase 9's `HideAsync`/`UnhideAsync` authorization and state changes. `IPackageRepository`/`IBusinessService` are mocked, same shape as `BusinessServiceTests.cs`.
 - **`Services/BusinessServiceTests.cs`** — also covers Phase 9's `ApplyAsync` (anonymous throws, signed-in sets `PendingApproval` + `SubmittedByUserId`), `ApproveAsync`/`RejectAsync` (admin-only, including that a `Rejected` business can be reconsidered back to `Approved`), and `HideAsync`/`UnhideAsync` (admin-only, notifies staff). `IAuditLogService`/`INotificationService` are mocked alongside `IBusinessRepository`.
 - **`Services/ReportServiceTests.cs`** — covers `ReportService`'s authorization split (submit open to any signed-in user; dismiss/take-action/list admin-only) and that `TakeActionAsync` delegates to the right target service (`IBusinessService.HideAsync` vs. `IPackageService.HideAsync`) based on `TargetType` rather than mutating the target itself. `IReportRepository`/`IBusinessService`/`IPackageService`/`IAuditLogService` are mocked.
+- **`Repositories/BusinessRepositoryTests.cs`** — the many-to-many `BusinessStaff` CRUD and the `SetHoursAsync`/`AddClosureAsync`/`RemoveClosureAsync` hours/closures methods against a real `EcoMealDbContext`, InMemory-provider-backed (`InMemoryDb.Create()`) rather than mocked — exercises `BusinessRepository`'s own query/persistence logic instead of `BusinessService`'s authorization, which `BusinessServiceTests.cs` above covers with the repository mocked out.
+- **`Models/BusinessHoursStatusTests.cs`** — pure-function coverage for `BusinessHoursStatus.IsOpenNow`/`ActiveClosure` (§3), no DbContext at all: today-in-window, today marked closed, no row for today, an active vs. an out-of-range `BusinessClosure`, and the overnight-window wraparound case (`CloseTime < OpenTime`).
 - **`Database/DbSeederTests.cs`** — integration tests that run `DbSeeder.SeedAsync` against a **real Postgres** container (`Testcontainers.PostgreSql`, `Tests/TestSupport/PostgresFixture.cs`), applying real EF migrations first via `MigrateAsync()` — exactly what `Program.cs` does on startup. This is deliberate, not incidental: an InMemory-provider test wouldn't replay real migration history, so it can't catch the class of bug this project has hit before (see §9 point 4's history and the old `SeedData`/`MoreSeedData` migrations vs. `DbSeeder` conflict) — only a real migration run proves the current seed data actually wins. One Postgres container is shared per test class; each test gets its own logical database on it (`CreateDatabaseAsync`) for isolation without paying container-startup cost per test. Requires Docker to be running locally.
 
 Given this split, Postgres-only query behavior (`EF.Functions.ILike` in `OrderRepository`, the `xmin` optimistic-concurrency token on `Package`, the `order_numbers` sequence) is exercised by the seeding integration tests' real Postgres round-trip, not by the InMemory-backed unit tests.

@@ -14,6 +14,9 @@ public static class AuditActions
     public const string BusinessRejected = "BusinessRejected";
     public const string BusinessHidden = "BusinessHidden";
     public const string BusinessUnhidden = "BusinessUnhidden";
+    public const string BusinessHoursUpdated = "BusinessHoursUpdated";
+    public const string BusinessClosureAdded = "BusinessClosureAdded";
+    public const string BusinessClosureRemoved = "BusinessClosureRemoved";
     public const string PackageHidden = "PackageHidden";
     public const string PackageUnhidden = "PackageUnhidden";
     public const string ReportDismissed = "ReportDismissed";

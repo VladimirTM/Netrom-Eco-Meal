@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Repositories;
 using Netrom_Eco_Meal.Tests.TestSupport;
@@ -134,5 +135,104 @@ public class BusinessRepositoryTests
 
         Assert.Single(result);
         Assert.Equal(staffedBusiness.Id, result[0].Id);
+    }
+
+    // ---- SetHoursAsync / AddClosureAsync / RemoveClosureAsync ------------
+
+    [Fact]
+    public async Task SetHoursAsync_NoExistingRows_InsertsAll()
+    {
+        await using var db = InMemoryDb.Create();
+        var repo = new BusinessRepository(db);
+        var business = TestData.Business();
+        db.Businesses.Add(business);
+        await db.SaveChangesAsync();
+
+        await repo.SetHoursAsync(business.Id, [
+            new BusinessHours { BusinessId = business.Id, DayOfWeek = DayOfWeek.Monday, OpenTime = new TimeOnly(9, 0), CloseTime = new TimeOnly(18, 0) },
+            new BusinessHours { BusinessId = business.Id, DayOfWeek = DayOfWeek.Tuesday, IsClosed = true },
+        ]);
+
+        var stored = await db.BusinessHours.Where(h => h.BusinessId == business.Id).ToListAsync();
+        Assert.Equal(2, stored.Count);
+    }
+
+    [Fact]
+    public async Task SetHoursAsync_CalledAgain_ReplacesPreviousRowsEntirely()
+    {
+        await using var db = InMemoryDb.Create();
+        var repo = new BusinessRepository(db);
+        var business = TestData.Business();
+        db.Businesses.Add(business);
+        await db.SaveChangesAsync();
+        await repo.SetHoursAsync(business.Id, [
+            new BusinessHours { BusinessId = business.Id, DayOfWeek = DayOfWeek.Monday, OpenTime = new TimeOnly(9, 0), CloseTime = new TimeOnly(18, 0) },
+        ]);
+
+        await repo.SetHoursAsync(business.Id, [
+            new BusinessHours { BusinessId = business.Id, DayOfWeek = DayOfWeek.Monday, OpenTime = new TimeOnly(10, 0), CloseTime = new TimeOnly(20, 0) },
+            new BusinessHours { BusinessId = business.Id, DayOfWeek = DayOfWeek.Tuesday, OpenTime = new TimeOnly(10, 0), CloseTime = new TimeOnly(20, 0) },
+        ]);
+
+        var stored = await db.BusinessHours.Where(h => h.BusinessId == business.Id).ToListAsync();
+        Assert.Equal(2, stored.Count);
+        Assert.Equal(new TimeOnly(10, 0), stored.Single(h => h.DayOfWeek == DayOfWeek.Monday).OpenTime);
+    }
+
+    [Fact]
+    public async Task AddClosureAsync_Persists()
+    {
+        await using var db = InMemoryDb.Create();
+        var repo = new BusinessRepository(db);
+        var business = TestData.Business();
+        db.Businesses.Add(business);
+        await db.SaveChangesAsync();
+
+        var closure = await repo.AddClosureAsync(new BusinessClosure
+        {
+            BusinessId = business.Id, StartDate = new DateOnly(2026, 8, 10), EndDate = new DateOnly(2026, 8, 12), Reason = "Holiday",
+        });
+
+        Assert.NotEqual(Guid.Empty, closure.Id);
+        Assert.Single(await db.BusinessClosures.Where(c => c.BusinessId == business.Id).ToListAsync());
+    }
+
+    [Fact]
+    public async Task RemoveClosureAsync_ExistingClosure_ReturnsTrueAndRemoves()
+    {
+        await using var db = InMemoryDb.Create();
+        var repo = new BusinessRepository(db);
+        var business = TestData.Business();
+        db.Businesses.Add(business);
+        await db.SaveChangesAsync();
+        var closure = await repo.AddClosureAsync(new BusinessClosure
+        {
+            BusinessId = business.Id, StartDate = new DateOnly(2026, 8, 10), EndDate = new DateOnly(2026, 8, 12),
+        });
+
+        var result = await repo.RemoveClosureAsync(business.Id, closure.Id);
+
+        Assert.True(result);
+        Assert.Empty(await db.BusinessClosures.Where(c => c.BusinessId == business.Id).ToListAsync());
+    }
+
+    [Fact]
+    public async Task RemoveClosureAsync_WrongBusinessId_ReturnsFalseAndDoesNotRemove()
+    {
+        await using var db = InMemoryDb.Create();
+        var repo = new BusinessRepository(db);
+        var business = TestData.Business();
+        var otherBusiness = TestData.Business();
+        db.Businesses.AddRange(business, otherBusiness);
+        await db.SaveChangesAsync();
+        var closure = await repo.AddClosureAsync(new BusinessClosure
+        {
+            BusinessId = business.Id, StartDate = new DateOnly(2026, 8, 10), EndDate = new DateOnly(2026, 8, 12),
+        });
+
+        var result = await repo.RemoveClosureAsync(otherBusiness.Id, closure.Id);
+
+        Assert.False(result);
+        Assert.Single(await db.BusinessClosures.Where(c => c.BusinessId == business.Id).ToListAsync());
     }
 }

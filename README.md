@@ -57,6 +57,7 @@ whichever one they pick in the sidebar switcher:
 - ASP.NET Core 10 / Blazor Server (interactive server render mode)
 - EF Core + PostgreSQL (Npgsql)
 - ASP.NET Identity for auth/roles
+- Serilog for structured logging (console sink, per-request logging, config-driven levels)
 - QRCoder for server-side pickup QR generation, jsQR (vendored) for client-side camera scanning
 - Leaflet + OpenStreetMap tiles (CDN, no API key) for the home page's map view
 - Stripe Checkout (`Stripe.net`) for payment
@@ -85,6 +86,18 @@ step needed.
 No SMTP server is required to run the app: emails (order updates, back-in-stock alerts,
 account confirmation/password reset) are just logged instead of sent when `Email:Smtp:Host`
 isn't configured. See [Email](#email) below to wire up a real sender or a local catcher.
+
+## Logging
+
+Every log line — app startup, request timing/status via `UseSerilogRequestLogging`, unhandled
+exceptions, `DbSeeder`'s own `ILogger` calls — goes through Serilog rather than the default
+console logger, writing structured lines to the console (readable locally, still line-per-event
+under `docker compose logs`). Configure sinks and minimum levels under the `Serilog` section in
+`appsettings.json`/`appsettings.{Environment}.json` — no code changes needed to add a sink (e.g.
+a file or a hosted log aggregator) or turn up verbosity for a specific namespace; see the
+`Serilog:MinimumLevel:Override` blocks already there for `Microsoft.AspNetCore` and
+`Microsoft.EntityFrameworkCore` as an example. `appsettings.Development.json` defaults to
+`Debug` instead of `Information` for local runs.
 
 ## Email
 
@@ -196,6 +209,14 @@ It also turns one of the demo-managed business's packages into a recurring templ
 `/packages/templates` and the 🔁 "Daily" badge on `/packages` aren't empty on a fresh
 database — `PackageTemplateGenerationService` takes over generating that package's future
 daily instances from there.
+
+Every demo business gets a full weekly schedule too — varied by type (restaurants run an
+evening service and close one weekday, bakeries/cafes open mornings through early evening,
+groceries run long hours every day, food trucks are evening-only) — so the "closed now"
+indicator has real variety instead of every kitchen reading the same open/closed. One business
+(Cartonaș Galben Café) is seeded with an active holiday closure so the closure banner is visible
+immediately, and another (Poarta de Aur Bakery) has one starting a few weeks out, to demonstrate
+removing a not-yet-active closure without it affecting "closed now" yet.
 
 It also creates three demo accounts, so every feature has real data to look at right away
 instead of an empty app:

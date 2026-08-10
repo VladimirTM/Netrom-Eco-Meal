@@ -4,6 +4,7 @@
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Mvc
 @using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
@@ -121,6 +122,119 @@
     </div>
 </div>
 
+@if (IsEdit && !_forbidden && !_notFound)
+{
+    <div class="row justify-content-center mt-4">
+        <div class="col-lg-7 col-xl-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4">
+                    <h2 class="h5 fw-bold mb-1">Opening Hours</h2>
+                    <p class="text-muted small mb-3">Powers the "closed now" indicator customers see on your kitchen's card and page.</p>
+
+                    @if (_hoursError is not null)
+                    {
+                        <div class="alert alert-danger py-2 small">@_hoursError</div>
+                    }
+                    @if (_hoursSavedMessage is not null)
+                    {
+                        <div class="alert alert-success py-2 small">@_hoursSavedMessage</div>
+                    }
+
+                    @foreach (var row in _hoursRows)
+                    {
+                        <div class="row g-2 align-items-center mb-2" @key="row.DayOfWeek">
+                            <div class="col-3 small fw-semibold">@row.DayOfWeek.ToString()[..3]</div>
+                            <div class="col-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="@($"closed-{row.DayOfWeek}")" @bind="row.IsClosed"/>
+                                    <label class="form-check-label small" for="@($"closed-{row.DayOfWeek}")">Closed</label>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <input type="time" class="form-control form-control-sm" @bind="row.OpenTime" disabled="@row.IsClosed"/>
+                            </div>
+                            <div class="col-3">
+                                <input type="time" class="form-control form-control-sm" @bind="row.CloseTime" disabled="@row.IsClosed"/>
+                            </div>
+                        </div>
+                    }
+
+                    <button type="button" class="btn btn-outline-primary btn-sm mt-2" disabled="@_savingHours" @onclick="SaveHoursAsync">
+                        @if (_savingHours)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        }
+                        Save hours
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row justify-content-center mt-4">
+        <div class="col-lg-7 col-xl-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4">
+                    <h2 class="h5 fw-bold mb-1">Holiday Closures</h2>
+                    <p class="text-muted small mb-3">Overrides your weekly hours for a date range — e.g. a vacation or a one-off closure.</p>
+
+                    @if (_closureError is not null)
+                    {
+                        <div class="alert alert-danger py-2 small">@_closureError</div>
+                    }
+
+                    @if (_closures.Count > 0)
+                    {
+                        <ul class="list-group list-group-flush mb-3">
+                            @foreach (var closure in _closures)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center px-0" @key="closure.Id">
+                                    <div>
+                                        <div class="small fw-semibold">@closure.StartDate.ToString("MMM d, yyyy") – @closure.EndDate.ToString("MMM d, yyyy")</div>
+                                        @if (!string.IsNullOrWhiteSpace(closure.Reason))
+                                        {
+                                            <div class="text-muted small">@closure.Reason</div>
+                                        }
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" title="Remove closure" @onclick="() => RemoveClosureAsync(closure.Id)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="text-muted small">No holiday closures scheduled.</p>
+                    }
+
+                    <div class="row g-2">
+                        <div class="col-sm-4">
+                            <label class="form-label small">Start date</label>
+                            <input type="date" class="form-control form-control-sm" @bind="_closureStart"/>
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label small">End date</label>
+                            <input type="date" class="form-control form-control-sm" @bind="_closureEnd"/>
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label small">Reason <span class="text-muted fw-normal">(optional)</span></label>
+                            <input type="text" class="form-control form-control-sm" placeholder="e.g. Summer vacation" @bind="_closureReason"/>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-outline-primary btn-sm mt-3" disabled="@_addingClosure" @onclick="AddClosureAsync">
+                        @if (_addingClosure)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        }
+                        Add closure
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter] public Guid? Id { get; set; }
 
@@ -132,6 +246,21 @@
     private bool _notFound;
     private bool _locating;
     private string? _locationError;
+
+    private static readonly DayOfWeek[] WeekOrder =
+        [DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday];
+
+    private List<BusinessHours> _hoursRows = [];
+    private bool _savingHours;
+    private string? _hoursError;
+    private string? _hoursSavedMessage;
+
+    private List<BusinessClosure> _closures = [];
+    private DateOnly? _closureStart;
+    private DateOnly? _closureEnd;
+    private string? _closureReason;
+    private bool _addingClosure;
+    private string? _closureError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -172,6 +301,9 @@
             _model.Latitude = existing.Latitude;
             _model.Longitude = existing.Longitude;
             _model.BusinessTypeId = existing.BusinessTypeId;
+
+            _hoursRows = BuildWeekRows(existing.Hours);
+            _closures = existing.Closures.OrderBy(c => c.StartDate).ToList();
         }
         else if (_businessTypes.Count > 0)
         {
@@ -179,6 +311,81 @@
             // this default BusinessTypeId stays Guid.Empty and the insert fails its FK constraint.
             _model.BusinessTypeId = _businessTypes[0].Id;
         }
+    }
+
+    // Always returns all 7 days, filling in a 09:00–18:00 default for any day not yet configured.
+    private static List<BusinessHours> BuildWeekRows(ICollection<BusinessHours> existing) =>
+        WeekOrder.Select(day => existing.FirstOrDefault(h => h.DayOfWeek == day) is { } found
+            ? new BusinessHours { DayOfWeek = day, BusinessId = found.BusinessId, IsClosed = found.IsClosed, OpenTime = found.OpenTime, CloseTime = found.CloseTime }
+            : new BusinessHours { DayOfWeek = day, BusinessId = Guid.Empty, IsClosed = false, OpenTime = new TimeOnly(9, 0), CloseTime = new TimeOnly(18, 0) })
+            .ToList();
+
+    private async Task SaveHoursAsync()
+    {
+        _hoursError = null;
+        _hoursSavedMessage = null;
+
+        var incomplete = _hoursRows.FirstOrDefault(r => !r.IsClosed && (r.OpenTime is null || r.CloseTime is null));
+        if (incomplete is not null)
+        {
+            _hoursError = $"Set both an open and close time for {incomplete.DayOfWeek}, or mark it closed.";
+            return;
+        }
+
+        _savingHours = true;
+        var result = await BusinessController.SetHoursAsync(Id!.Value, _hoursRows);
+        _savingHours = false;
+
+        if (result is UnauthorizedResult)
+        {
+            _hoursError = "You don't have permission to edit this business's hours.";
+            return;
+        }
+
+        _hoursSavedMessage = "Hours saved.";
+    }
+
+    private async Task AddClosureAsync()
+    {
+        _closureError = null;
+
+        if (_closureStart is null || _closureEnd is null)
+        {
+            _closureError = "Pick a start and end date.";
+            return;
+        }
+
+        if (_closureEnd < _closureStart)
+        {
+            _closureError = "End date must be on or after the start date.";
+            return;
+        }
+
+        _addingClosure = true;
+        var result = await BusinessController.AddClosureAsync(Id!.Value, _closureStart.Value, _closureEnd.Value, _closureReason);
+        _addingClosure = false;
+
+        if (result.Result is UnauthorizedResult)
+        {
+            _closureError = "You don't have permission to edit this business's closures.";
+            return;
+        }
+
+        if (result.Value is { } closure)
+        {
+            _closures.Add(closure);
+            _closures = _closures.OrderBy(c => c.StartDate).ToList();
+            _closureStart = null;
+            _closureEnd = null;
+            _closureReason = null;
+        }
+    }
+
+    private async Task RemoveClosureAsync(Guid closureId)
+    {
+        var result = await BusinessController.RemoveClosureAsync(Id!.Value, closureId);
+        if (result is NoContentResult)
+            _closures.RemoveAll(c => c.Id == closureId);
     }
 
     private async Task Submit()

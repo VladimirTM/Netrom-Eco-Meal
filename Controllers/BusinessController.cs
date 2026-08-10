@@ -95,4 +95,42 @@ public class BusinessController(IBusinessService businessService) : ControllerBa
         await businessService.UnhideAsync(businessId);
         return NoContent();
     }
+
+    public async Task<ActionResult> SetHoursAsync(Guid businessId, List<BusinessHours> hours)
+    {
+        try
+        {
+            await businessService.SetHoursAsync(businessId, hours);
+            return NoContent();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized();
+        }
+    }
+
+    public async Task<ActionResult<BusinessClosure>> AddClosureAsync(Guid businessId, DateOnly startDate, DateOnly endDate, string? reason = null)
+    {
+        try
+        {
+            return await businessService.AddClosureAsync(businessId, startDate, endDate, reason);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized();
+        }
+    }
+
+    public async Task<ActionResult> RemoveClosureAsync(Guid businessId, Guid closureId)
+    {
+        try
+        {
+            var success = await businessService.RemoveClosureAsync(businessId, closureId);
+            return success ? NoContent() : NotFound();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized();
+        }
+    }
 }

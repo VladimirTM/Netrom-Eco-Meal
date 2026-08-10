@@ -63,6 +63,8 @@ public static class DbSeeder
         await SeedBusinessesAsync(db);
         await SeedPackagesAsync(db);
         await SeedPackageTemplateAsync(db);
+        await SeedBusinessHoursAsync(db);
+        await SeedBusinessClosuresAsync(db);
         await SeedBusinessStaffAsync(db, demoManager?.Id, demoManager2?.Id);
 
         if (demoCustomer is not null)
@@ -346,6 +348,65 @@ public static class DbSeeder
             LastGeneratedDate = DateOnly.FromDateTime(linkedPackage.PickupStart),
         });
         linkedPackage.TemplateId = templateId;
+
+        await db.SaveChangesAsync();
+    }
+
+    // A plausible weekly schedule per business type, so the "closed now" indicator has real
+    // variety on a fresh database instead of every kitchen reading the same open/closed.
+    private static async Task SeedBusinessHoursAsync(EcoMealDbContext db)
+    {
+        if (await db.BusinessHours.AnyAsync()) return;
+
+        List<BusinessHours> Week(Guid businessId, TimeOnly open, TimeOnly close, DayOfWeek? closedDay = null) =>
+            Enum.GetValues<DayOfWeek>().Select(day =>
+            {
+                var isClosed = day == closedDay;
+                return new BusinessHours
+                {
+                    Id = Guid.NewGuid(), BusinessId = businessId, DayOfWeek = day, IsClosed = isClosed,
+                    OpenTime = isClosed ? null : open, CloseTime = isClosed ? null : close,
+                };
+            }).ToList();
+
+        var hours = new List<BusinessHours>();
+        // Restaurants — evening service, closed one weekday each (a common industry pattern).
+        hours.AddRange(Week(new Guid("44444444-0000-0000-0000-000000000001"), new TimeOnly(12, 0), new TimeOnly(23, 0), DayOfWeek.Monday));
+        hours.AddRange(Week(new Guid("44444444-0000-0000-0000-000000000002"), new TimeOnly(12, 0), new TimeOnly(22, 30), DayOfWeek.Monday));
+        hours.AddRange(Week(new Guid("44444444-0000-0000-0000-000000000003"), new TimeOnly(11, 30), new TimeOnly(22, 0), DayOfWeek.Tuesday));
+        // Bakeries — early morning through early evening.
+        hours.AddRange(Week(new Guid("44444444-0000-0000-0000-000000000004"), new TimeOnly(7, 0), new TimeOnly(19, 0)));
+        hours.AddRange(Week(new Guid("44444444-0000-0000-0000-000000000005"), new TimeOnly(6, 30), new TimeOnly(18, 30)));
+        hours.AddRange(Week(new Guid("44444444-0000-0000-0000-000000000006"), new TimeOnly(7, 0), new TimeOnly(18, 0), DayOfWeek.Sunday));
+        // Cafes — mid-morning through evening.
+        hours.AddRange(Week(new Guid("44444444-0000-0000-0000-000000000007"), new TimeOnly(8, 0), new TimeOnly(21, 0)));
+        hours.AddRange(Week(new Guid("44444444-0000-0000-0000-000000000008"), new TimeOnly(8, 0), new TimeOnly(20, 0)));
+        // Grocery stores — long hours, open every day.
+        hours.AddRange(Week(new Guid("44444444-0000-0000-0000-000000000009"), new TimeOnly(8, 0), new TimeOnly(22, 0)));
+        hours.AddRange(Week(new Guid("44444444-0000-0000-0000-000000000010"), new TimeOnly(9, 0), new TimeOnly(21, 0)));
+        // Food trucks — evening only.
+        hours.AddRange(Week(new Guid("44444444-0000-0000-0000-000000000011"), new TimeOnly(17, 0), new TimeOnly(23, 0)));
+        hours.AddRange(Week(new Guid("44444444-0000-0000-0000-000000000012"), new TimeOnly(17, 0), new TimeOnly(22, 30)));
+
+        db.BusinessHours.AddRange(hours);
+        await db.SaveChangesAsync();
+    }
+
+    // One business closed right now (shows the holiday-closure banner immediately) and one
+    // closed starting in a few weeks (shows the closures list without affecting "closed now" yet).
+    private static async Task SeedBusinessClosuresAsync(EcoMealDbContext db)
+    {
+        var activeClosureBusinessId = new Guid("44444444-0000-0000-0000-000000000008");
+        var upcomingClosureBusinessId = new Guid("44444444-0000-0000-0000-000000000004");
+
+        if (await db.BusinessClosures.AnyAsync(c => c.BusinessId == activeClosureBusinessId || c.BusinessId == upcomingClosureBusinessId))
+            return;
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        db.BusinessClosures.AddRange(
+            new BusinessClosure { Id = Guid.NewGuid(), BusinessId = activeClosureBusinessId, StartDate = today.AddDays(-1), EndDate = today.AddDays(2), Reason = "Staff on holiday — back Wednesday." },
+            new BusinessClosure { Id = Guid.NewGuid(), BusinessId = upcomingClosureBusinessId, StartDate = today.AddDays(20), EndDate = today.AddDays(27), Reason = "Annual summer closure." }
+        );
 
         await db.SaveChangesAsync();
     }

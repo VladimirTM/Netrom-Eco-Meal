@@ -2302,6 +2302,19 @@ h1:focus {
     letter-spacing: 0.04em;
 }
 
+.biz-card-closed-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #b91c1c;
+    background: #fef2f2;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+}
+
 .biz-card-name {
     font-size: 1.2rem;
     font-weight: 700;
@@ -2498,6 +2511,71 @@ h1:focus {
 
 .biz-modal-address i {
     margin-right: 0.3rem;
+}
+
+.biz-modal-open-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.biz-modal-open-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.biz-modal-open-badge-open .biz-modal-open-dot {
+    background: var(--em-leaf);
+    box-shadow: 0 0 0 2px rgba(47, 158, 92, 0.35);
+}
+
+.biz-modal-open-badge-closed .biz-modal-open-dot {
+    background: #f87171;
+    box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.35);
+}
+
+.biz-modal-closure-notice {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #b91c1c;
+    background: #fef2f2;
+    border-radius: 10px;
+    padding: 0.65rem 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.biz-hours-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.biz-hours-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--em-muted);
+    padding: 0.3rem 0.6rem;
+    border-radius: 8px;
+}
+
+.biz-hours-row-today {
+    background: var(--em-surface);
+    color: var(--em-text);
+    font-weight: 700;
 }
 
 .biz-modal-body {

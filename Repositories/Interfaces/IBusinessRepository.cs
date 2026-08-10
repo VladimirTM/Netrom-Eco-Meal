@@ -17,4 +17,10 @@ public interface IBusinessRepository
     public Task AddAsync(Business business);
     public Task DeleteAsync(Guid id);
     public Task SaveChangesAsync();
+
+    // Replaces the business's full set of weekly-hours rows (up to one per DayOfWeek) in one go —
+    // there's no partial add/remove for hours, only "here's this week's schedule now."
+    public Task SetHoursAsync(Guid businessId, List<BusinessHours> hours);
+    public Task<BusinessClosure> AddClosureAsync(BusinessClosure closure);
+    public Task<bool> RemoveClosureAsync(Guid businessId, Guid closureId);
 }

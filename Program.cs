@@ -11,6 +11,7 @@ using Netrom_Eco_Meal.Services;
 using Netrom_Eco_Meal.Services.Email;
 using Netrom_Eco_Meal.Services.Interfaces;
 using Netrom_Eco_Meal.Services.Payments;
+using Serilog;
 
 // Single-locale app: prices are always RON, so every ToString("C") call site (cart,
 // package cards, orders...) gets that formatting for free instead of the server's OS culture.
@@ -18,7 +19,21 @@ var romanianCulture = new CultureInfo("ro-RO");
 CultureInfo.DefaultThreadCurrentCulture = romanianCulture;
 CultureInfo.DefaultThreadCurrentUICulture = romanianCulture;
 
+// Catches anything that fails before the real, config-driven logger below is up.
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
+
 var builder = WebApplication.CreateBuilder(args);
+
+// Sinks/levels live under "Serilog" in appsettings.json — see that file for the default shape.
+builder.Host.UseSerilog((context, services, configuration) => configuration
+    .ReadFrom.Configuration(context.Configuration)
+    .ReadFrom.Services(services)
+    .Enrich.FromLogContext()
+    .Enrich.WithMachineName()
+    .Enrich.WithEnvironmentName()
+    .Enrich.WithThreadId());
 
 // Left unset when Stripe:SecretKey isn't configured — StripeGateway.EnsureConfigured then turns
 // any checkout attempt into a friendly "payments aren't configured yet" error instead of an SDK
@@ -102,6 +117,10 @@ builder.Services.AddHostedService<OrderLifecycleSweepService>();
 builder.Services.AddHostedService<PackageTemplateGenerationService>();
 
 var app = builder.Build();
+
+// One structured line per request (method, path, status, elapsed ms) — placed first so it also
+// covers the UseExceptionHandler re-execution below.
+app.UseSerilogRequestLogging();
 
 using (var scope = app.Services.CreateScope())
 {

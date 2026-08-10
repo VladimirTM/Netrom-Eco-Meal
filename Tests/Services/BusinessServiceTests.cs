@@ -297,4 +297,87 @@ public class BusinessServiceTests
         Assert.False(business.IsHidden);
         Assert.Null(business.HiddenReason);
     }
+
+    // ---- SetHoursAsync / AddClosureAsync / RemoveClosureAsync -------------
+
+    [Fact]
+    public async Task SetHoursAsync_NotStaffOfBusiness_Throws()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+        var business = TestData.Business();
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.IsStaffAsync(business.Id, ManagerId)).ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.SetHoursAsync(business.Id, []));
+    }
+
+    [Fact]
+    public async Task SetHoursAsync_StaffOfBusiness_DelegatesToRepository()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+        var business = TestData.Business();
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.IsStaffAsync(business.Id, ManagerId)).ReturnsAsync(true);
+        var hours = new List<BusinessHours> { new() { BusinessId = business.Id, DayOfWeek = DayOfWeek.Monday, OpenTime = new TimeOnly(9, 0), CloseTime = new TimeOnly(18, 0) } };
+
+        await f.Service.SetHoursAsync(business.Id, hours);
+
+        f.Repo.Verify(r => r.SetHoursAsync(business.Id, hours), Times.Once);
+    }
+
+    [Fact]
+    public async Task AddClosureAsync_NotStaffOfBusiness_Throws()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+        var business = TestData.Business();
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.IsStaffAsync(business.Id, ManagerId)).ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            f.Service.AddClosureAsync(business.Id, new DateOnly(2026, 8, 10), new DateOnly(2026, 8, 12), "Holiday"));
+    }
+
+    [Fact]
+    public async Task AddClosureAsync_StaffOfBusiness_DelegatesToRepositoryAndLogsAudit()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+        var business = TestData.Business();
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.IsStaffAsync(business.Id, ManagerId)).ReturnsAsync(true);
+        f.Repo.Setup(r => r.AddClosureAsync(It.IsAny<BusinessClosure>()))
+            .ReturnsAsync((BusinessClosure c) => c);
+
+        var result = await f.Service.AddClosureAsync(business.Id, new DateOnly(2026, 8, 10), new DateOnly(2026, 8, 12), "Holiday");
+
+        Assert.Equal(business.Id, result.BusinessId);
+        f.AuditLog.Verify(a => a.LogAsync(Constants.AuditActions.BusinessClosureAdded, Constants.AuditTargetTypes.Business,
+            business.Id.ToString(), business.Name, It.IsAny<string?>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RemoveClosureAsync_NotStaffOfBusiness_Throws()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+        var business = TestData.Business();
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.IsStaffAsync(business.Id, ManagerId)).ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.RemoveClosureAsync(business.Id, Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task RemoveClosureAsync_StaffOfBusiness_DelegatesToRepository()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+        var business = TestData.Business();
+        var closureId = Guid.NewGuid();
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.IsStaffAsync(business.Id, ManagerId)).ReturnsAsync(true);
+        f.Repo.Setup(r => r.RemoveClosureAsync(business.Id, closureId)).ReturnsAsync(true);
+
+        var result = await f.Service.RemoveClosureAsync(business.Id, closureId);
+
+        Assert.True(result);
+        f.Repo.Verify(r => r.RemoveClosureAsync(business.Id, closureId), Times.Once);
+    }
 }

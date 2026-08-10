@@ -61,14 +61,24 @@ and total kg of food saved to date.
 
 Each card shows a live-count badge ("N live", green dot) if the kitchen has anything available
 right now, a star rating badge if it has reviews, and either "from $X.XX" (its cheapest live
-package) or "Nothing live now" if it's temporarily empty.
+package) or "Nothing live now" if it's temporarily empty. If the kitchen has set weekly hours
+(or a holiday closure) and it's currently outside them, a red **Closed now** badge shows next to
+the kitchen type — this only reflects a manager-entered schedule, so a kitchen that hasn't set
+hours yet never shows the badge either way.
 
 ### View a kitchen and order
 
-Opening a kitchen shows its full profile — description, address, star rating — and every
+Opening a kitchen shows its full profile — description, address, star rating, and an **Open
+now**/**Closed now** badge next to the address if the kitchen has set hours — and every
 currently-live package (already sorted soonest-closing first), each with its type, pickup
 window, description, price, dietary/allergen tag pills, and how many are left after everyone
 else's pending reservations are accounted for.
+
+If the kitchen has set weekly hours, an **Opening hours** section lists all seven days with
+today highlighted; a day with no open/close time shown reads "Closed". If a holiday closure is
+active right now, a banner above the hours reads *"Closed for the holidays until [date] — [the
+manager's reason, if one was given]."* A closure only affects this indicator and badge — it
+doesn't hide the kitchen's live packages or block ordering from them.
 
 Click a package (or **Add** directly from the list) to open its detail view. If a package has
 sold out since the page loaded, the button reads **Sold out** and is disabled instead of
@@ -193,6 +203,27 @@ If you're staffed to more than one business, a **switcher** appears at the top o
 everything below (packages, orders, dashboard, payments) is scoped to whichever one is
 currently selected there. Staffed to just one? The switcher doesn't show up at all; there's
 nothing to switch between.
+
+### Set your hours and closures
+
+From `/businesses/edit/{id}` for your business (reachable via **Businesses** in the sidebar),
+two sections below the main profile fields let you set the schedule customers see as the
+"closed now" badge and hours panel:
+
+- **Opening Hours** — one row per weekday. Tick **Closed** to mark a day fully closed, or set an
+  open/close time (a day left with only one of the two, and not ticked Closed, shows an error on
+  save: *"Set both an open and close time for [Day], or mark it closed."*). **Save hours** always
+  replaces the whole week at once — there's no way to save just one day. Every business starts
+  with no hours configured (the badge and hours panel stay hidden for customers until you save
+  here for the first time), pre-filled with a 09:00–18:00 default on every day to edit from.
+- **Holiday Closures** — an independent list of date ranges (with an optional reason) that
+  override your weekly hours while active, e.g. a vacation. Pick a start and end date and
+  **Add closure**; each existing closure has its own remove button. A closure doesn't need your
+  weekly hours to be set first, and doesn't affect whether your packages can still be ordered —
+  it only changes the "closed now" indicator customers see.
+
+Both sections require you to be an Admin or staffed to the business, same as editing its profile
+fields above them.
 
 ### Manage what's available
 
