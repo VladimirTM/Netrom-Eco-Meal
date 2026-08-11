@@ -90,6 +90,16 @@ public class OrderRepository(EcoMealDbContext context) : IOrderRepository
             o.UserId == userId && o.BusinessId == businessId && o.Status.Name == OrderStatuses.Completed);
     }
 
+    public async Task<List<Package>> GetCompletedPackagesAsync(string userId, Guid businessId)
+    {
+        return await context.OrderPackages
+            .Where(op => op.Order.UserId == userId && op.Order.BusinessId == businessId && op.Order.Status.Name == OrderStatuses.Completed)
+            .Select(op => op.Package)
+            .Distinct()
+            .OrderBy(p => p.Name)
+            .ToListAsync();
+    }
+
     // Platform-wide impact stat for the home hero — only orders actually picked up count as "saved".
     public async Task<decimal> GetTotalWeightSavedKgAsync()
     {

@@ -2785,6 +2785,23 @@ h1:focus {
     font-size: 0.85rem;
 }
 
+.biz-review-package-select {
+    width: auto;
+    max-width: 100%;
+}
+
+.biz-review-package-tag {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(31, 138, 76, 0.1);
+    color: var(--em-leaf-dark);
+}
+
 .biz-review-list {
     display: flex;
     flex-direction: column;

@@ -691,9 +691,11 @@ public static class DbSeeder
             new Favorite { Id = Guid.NewGuid(), UserId = demoCustomer.Id, BusinessId = b10, CreatedAt = now }
         );
 
+        // Tagged to the packages those orders actually contain, so the package-level review tag
+        // has real data on a fresh database instead of only the business-level default.
         db.Reviews.AddRange(
-            new Review { Id = Guid.NewGuid(), BusinessId = b1, UserId = demoCustomer.Id, Rating = 5, Comment = "Great surprise bag, saved us from cooking twice!", CreatedAt = now.AddDays(-6) },
-            new Review { Id = Guid.NewGuid(), BusinessId = b3, UserId = demoCustomer.Id, Rating = 4, Comment = "Solid portion, will order again.", CreatedAt = now.AddDays(-9) }
+            new Review { Id = Guid.NewGuid(), BusinessId = b1, UserId = demoCustomer.Id, PackageId = recentCompleted.OrderPackages.First().PackageId, Rating = 5, Comment = "Great surprise bag, saved us from cooking twice!", CreatedAt = now.AddDays(-6) },
+            new Review { Id = Guid.NewGuid(), BusinessId = b3, UserId = demoCustomer.Id, PackageId = midCompleted.OrderPackages.First().PackageId, Rating = 4, Comment = "Solid portion, will order again.", CreatedAt = now.AddDays(-9) }
         );
 
         // Orders need to be saved first so the order_numbers sequence assigns OrderNumber before

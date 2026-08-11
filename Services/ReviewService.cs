@@ -29,15 +29,16 @@ public class ReviewService(
     {
         var (_, userId) = await currentUser.GetCurrentUserAsync();
         if (userId is null || !await currentUser.IsInRoleAsync(AppRoles.Customer))
-            return new ReviewContext(false, null);
+            return new ReviewContext(false, null, []);
 
         var myReview = await reviewRepository.GetByUserAndBusinessAsync(userId, businessId);
         var canReview = await HasCompletedOrderAsync(userId, businessId);
+        var reviewablePackages = canReview ? await orderRepository.GetCompletedPackagesAsync(userId, businessId) : [];
 
-        return new ReviewContext(canReview, myReview);
+        return new ReviewContext(canReview, myReview, reviewablePackages);
     }
 
-    public async Task<Review> SubmitAsync(Guid businessId, int rating, string? comment)
+    public async Task<Review> SubmitAsync(Guid businessId, int rating, string? comment, Guid? packageId = null)
     {
         if (!await currentUser.IsInRoleAsync(AppRoles.Customer))
             throw new UnauthorizedAccessException("Only customers can leave reviews.");
@@ -52,11 +53,21 @@ public class ReviewService(
         if (!await HasCompletedOrderAsync(userId, businessId))
             throw new UnauthorizedAccessException("You can only review a business after completing an order with them.");
 
+        // Only keep the tag if it's actually a package this customer completed an order for —
+        // silently drops anything else instead of erroring, same as a stale client-side pick.
+        if (packageId is not null)
+        {
+            var reviewablePackages = await orderRepository.GetCompletedPackagesAsync(userId, businessId);
+            if (reviewablePackages.All(p => p.Id != packageId))
+                packageId = null;
+        }
+
         var existing = await reviewRepository.GetByUserAndBusinessAsync(userId, businessId);
         if (existing is not null)
         {
             existing.Rating = rating;
             existing.Comment = comment;
+            existing.PackageId = packageId;
             existing.CreatedAt = DateTime.UtcNow;
             await reviewRepository.SaveChangesAsync();
             return existing;
@@ -69,6 +80,7 @@ public class ReviewService(
             UserId = userId,
             Rating = rating,
             Comment = comment,
+            PackageId = packageId,
             CreatedAt = DateTime.UtcNow,
         };
 

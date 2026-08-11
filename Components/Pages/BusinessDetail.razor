@@ -190,6 +190,16 @@ else
                                 <div class="biz-review-form">
                                     <span class="biz-review-form-label">@(_reviewContext.MyReview is null ? "Leave a review" : "Update your review")</span>
                                     <StarRating Editable="true" SelectedValue="_reviewRating" SelectedValueChanged="v => _reviewRating = v" Size="1.4rem"/>
+                                    @if (_reviewContext.ReviewablePackages.Count > 0)
+                                    {
+                                        <select class="form-select form-select-sm biz-review-package-select" @bind="_reviewPackageIdText">
+                                            <option value="">Whole kitchen (no specific package)</option>
+                                            @foreach (var package in _reviewContext.ReviewablePackages)
+                                            {
+                                                <option value="@package.Id">@package.Name</option>
+                                            }
+                                        </select>
+                                    }
                                     <textarea class="form-control biz-review-textarea" rows="2" maxlength="600"
                                               placeholder="What did you think? (optional)" @bind="_reviewComment"></textarea>
                                     @if (_reviewError is not null)
@@ -228,7 +238,13 @@ else
                                             <span class="biz-review-name">@review.User.Name</span>
                                             <span class="biz-review-date">@ClientTimeZoneService.ToLocal(review.CreatedAt).ToString("MMM d, yyyy")</span>
                                         </div>
-                                        <StarRating Value="@review.Rating" Size="0.75rem"/>
+                                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                                            <StarRating Value="@review.Rating" Size="0.75rem"/>
+                                            @if (review.Package is not null)
+                                            {
+                                                <span class="biz-review-package-tag">@review.Package.Name</span>
+                                            }
+                                        </div>
                                         @if (!string.IsNullOrWhiteSpace(review.Comment))
                                         {
                                             <p class="biz-review-comment">@review.Comment</p>
@@ -247,6 +263,8 @@ else
 <PackageDetailModal Package="_selectedPackage"
                      AvailableQuantity="@(_selectedPackage is null ? 0 : CartService.AvailableQuantity(_selectedPackage, _reservedByPackage.GetValueOrDefault(_selectedPackage.Id)))"
                      PickupLabel="@(_selectedPackage is null ? "" : PickupLabel(_selectedPackage))"
+                     RatingAverage="@(_selectedPackage is null ? 0 : PackageRatingAverage(_selectedPackage.Id))"
+                     ReviewCount="@(_selectedPackage is null ? 0 : PackageReviews(_selectedPackage.Id).Count)"
                      OnClose="() => _selectedPackage = null"
                      OnAddToCart="AddToCart"/>
 
@@ -277,6 +295,7 @@ else
     private ReviewContext? _reviewContext;
     private int _reviewRating;
     private string _reviewComment = "";
+    private string _reviewPackageIdText = "";
     private bool _submittingReview;
     private string? _reviewError;
     private string? _toastMessage;
@@ -357,6 +376,7 @@ else
         {
             _reviewRating = mine.Rating;
             _reviewComment = mine.Comment ?? "";
+            _reviewPackageIdText = mine.PackageId?.ToString() ?? "";
         }
     }
 
@@ -365,6 +385,14 @@ else
         var start = ClientTimeZoneService.ToLocal(package.PickupStart);
         var end = ClientTimeZoneService.ToLocal(package.PickupEnd);
         return $"{start:MMM d} · {start:HH:mm}–{end:HH:mm}";
+    }
+
+    private List<Review> PackageReviews(Guid packageId) => _reviews.Where(r => r.PackageId == packageId).ToList();
+
+    private double PackageRatingAverage(Guid packageId)
+    {
+        var reviews = PackageReviews(packageId);
+        return reviews.Count == 0 ? 0 : reviews.Average(r => r.Rating);
     }
 
     private async Task AddToCart(Package package)
@@ -425,7 +453,8 @@ else
 
         _submittingReview = true;
         _reviewError = null;
-        var result = await ReviewController.SubmitAsync(_business.Id, _reviewRating, _reviewComment);
+        Guid? packageId = Guid.TryParse(_reviewPackageIdText, out var id) ? id : null;
+        var result = await ReviewController.SubmitAsync(_business.Id, _reviewRating, _reviewComment, packageId);
         _submittingReview = false;
 
         if (result is ConflictObjectResult conflict)

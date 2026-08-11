@@ -76,6 +76,13 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
             .HasIndex(r => new { r.BusinessId, r.UserId })
             .IsUnique();
 
+        // Deleting a package un-tags any review that pointed at it rather than deleting the review.
+        modelBuilder.Entity<Review>()
+            .HasOne(r => r.Package)
+            .WithMany()
+            .HasForeignKey(r => r.PackageId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         // One favorite per customer per business — toggling un-favorites instead of duplicating.
         modelBuilder.Entity<Favorite>()
             .HasIndex(f => new { f.UserId, f.BusinessId })

@@ -68,6 +68,16 @@ public static class TestData
         PickupEnd = DateTime.UtcNow.AddHours(2),
     };
 
+    public static Review Review(Guid businessId, string userId, int rating = 5, Guid? packageId = null) => new()
+    {
+        Id = Guid.NewGuid(),
+        BusinessId = businessId,
+        UserId = userId,
+        Rating = rating,
+        PackageId = packageId,
+        CreatedAt = DateTime.UtcNow,
+    };
+
     // Not persisted through the mocked repository — build the full graph so ApplyStatusChangeAsync
     // can mutate order.OrderPackages[].Package.Quantity directly, same as the real code does.
     public static Order Order(ApplicationUser user, Guid businessId, string statusName, params (Package Package, int Quantity)[] lines)

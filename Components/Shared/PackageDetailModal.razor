@@ -18,6 +18,10 @@
             <span class="biz-modal-eyebrow">@Package.PackageType.Name</span>
             <h2 class="pkg-modal-title" id="pkg-modal-title">@Package.Name</h2>
             <div class="pkg-modal-price">@Package.Price.ToString("C")</div>
+            @if (ReviewCount > 0)
+            {
+                <StarRating Value="@RatingAverage" ShowValue="true" Count="@ReviewCount" Size="0.8rem"/>
+            }
 
             <p class="biz-modal-desc">@Package.Description</p>
 
@@ -91,6 +95,8 @@
     [Parameter] public Package? Package { get; set; }
     [Parameter] public int AvailableQuantity { get; set; }
     [Parameter] public string PickupLabel { get; set; } = "";
+    [Parameter] public double RatingAverage { get; set; }
+    [Parameter] public int ReviewCount { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback<Package> OnAddToCart { get; set; }
 

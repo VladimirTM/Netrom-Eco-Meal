@@ -17,6 +17,7 @@ public class ReviewRepository(EcoMealDbContext context) : IReviewRepository
     {
         return await context.Reviews
             .Include(r => r.User)
+            .Include(r => r.Package)
             .Where(r => r.BusinessId == businessId)
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync();

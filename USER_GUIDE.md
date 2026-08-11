@@ -160,6 +160,11 @@ to 600 characters), then **Submit review**. Submitting again after you already h
 that kitchen updates it in place — the button relabels to **Update review** and there's no way
 to end up with two.
 
+If you've completed an order for a specific package from that kitchen, a dropdown lets you tag
+your review to it ("Whole kitchen" stays the default if you'd rather not). A tagged review shows
+a small package-name pill on the review card, and that package's own detail popup then shows its
+own star rating and review count separately from the kitchen's overall rating.
+
 ### Report a kitchen or package
 
 If something looks wrong with a kitchen or a specific package — inaccurate info, a stale photo,

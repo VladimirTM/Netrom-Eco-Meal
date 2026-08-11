@@ -15,6 +15,9 @@ public interface IOrderRepository
     public Task<List<Order>> GetInRangeAsync(Guid? businessId, DateTime? from, DateTime? to);
     public Task<Order?> GetByIdAsync(Guid id);
     public Task<bool> HasCompletedOrderAsync(string userId, Guid businessId);
+    // Distinct packages a customer has a Completed order for at a business — feeds the "which
+    // package is this review about" picker.
+    public Task<List<Package>> GetCompletedPackagesAsync(string userId, Guid businessId);
     public Task<decimal> GetTotalWeightSavedKgAsync();
     // Pending orders past their confirm window or a closed pickup slot — feeds the expiry sweep.
     public Task<List<Order>> GetStalePendingOrdersAsync(DateTime createdBefore);

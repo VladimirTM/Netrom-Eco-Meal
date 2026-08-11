@@ -29,11 +29,11 @@ public class ReviewController(IReviewService reviewService) : ControllerBase
         return await reviewService.GetContextAsync(businessId);
     }
 
-    public async Task<ActionResult> SubmitAsync(Guid businessId, int rating, string? comment)
+    public async Task<ActionResult> SubmitAsync(Guid businessId, int rating, string? comment, Guid? packageId = null)
     {
         try
         {
-            await reviewService.SubmitAsync(businessId, rating, comment);
+            await reviewService.SubmitAsync(businessId, rating, comment, packageId);
             return NoContent();
         }
         catch (UnauthorizedAccessException ex)
