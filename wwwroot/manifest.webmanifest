@@ -1,0 +1,14 @@
+{
+  "name": "Eco Meal",
+  "short_name": "Eco Meal",
+  "description": "Rescue surplus food from local kitchens before it goes to waste.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5efe2",
+  "theme_color": "#1f8a4c",
+  "icons": [
+    { "src": "/favicon.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "/logo.png", "sizes": "2048x2048", "type": "image/png", "purpose": "any" }
+  ]
+}

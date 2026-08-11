@@ -45,6 +45,12 @@ services:
       # https://dashboard.stripe.com/test/apikeys; no live/production key is ever needed for this app.
       Stripe__SecretKey: ""
       Stripe__Currency: "ron"
+      # A self-generated VAPID key pair (WebPush.VapidHelper.GenerateVapidKeys()) — unlike Stripe/
+      # SMTP this needs no external account at all, so it ships pre-configured here for a working
+      # web-push demo out of the box. Regenerate your own pair for anything beyond local testing.
+      WebPush__PublicKey: "REDACTED_VAPID_PUBLIC_KEY"
+      WebPush__PrivateKey: "REDACTED_VAPID_PRIVATE_KEY"
+      WebPush__Subject: "mailto:admin@ecomeal.local"
     ports:
       - "8081:8080"
     depends_on:

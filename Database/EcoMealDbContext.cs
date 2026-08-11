@@ -30,6 +30,7 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Report> Reports { get; set; }
     public DbSet<BusinessHours> BusinessHours { get; set; }
     public DbSet<BusinessClosure> BusinessClosures { get; set; }
+    public DbSet<PushSubscription> PushSubscriptions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -126,6 +127,17 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
             .HasOne(c => c.Business)
             .WithMany(b => b.Closures)
             .HasForeignKey(c => c.BusinessId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A resubscribing browser gets a fresh row rather than a duplicate — see PushSubscription.
+        modelBuilder.Entity<PushSubscription>()
+            .HasIndex(s => s.Endpoint)
+            .IsUnique();
+
+        modelBuilder.Entity<PushSubscription>()
+            .HasOne(s => s.User)
+            .WithMany()
+            .HasForeignKey(s => s.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // Optimistic concurrency so two managers confirming the same package can't oversell stock.

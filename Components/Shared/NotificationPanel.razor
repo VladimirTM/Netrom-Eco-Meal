@@ -1,8 +1,12 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
 @using Netrom_Eco_Meal.Services
 @implements IDisposable
 @inject NotificationPanelState PanelState
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+@inject PushSubscriptionController PushSubscriptionController
 
 @* Rendered once at the layout's top level, not inside NotificationBell — a trigger nested in
    .sidebar/.public-header traps a fixed popup under <main> (sticky ancestors always create a
@@ -13,11 +17,29 @@
     <div class="notif-panel" role="dialog" aria-modal="true" aria-label="Notifications">
         <div class="notif-panel-header">
             <span>Notifications</span>
-            @if (PanelState.UnreadCount > 0)
-            {
-                <button type="button" class="notif-mark-all" @onclick="() => PanelState.MarkAllReadAsync()">Mark all read</button>
-            }
+            <div class="notif-panel-header-actions">
+                <AuthorizeView>
+                    <Authorized>
+                        @if (_pushPublicKey is not null && _pushSupported)
+                        {
+                            <button type="button" class="notif-push-toggle @(_pushEndpoint is not null ? "notif-push-toggle-on" : "")"
+                                    title="@(_pushEndpoint is not null ? "Disable browser alerts" : "Enable browser alerts")"
+                                    disabled="@_pushBusy" @onclick="TogglePushAsync">
+                                <i class="bi @(_pushEndpoint is not null ? "bi-bell-fill" : "bi-bell-slash")"></i>
+                            </button>
+                        }
+                    </Authorized>
+                </AuthorizeView>
+                @if (PanelState.UnreadCount > 0)
+                {
+                    <button type="button" class="notif-mark-all" @onclick="() => PanelState.MarkAllReadAsync()">Mark all read</button>
+                }
+            </div>
         </div>
+        @if (_pushError is not null)
+        {
+            <div class="notif-push-error">@_pushError</div>
+        }
         <div class="notif-panel-list">
             @if (PanelState.Notifications is null)
             {
@@ -45,10 +67,72 @@
 }
 
 @code {
+    private bool _pushSupported;
+    private string? _pushPublicKey;
+    private string? _pushEndpoint;
+    private bool _pushBusy;
+    private string? _pushError;
+
     protected override async Task OnInitializedAsync()
     {
         PanelState.OnChange += HandleChanged;
         await PanelState.InitializeAsync();
+    }
+
+    // Deferred to OnAfterRenderAsync — JS interop isn't available until the component has
+    // actually rendered once, same reasoning as CartService.RestoreAsync in PublicLayout.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        // Null when WebPush isn't configured server-side — the toggle stays hidden entirely,
+        // same degrade-gracefully pattern as a missing Stripe/SMTP config elsewhere in the app.
+        _pushPublicKey = PushSubscriptionController.GetPublicKey().Value;
+        if (_pushPublicKey is null)
+            return;
+
+        _pushSupported = await JSRuntime.InvokeAsync<bool>("EcoMeal.push.isSupported");
+        if (!_pushSupported)
+            return;
+
+        _pushEndpoint = await JSRuntime.InvokeAsync<string?>("EcoMeal.push.getSubscriptionEndpoint");
+        StateHasChanged();
+    }
+
+    private async Task TogglePushAsync()
+    {
+        _pushBusy = true;
+        _pushError = null;
+        StateHasChanged();
+
+        try
+        {
+            if (_pushEndpoint is not null)
+            {
+                var unsubscribedEndpoint = await JSRuntime.InvokeAsync<string?>("EcoMeal.push.unsubscribe");
+                if (unsubscribedEndpoint is not null)
+                    await PushSubscriptionController.UnsubscribeAsync(unsubscribedEndpoint);
+                _pushEndpoint = null;
+            }
+            else
+            {
+                var subscription = await JSRuntime.InvokeAsync<PushSubscriptionInfo?>("EcoMeal.push.subscribe", _pushPublicKey);
+                if (subscription is null)
+                {
+                    _pushError = "Couldn't enable browser alerts — check your browser's notification permission.";
+                }
+                else
+                {
+                    await PushSubscriptionController.SubscribeAsync(subscription.Endpoint, subscription.P256Dh, subscription.Auth);
+                    _pushEndpoint = subscription.Endpoint;
+                }
+            }
+        }
+        finally
+        {
+            _pushBusy = false;
+        }
     }
 
     private void HandleChanged() => InvokeAsync(StateHasChanged);
@@ -73,5 +157,14 @@
     public void Dispose()
     {
         PanelState.OnChange -= HandleChanged;
+    }
+
+    // Shape of EcoMeal.push.subscribe's resolved value (site.js) — JS interop matches property
+    // names case-insensitively, same convention Home.razor's GeoPosition already relies on.
+    private class PushSubscriptionInfo
+    {
+        public string Endpoint { get; set; } = "";
+        public string P256Dh { get; set; } = "";
+        public string Auth { get; set; } = "";
     }
 }

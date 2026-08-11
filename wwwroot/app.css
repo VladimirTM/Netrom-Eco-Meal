@@ -3302,6 +3302,12 @@ h1:focus {
     flex-shrink: 0;
 }
 
+.notif-panel-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+}
+
 .notif-mark-all {
     border: none;
     background: none;
@@ -3315,6 +3321,42 @@ h1:focus {
 .notif-mark-all:hover {
     color: #fff;
     text-decoration: underline;
+}
+
+.notif-push-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.85rem;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.notif-push-toggle:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.22);
+    color: #fff;
+}
+
+.notif-push-toggle:disabled {
+    opacity: 0.6;
+}
+
+.notif-push-toggle-on {
+    background: var(--em-leaf);
+    color: #fff;
+}
+
+.notif-push-error {
+    padding: 0.6rem 1.1rem;
+    background: var(--em-rescue-soft);
+    color: var(--em-rescue-dark);
+    font-size: 0.78rem;
+    flex-shrink: 0;
 }
 
 .notif-panel-list {

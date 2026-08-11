@@ -194,6 +194,10 @@ no-shows, pickup reminders shortly before a window closes, back-in-stock alerts 
 you've favorited, and — if you've applied to list a business — its approval or rejection, each
 with a matching email sent in parallel.
 
+The small **bell icon** next to "Mark all read" turns these into real browser notifications too,
+even when the tab isn't open — click it once to grant your browser's notification permission.
+Click it again to turn them back off. It only appears if your browser supports it.
+
 ---
 
 ## Business Manager

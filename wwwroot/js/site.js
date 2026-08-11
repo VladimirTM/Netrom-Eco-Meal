@@ -140,5 +140,85 @@ window.EcoMeal = {
                 return null;
             }
         }
+    },
+
+    // Web Push: service-worker registration + subscribe/unsubscribe. NotificationPanel.razor is
+    // the one caller (its "enable browser alerts" toggle) — actually sending a push once
+    // subscribed is entirely server-side, see PushSubscriptionService/WebPushGateway.
+    push: {
+        isSupported: function () {
+            return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+        },
+
+        // Fire-and-forget, called once below on every page load regardless of whether the viewer
+        // ever opens the notification panel — registration itself needs no permission.
+        registerAsync: function () {
+            if (!this.isSupported()) return Promise.resolve(null);
+            return navigator.serviceWorker.register("/service-worker.js").catch(function () { return null; });
+        },
+
+        // VAPID applicationServerKey must be a Uint8Array, not the base64url string the server hands back.
+        _vapidKeyToUint8Array: function (base64String) {
+            var padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+            var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+            var rawData = atob(base64);
+            var outputArray = new Uint8Array(rawData.length);
+            for (var i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        },
+
+        // Resolves to the current subscription's endpoint, or null if never subscribed — used to
+        // initialize the toggle's on/off state on page load without prompting for permission.
+        getSubscriptionEndpoint: async function () {
+            if (!this.isSupported()) return null;
+            var registration = await navigator.serviceWorker.ready.catch(function () { return null; });
+            if (!registration) return null;
+            var subscription = await registration.pushManager.getSubscription();
+            return subscription ? subscription.endpoint : null;
+        },
+
+        // Prompts for Notification permission if needed, then subscribes. Resolves to
+        // {endpoint, p256dh, auth} for the caller to hand to PushSubscriptionController, or null
+        // on denial/failure/unsupported — never rejects, same convention as geo.getPosition.
+        subscribe: async function (publicKeyBase64) {
+            if (!this.isSupported() || !publicKeyBase64) return null;
+
+            var permission = await Notification.requestPermission();
+            if (permission !== "granted") return null;
+
+            var registration = await navigator.serviceWorker.ready.catch(function () { return null; });
+            if (!registration) return null;
+
+            try {
+                var existing = await registration.pushManager.getSubscription();
+                var subscription = existing || await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: this._vapidKeyToUint8Array(publicKeyBase64)
+                });
+                var json = subscription.toJSON();
+                return { endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth };
+            } catch {
+                return null;
+            }
+        },
+
+        // Unsubscribes the browser's current subscription and returns its endpoint (so the
+        // caller can tell the backend to delete the matching row), or null if there wasn't one.
+        unsubscribe: async function () {
+            if (!this.isSupported()) return null;
+            var registration = await navigator.serviceWorker.ready.catch(function () { return null; });
+            if (!registration) return null;
+
+            var subscription = await registration.pushManager.getSubscription();
+            if (!subscription) return null;
+
+            var endpoint = subscription.endpoint;
+            await subscription.unsubscribe();
+            return endpoint;
+        }
     }
 };
+
+EcoMeal.push.registerAsync();

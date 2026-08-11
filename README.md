@@ -61,6 +61,7 @@ whichever one they pick in the sidebar switcher:
 - QRCoder for server-side pickup QR generation, jsQR (vendored) for client-side camera scanning
 - Leaflet + OpenStreetMap tiles (CDN, no API key) for the home page's map view
 - Stripe Checkout (`Stripe.net`) for payment
+- Web Push (`WebPush`, VAPID-signed) + a service worker/PWA manifest for browser push notifications
 
 ## Running locally
 
@@ -151,6 +152,30 @@ does **not** — the kept charge doubles as the no-show fee. If the refund itsel
 Stripe-side error), the order still cancels but the payment is flagged `RefundFailed` instead
 of silently staying `Paid` — surfaced as a distinct badge everywhere payment status shows up,
 plus a note in the customer's cancellation email.
+
+## Web Push Notifications
+
+Every in-app notification (order updates, back-in-stock alerts, business approval/rejection...)
+can also show up as a real browser notification, even when the app tab isn't open — the
+notification bell's popup has an "enable browser alerts" toggle that registers a service
+worker and subscribes via the browser's Push API. Unlike Stripe/SMTP above, this needs **no
+external account at all** — push just needs a VAPID key pair, a self-generated cryptographic
+key pair, not a third-party credential. `appsettings.Development.json` already ships a working
+(if only locally-meaningful) key pair, so `dotnet run` and
+`docker compose -f docker-compose.test.yml up` both have working push out of the box with no
+setup. To use your own pair instead (e.g. before deploying anywhere real), generate one with
+`WebPush.VapidHelper.GenerateVapidKeys()` (from the `WebPush` NuGet package) and set:
+
+```bash
+dotnet user-secrets set "WebPush:PublicKey" "..."
+dotnet user-secrets set "WebPush:PrivateKey" "..."
+dotnet user-secrets set "WebPush:Subject" "mailto:you@example.com"
+```
+
+Leave any of the three unset and the "enable browser alerts" toggle hides itself entirely —
+same degrade-gracefully pattern as a missing Stripe key, just with no external signup behind
+it. The pickup QR scanner's HTTPS-or-localhost restriction (see below) applies here too:
+service workers (and so push) only work on `https://` or `localhost`.
 
 ## Running with Docker
 

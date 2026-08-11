@@ -90,6 +90,9 @@ builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IReportRepository, ReportRepository>();
 builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
+builder.Services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();
+builder.Services.AddScoped<IWebPushGateway, WebPushGateway>();
 builder.Services.AddScoped<IAppEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<IStripeGateway, StripeGateway>();
 builder.Services.AddScoped<ICheckoutService, CheckoutService>();
@@ -110,6 +113,7 @@ builder.Services.AddScoped<NotificationController>();
 builder.Services.AddScoped<FavoriteController>();
 builder.Services.AddScoped<AuditLogController>();
 builder.Services.AddScoped<ReportController>();
+builder.Services.AddScoped<PushSubscriptionController>();
 // Real HTTP endpoint for Login/Register/Logout (see AuthController), but also registered here so
 // ConfirmEmail/ForgotPassword/ResetPassword can inject it in-process like every other controller.
 builder.Services.AddScoped<AuthController>();
@@ -145,6 +149,12 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapControllers();
+
+// MapStaticAssets' default FileExtensionContentTypeProvider has no entry for .webmanifest, so it
+// would otherwise fall back to application/octet-stream — some browsers refuse to treat that as
+// an installable manifest.
+app.MapGet("/manifest.webmanifest", () =>
+    Results.File(Path.Combine(app.Environment.WebRootPath, "manifest.webmanifest"), "application/manifest+json"));
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
