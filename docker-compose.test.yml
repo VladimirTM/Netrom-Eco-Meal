@@ -48,8 +48,8 @@ services:
       # A self-generated VAPID key pair (WebPush.VapidHelper.GenerateVapidKeys()) — unlike Stripe/
       # SMTP this needs no external account at all, so it ships pre-configured here for a working
       # web-push demo out of the box. Regenerate your own pair for anything beyond local testing.
-      WebPush__PublicKey: "REDACTED_VAPID_PUBLIC_KEY"
-      WebPush__PrivateKey: "REDACTED_VAPID_PRIVATE_KEY"
+      WebPush__PublicKey: "BKRseuce1Oy0BD5nf9ougmmmY6F9A06j_-nqXnpXe5QaNpbvB3edTJmpxlgOTn6-_bPSdJadSW44eXkRCUzv6dM"
+      WebPush__PrivateKey: "DNhXLRshYWgpQ2ZhGf7uAH5ka0UNe_uz5O5ZIO3r7dA"
       WebPush__Subject: "mailto:admin@ecomeal.local"
     ports:
       - "8081:8080"
