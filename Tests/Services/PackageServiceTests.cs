@@ -19,7 +19,7 @@ public class PackageServiceTests
     private const string ManagerId = "manager-1";
     private const string OtherManagerId = "manager-2";
 
-    private sealed record Fixture(PackageService Service, Mock<IPackageRepository> Repo, Mock<IBusinessService> BusinessService);
+    private sealed record Fixture(PackageService Service, Mock<IPackageRepository> Repo, Mock<IBusinessService> BusinessService, Mock<INotificationService> NotificationService);
 
     private static Fixture Build(string? userId, params string[] roles)
     {
@@ -32,11 +32,15 @@ public class PackageServiceTests
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
         var configuration = new ConfigurationBuilder().Build();
 
+        // Default so HideAsync's staff-notification fan-out (NotifyHiddenAsync) has something to
+        // enumerate; tests that care about notification content override this per-case.
+        businessService.Setup(b => b.GetStaffAsync(It.IsAny<Guid>())).ReturnsAsync([]);
+
         var service = new PackageService(
             repo.Object, businessService.Object, favoriteRepo.Object, notificationService.Object,
             emailSender.Object, currentUser, configuration, auditLogService.Object);
 
-        return new Fixture(service, repo, businessService);
+        return new Fixture(service, repo, businessService, notificationService);
     }
 
     // ---- DuplicateManyAsync -------------------------------------------------
@@ -73,6 +77,24 @@ public class PackageServiceTests
         Assert.Null(duplicate.TemplateId);
         f.Repo.Verify(r => r.AddAsync(duplicate), Times.Once);
         f.Repo.Verify(r => r.SaveChangesAsync(), Times.Once);
+    }
+
+    // Regression test: a moderator-hidden package must not resurface via its duplicate.
+    [Fact]
+    public async Task DuplicateManyAsync_SourceIsHidden_DuplicateStaysHidden()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        package.IsHidden = true;
+        package.HiddenReason = "Mislabeled allergens";
+        f.Repo.Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>())).ReturnsAsync([package]);
+
+        var duplicates = await f.Service.DuplicateManyAsync([package.Id]);
+
+        var duplicate = Assert.Single(duplicates);
+        Assert.True(duplicate.IsHidden);
+        Assert.Equal("Mislabeled allergens", duplicate.HiddenReason);
     }
 
     // ---- AdjustQuantityManyAsync ---------------------------------------------
@@ -218,6 +240,39 @@ public class PackageServiceTests
         Assert.True(package.IsHidden);
         Assert.Equal("Allergen mislabeled", package.HiddenReason);
         f.Repo.Verify(r => r.SaveChangesAsync(), Times.Once);
+    }
+
+    // Regression test: hiding a package should notify its business's staff, the same way
+    // BusinessService.HideAsync already notifies staff when the business itself is hidden.
+    [Fact]
+    public async Task HideAsync_Admin_NotifiesBusinessStaff()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        var staffMember = TestData.User(ManagerId);
+        f.Repo.Setup(r => r.GetByIdAsync(package.Id)).ReturnsAsync(package);
+        f.BusinessService.Setup(b => b.GetStaffAsync(businessId)).ReturnsAsync([staffMember]);
+
+        await f.Service.HideAsync(package.Id, "Allergen mislabeled");
+
+        f.NotificationService.Verify(n => n.CreateAsync(ManagerId, It.Is<string>(m => m.Contains(package.Name)), null), Times.Once);
+    }
+
+    // HideAsync(notify: false) — used by ReportService.TakeActionAsync so notification can be
+    // deferred until after its transaction commits — must persist the hide without notifying.
+    [Fact]
+    public async Task HideAsync_NotifyFalse_SkipsNotification()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        f.Repo.Setup(r => r.GetByIdAsync(package.Id)).ReturnsAsync(package);
+
+        await f.Service.HideAsync(package.Id, "Allergen mislabeled", notify: false);
+
+        Assert.True(package.IsHidden);
+        f.NotificationService.Verify(n => n.CreateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>()), Times.Never);
     }
 
     [Fact]

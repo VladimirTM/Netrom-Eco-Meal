@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Netrom_Eco_Meal.Repositories.Interfaces;
 using Netrom_Eco_Meal.Services.Interfaces;
 
@@ -6,7 +7,8 @@ namespace Netrom_Eco_Meal.Services;
 public class PushSubscriptionService(
     IPushSubscriptionRepository pushSubscriptionRepository,
     IWebPushGateway webPushGateway,
-    CurrentUserAccessor currentUser) : IPushSubscriptionService
+    CurrentUserAccessor currentUser,
+    ILogger<PushSubscriptionService> logger) : IPushSubscriptionService
 {
     public string? GetPublicKey() => webPushGateway.IsConfigured ? webPushGateway.PublicKey : null;
 
@@ -37,12 +39,22 @@ public class PushSubscriptionService(
         if (!webPushGateway.IsConfigured)
             return;
 
-        var subscriptions = await pushSubscriptionRepository.GetByUserIdAsync(userId);
-        foreach (var subscription in subscriptions)
+        // Best-effort like WebPushGateway.SendAsync itself (see IPushSubscriptionService) — a
+        // transient failure reading/pruning subscriptions must not surface past NotificationService
+        // .CreateAsync and fail whatever business action triggered the notification.
+        try
         {
-            var stillValid = await webPushGateway.SendAsync(subscription, "Eco Meal", message, url);
-            if (!stillValid)
-                await pushSubscriptionRepository.RemoveByEndpointAsync(subscription.Endpoint);
+            var subscriptions = await pushSubscriptionRepository.GetByUserIdAsync(userId);
+            foreach (var subscription in subscriptions)
+            {
+                var stillValid = await webPushGateway.SendAsync(subscription, "Eco Meal", message, url);
+                if (!stillValid)
+                    await pushSubscriptionRepository.RemoveByEndpointAsync(subscription.Endpoint);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Push delivery failed for user {UserId}", userId);
         }
     }
 }

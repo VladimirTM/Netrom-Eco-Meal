@@ -35,19 +35,31 @@ public class ReportService(
 
     public async Task<List<ReportView>> GetOpenAsync()
     {
-        await EnsureAdminAsync();
+        await currentUser.EnsureAdminAsync("Only an admin can manage reports.");
 
         var reports = await reportRepository.GetByStatusAsync(ReportStatuses.Open);
-        var views = new List<ReportView>();
-        foreach (var report in reports)
-            views.Add(new ReportView(report, await ResolveTargetNameAsync(report), report.Reporter.Name));
 
-        return views;
+        // Batch-resolve target names in (at most) two queries instead of one heavy per-report
+        // lookup each — ResolveTargetNameAsync's single-target GetByIdAsync calls are fine for the
+        // Dismiss/TakeAction paths below, but looping them here turned every open-reports page
+        // load into dozens of full-graph queries.
+        var businessIds = reports.Where(r => r.TargetType == AuditTargetTypes.Business).Select(r => r.TargetId).Distinct().ToList();
+        var packageIds = reports.Where(r => r.TargetType != AuditTargetTypes.Business).Select(r => r.TargetId).Distinct().ToList();
+
+        var businessNames = businessIds.Count > 0 ? await businessService.GetNamesByIdsAsync(businessIds) : [];
+        var packageNames = packageIds.Count > 0 ? await packageService.GetNamesByIdsAsync(packageIds) : [];
+
+        return reports.Select(report => new ReportView(
+            report,
+            report.TargetType == AuditTargetTypes.Business
+                ? businessNames.GetValueOrDefault(report.TargetId, "(deleted business)")
+                : packageNames.GetValueOrDefault(report.TargetId, "(deleted package)"),
+            report.Reporter.Name)).ToList();
     }
 
     public async Task DismissAsync(Guid reportId)
     {
-        await EnsureAdminAsync();
+        await currentUser.EnsureAdminAsync("Only an admin can manage reports.");
 
         var report = await reportRepository.GetByIdAsync(reportId);
         if (report is null || report.Status != ReportStatuses.Open)
@@ -61,7 +73,7 @@ public class ReportService(
 
     public async Task TakeActionAsync(Guid reportId, string actionReason)
     {
-        await EnsureAdminAsync();
+        await currentUser.EnsureAdminAsync("Only an admin can manage reports.");
 
         var report = await reportRepository.GetByIdAsync(reportId);
         if (report is null || report.Status != ReportStatuses.Open)
@@ -70,20 +82,31 @@ public class ReportService(
         // Hiding the target, resolving the report, and the audit log entry are each their own
         // SaveChangesAsync — wrap them in one transaction so a failure partway through (e.g. a
         // concurrent admin resolving the same report) can't leave the target hidden but the
-        // report still showing as Open.
-        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        // report still showing as Open. Notification is deliberately excluded from the
+        // transaction (notify: false) and sent after commit — it fans out a synchronous outbound
+        // push HTTP call per affected staff member, which must not hold these row locks open.
+        Business? hiddenBusiness = null;
+        Package? hiddenPackage = null;
 
-        if (report.TargetType == AuditTargetTypes.Business)
-            await businessService.HideAsync(report.TargetId, actionReason);
-        else
-            await packageService.HideAsync(report.TargetId, actionReason);
+        await using (var transaction = await dbContext.Database.BeginTransactionAsync())
+        {
+            if (report.TargetType == AuditTargetTypes.Business)
+                hiddenBusiness = await businessService.HideAsync(report.TargetId, actionReason, notify: false);
+            else
+                hiddenPackage = await packageService.HideAsync(report.TargetId, actionReason, notify: false);
 
-        var targetName = await ResolveTargetNameAsync(report);
+            var targetName = await ResolveTargetNameAsync(report);
 
-        await ResolveAsync(report, ReportStatuses.ActionTaken);
-        await auditLogService.LogAsync(AuditActions.ReportActionTaken, report.TargetType, report.TargetId.ToString(), targetName, actionReason);
+            await ResolveAsync(report, ReportStatuses.ActionTaken);
+            await auditLogService.LogAsync(AuditActions.ReportActionTaken, report.TargetType, report.TargetId.ToString(), targetName, actionReason);
 
-        await transaction.CommitAsync();
+            await transaction.CommitAsync();
+        }
+
+        if (hiddenBusiness is not null)
+            await businessService.NotifyHiddenAsync(hiddenBusiness, actionReason);
+        else if (hiddenPackage is not null)
+            await packageService.NotifyHiddenAsync(hiddenPackage, actionReason);
     }
 
     private async Task ResolveAsync(Report report, string status)
@@ -99,15 +122,12 @@ public class ReportService(
     private async Task<string> ResolveTargetNameAsync(Report report)
     {
         if (report.TargetType == AuditTargetTypes.Business)
-            return (await businessService.GetByIdAsync(report.TargetId))?.Name ?? "(deleted business)";
+        {
+            var names = await businessService.GetNamesByIdsAsync([report.TargetId]);
+            return names.GetValueOrDefault(report.TargetId, "(deleted business)");
+        }
 
-        return (await packageService.GetByIdAsync(report.TargetId))?.Name ?? "(deleted package)";
-    }
-
-    private async Task EnsureAdminAsync()
-    {
-        var (isAdmin, _) = await currentUser.GetCurrentUserAsync();
-        if (!isAdmin)
-            throw new UnauthorizedAccessException("Only an admin can manage reports.");
+        var packageNames = await packageService.GetNamesByIdsAsync([report.TargetId]);
+        return packageNames.GetValueOrDefault(report.TargetId, "(deleted package)");
     }
 }

@@ -19,7 +19,7 @@ public class UserService(
 {
     public async Task<List<UserWithRole>> GetAllAsync()
     {
-        await EnsureAdminAsync();
+        await currentUser.EnsureAdminAsync("Only an admin can manage users.");
 
         var users = await userManager.Users.OrderBy(u => u.Name).ToListAsync();
 
@@ -38,7 +38,7 @@ public class UserService(
 
     public async Task<List<UserWithRole>> GetByRoleAsync(string role)
     {
-        await EnsureAdminAsync();
+        await currentUser.EnsureAdminAsync("Only an admin can manage users.");
 
         var users = await userManager.GetUsersInRoleAsync(role);
 
@@ -50,7 +50,7 @@ public class UserService(
 
     public async Task<PaginatedList<UserWithRole>> GetPagedAsync(int pageIndex, int pageSize, string? search, string? role)
     {
-        await EnsureAdminAsync();
+        await currentUser.EnsureAdminAsync("Only an admin can manage users.");
 
         // Left join so a roleless user still shows up (defaults to Customer, matching
         // GetAllAsync/GetByRoleAsync). Projects to an anonymous type, not UserWithRole —
@@ -77,7 +77,7 @@ public class UserService(
 
     public async Task<bool> UpdateRoleAsync(string userId, string role)
     {
-        await EnsureAdminAsync();
+        await currentUser.EnsureAdminAsync("Only an admin can manage users.");
 
         if (!AppRoles.AllRoles.Contains(role))
             return false;
@@ -111,12 +111,5 @@ public class UserService(
         }
 
         return true;
-    }
-
-    private async Task EnsureAdminAsync()
-    {
-        var (isAdmin, _) = await currentUser.GetCurrentUserAsync();
-        if (!isAdmin)
-            throw new UnauthorizedAccessException("Only an admin can manage users.");
     }
 }

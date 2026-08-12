@@ -376,7 +376,30 @@ public class OrderService(
         if (order.UserId != userId)
             throw new UnauthorizedAccessException($"You can only {action} your own orders.");
 
+        await BackfillPickupPassIfNeededAsync(order);
+
         return order;
+    }
+
+    // Orders confirmed before pickup passes were introduced have zero pass rows — backfill one
+    // lazily here rather than via a one-time data migration, so the pickup-pass page never needs
+    // its own empty-state branch for "Confirmed with no passes."
+    private async Task BackfillPickupPassIfNeededAsync(Order order)
+    {
+        if (order.Status.Name != OrderStatuses.Confirmed || order.PickupPasses.Count > 0)
+            return;
+
+        // Add via the DbSet only — EF's relationship fixup adds it to order.PickupPasses
+        // automatically since OrderId matches the already-tracked order; also adding it through
+        // the navigation would duplicate it in that in-memory collection.
+        dbContext.OrderPickupPasses.Add(new OrderPickupPass
+        {
+            Id = Guid.NewGuid(),
+            OrderId = order.Id,
+            Label = "Pickup pass",
+            CreatedAt = DateTime.UtcNow,
+        });
+        await orderRepository.SaveChangesAsync();
     }
 
     // Shared by manager/admin status changes and customer self-cancellation — keeps the
@@ -496,6 +519,8 @@ public class OrderService(
             if (!await businessService.IsStaffAsync(order.BusinessId, userId))
                 throw new UnauthorizedAccessException("You can only manage orders that belong to your business.");
         }
+
+        await BackfillPickupPassIfNeededAsync(order);
 
         return order;
     }

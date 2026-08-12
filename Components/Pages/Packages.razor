@@ -245,8 +245,9 @@
               Placeholder="Reason (shown if someone hovers the Hidden badge)"
               ConfirmLabel="Hide package"
               Busy="@_hidePromptBusy"
+              Error="@_hidePromptError"
               OnSubmit="SubmitHidePromptAsync"
-              OnCancel="() => _hidePromptPackage = null"/>
+              OnCancel="() => { _hidePromptPackage = null; _hidePromptError = null; }"/>
 
 <ConfirmDialog IsOpen="_confirmingDuplicate"
                Title="Duplicate packages?"
@@ -316,6 +317,7 @@
     private bool _deleting;
     private Package? _hidePromptPackage;
     private bool _hidePromptBusy;
+    private string? _hidePromptError;
     private int _pageIndex = 1;
     private const int PageSize = 10;
     // Guards every reload trigger (search, filters, paging, post-mutation refresh) so
@@ -564,10 +566,24 @@
             return;
 
         _hidePromptBusy = true;
-        await PackageController.HideAsync(_hidePromptPackage.Id, reason);
-        await ReloadAsync();
-        _hidePromptBusy = false;
-        _hidePromptPackage = null;
+        _hidePromptError = null;
+        try
+        {
+            await PackageController.HideAsync(_hidePromptPackage.Id, reason);
+            await ReloadAsync();
+            _hidePromptPackage = null;
+        }
+        catch (Exception)
+        {
+            // e.g. the caller's business access changed mid-session — same reasoning as
+            // DuplicateSelectedAsync/ApplyBulkModalAsync, surface it instead of an unhandled
+            // exception tearing down the Blazor circuit.
+            _hidePromptError = "Couldn't hide this package. Please refresh and try again.";
+        }
+        finally
+        {
+            _hidePromptBusy = false;
+        }
     }
 
     private async Task UnhideAsync(Package package)
@@ -575,7 +591,14 @@
         if (!_isAdmin && package.BusinessId != _myBusinessId)
             return;
 
-        await PackageController.UnhideAsync(package.Id);
-        await ReloadAsync();
+        try
+        {
+            await PackageController.UnhideAsync(package.Id);
+            await ReloadAsync();
+        }
+        catch (Exception)
+        {
+            _bulkError = "Couldn't unhide this package. Please refresh and try again.";
+        }
     }
 }

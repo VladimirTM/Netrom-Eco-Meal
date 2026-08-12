@@ -47,6 +47,12 @@ public class PackageRepository(EcoMealDbContext context) : IPackageRepository
             .ToListAsync();
     }
 
+    public async Task<Dictionary<Guid, string>> GetNamesByIdsAsync(IEnumerable<Guid> ids)
+    {
+        var idList = ids.ToList();
+        return await context.Packages.Where(p => idList.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Name);
+    }
+
     public async Task<List<Package>> GetForAnalyticsAsync(Guid? businessId, DateTime since)
     {
         var query = context.Packages

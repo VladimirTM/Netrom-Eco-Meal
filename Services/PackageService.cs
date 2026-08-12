@@ -37,6 +37,11 @@ public class PackageService(
         return await packageRepository.GetByIdAsync(id);
     }
 
+    public async Task<Dictionary<Guid, string>> GetNamesByIdsAsync(IEnumerable<Guid> ids)
+    {
+        return await packageRepository.GetNamesByIdsAsync(ids);
+    }
+
     public async Task AddAsync(Package package)
     {
         await EnsureCanManageBusinessAsync(package.BusinessId);
@@ -101,6 +106,9 @@ public class PackageService(
             PickupStart = p.PickupStart,
             PickupEnd = p.PickupEnd,
             ImageUrl = p.ImageUrl,
+            // A moderator-hidden source package must not resurface via its duplicate.
+            IsHidden = p.IsHidden,
+            HiddenReason = p.HiddenReason,
         }).ToList();
 
         foreach (var duplicate in duplicates)
@@ -147,11 +155,11 @@ public class PackageService(
         return await packageRepository.GetForAnalyticsAsync(businessId, since);
     }
 
-    public async Task HideAsync(Guid packageId, string reason)
+    public async Task<Package?> HideAsync(Guid packageId, string reason, bool notify = true)
     {
         var package = await packageRepository.GetByIdAsync(packageId);
         if (package is null)
-            return;
+            return null;
 
         await EnsureCanManageBusinessAsync(package.BusinessId);
 
@@ -160,6 +168,20 @@ public class PackageService(
         await packageRepository.SaveChangesAsync();
 
         await auditLogService.LogAsync(AuditActions.PackageHidden, AuditTargetTypes.Package, package.Id.ToString(), package.Name, reason);
+
+        if (notify)
+            await NotifyHiddenAsync(package, reason);
+
+        return package;
+    }
+
+    // Parallel to BusinessService.HideAsync's staff notification — a package's own business
+    // staff should hear about it the same way a business's staff hear about their business.
+    public async Task NotifyHiddenAsync(Package package, string reason)
+    {
+        var staff = await businessService.GetStaffAsync(package.BusinessId);
+        foreach (var member in staff)
+            await notificationService.CreateAsync(member.Id, $"\"{package.Name}\" has been hidden by an admin: {reason}", null);
     }
 
     public async Task UnhideAsync(Guid packageId)

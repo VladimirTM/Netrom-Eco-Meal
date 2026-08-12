@@ -52,6 +52,7 @@ Components/
 │   ├── OrderPickupPass.razor     # /orders/pickup/{Id} — QR code(s) for a Confirmed order, splittable into several
 │   ├── OrderScan.razor(.js)      # /orders/scan — manager camera scanner
 │   ├── OrderValidate.razor       # /orders/validate/{Id}/{PassId} — confirm-pickup landing page (scanned or typed)
+│   ├── OrderValidateLegacy.razor # /orders/validate/{Id} — pre-multi-pass QR redirects here, then on to OrderValidate
 │   ├── Login.razor / Register.razor
 │   ├── ForgotPassword.razor / ResetPassword.razor / ConfirmEmail.razor
 │   ├── AccessDenied.razor / NotFound.razor / Error.razor
@@ -171,7 +172,7 @@ One consequence worth knowing: when `NotFoundPage` renders via the Router's in-c
 | Layout | Used by | Shell |
 |---|---|---|
 | `PublicLayout` | Home, BusinessDetail, BusinessApply, Orders, OrderPickupPass, AccessDenied, NotFound | Sticky header (logo, notification bell, orders link, basket button + badge, dashboard link if staff, "list your business" link for Customer/BusinessManager, logout), `@Body`, footer. Owns the `CartPanel` and `NotificationPanel`, and the cart's open/closed state |
-| `MainLayout` | Dashboard, Businesses(+Form), Packages(+Form), OrderManagement, Payments, Users, Reports, AuditLog, OrderScan, OrderValidate | Fixed left sidebar (`NavMenu`) + `<main>` content area — the classic admin-panel shell. Also owns `NotificationPanel` |
+| `MainLayout` | Dashboard, Businesses(+Form), Packages(+Form), OrderManagement, Payments, Users, Reports, AuditLog, OrderScan, OrderValidate, OrderValidateLegacy | Fixed left sidebar (`NavMenu`) + `<main>` content area — the classic admin-panel shell. Also owns `NotificationPanel` |
 | `EmptyLayout` | Login, Register | Just `@Body` — no header, no sidebar, no footer; the login/register cards center themselves entirely via `app.css`'s `.login-page`/`.login-card` |
 
 `MainLayout`'s `.page`/`.sidebar` (`MainLayout.razor.css`) are sized `height: 100dvh`, not `100vh` — `vh` is the *largest possible* viewport and ignores transient browser chrome (an address bar, a devtools/automation banner), so a `100vh`-tall sidebar can render a few px taller than what's actually visible, pushing its footer past the real bottom edge. `dvh` tracks the actual visible viewport instead.
@@ -563,6 +564,13 @@ This is a deliberate security boundary, not just parsing convenience: a maliciou
    must be fully self-sufficient and re-check authorization itself, never trust how the visitor arrived. *@
 ```
 Calls `OrderController.GetOrderForManagementAsync(Id)` on load — the exact same ownership check (`OrderService.GetOwnedOrderAsync`) any other manager-facing order read uses, regardless of whether this page was reached via the in-app scanner, a manually typed URL, or a third-party QR scanner app opening the link directly. The matching pass is found client-side via `order.PickupPasses.FirstOrDefault(p => p.Id == PassId)` — a `PassId` that doesn't belong to this order renders a "This pickup pass doesn't exist" panel rather than falling through to a confusing state. "Confirm pickup" calls `OrderController.RedeemPickupPassAsync(Id, PassId)`, which redeems *this* pass and completes the whole order in one call; a `ConflictObjectResult` (already redeemed, a different pass on the same order already completed it, or the order was cancelled — a duplicate scan or a race with the manager dashboard) re-fetches the order rather than leaving a stale status badge on screen. `StatusExplanation` distinguishes "this pass was already used" from "the order was already picked up using a *different* pass" purely from `order.Status.Name` + `pass.RedeemedAt`.
+
+### OrderValidateLegacy — the pre-multi-pass redirect
+
+```razor
+@page "/orders/validate/{Id:guid}"
+```
+Catches a QR code printed/saved before pickup passes gained their own route segment. Calls the same `GetOrderForManagementAsync(Id)` as the page above, then branches purely on how many passes the resolved order has (every Confirmed order is guaranteed at least one via `OrderService`'s backfill — see `BACKEND_ARCHITECTURE.md` §3 OrderPickupPass): exactly one forwards straight to `/orders/validate/{Id}/{that pass's Id}` (`NavigationManager.NavigateTo(..., replace: true)`, so the legacy URL doesn't linger in browser history); zero or more than one renders a "couldn't tell which pass this refers to" panel instead of guessing. Unauthorized/not-found render the same `ForbiddenPanel`/`NotFoundPanel` the page above uses.
 
 ---
 

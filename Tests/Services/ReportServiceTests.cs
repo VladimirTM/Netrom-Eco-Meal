@@ -77,7 +77,8 @@ public class ReportServiceTests
         var f = Build(AdminId, AppRoles.Admin);
         var report = new Report { Id = Guid.NewGuid(), ReporterUserId = CustomerId, Reporter = TestData.User(CustomerId), TargetType = AuditTargetTypes.Business, TargetId = Guid.NewGuid(), Reason = "x", Status = ReportStatuses.Open, CreatedAt = DateTime.UtcNow };
         f.Repo.Setup(r => r.GetByIdAsync(report.Id)).ReturnsAsync(report);
-        f.BusinessService.Setup(b => b.GetByIdAsync(report.TargetId)).ReturnsAsync(TestData.Business(report.TargetId));
+        f.BusinessService.Setup(b => b.GetNamesByIdsAsync(It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync(new Dictionary<Guid, string> { [report.TargetId] = "Test Business" });
 
         await f.Service.DismissAsync(report.Id);
 
@@ -92,11 +93,14 @@ public class ReportServiceTests
         var f = Build(AdminId, AppRoles.Admin);
         var report = new Report { Id = Guid.NewGuid(), ReporterUserId = CustomerId, Reporter = TestData.User(CustomerId), TargetType = AuditTargetTypes.Business, TargetId = Guid.NewGuid(), Reason = "Bad photos", Status = ReportStatuses.Open, CreatedAt = DateTime.UtcNow };
         f.Repo.Setup(r => r.GetByIdAsync(report.Id)).ReturnsAsync(report);
-        f.BusinessService.Setup(b => b.GetByIdAsync(report.TargetId)).ReturnsAsync(TestData.Business(report.TargetId));
+        f.BusinessService.Setup(b => b.GetNamesByIdsAsync(It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync(new Dictionary<Guid, string> { [report.TargetId] = "Test Business" });
 
         await f.Service.TakeActionAsync(report.Id, "Bad photos");
 
-        f.BusinessService.Verify(b => b.HideAsync(report.TargetId, "Bad photos"), Times.Once);
+        // notify: false — TakeActionAsync defers the notification fan-out until after its
+        // transaction commits (see BusinessService.NotifyHiddenAsync).
+        f.BusinessService.Verify(b => b.HideAsync(report.TargetId, "Bad photos", false), Times.Once);
         Assert.Equal(ReportStatuses.ActionTaken, report.Status);
     }
 
@@ -106,11 +110,12 @@ public class ReportServiceTests
         var f = Build(AdminId, AppRoles.Admin);
         var report = new Report { Id = Guid.NewGuid(), ReporterUserId = CustomerId, Reporter = TestData.User(CustomerId), TargetType = AuditTargetTypes.Package, TargetId = Guid.NewGuid(), Reason = "Mislabeled", Status = ReportStatuses.Open, CreatedAt = DateTime.UtcNow };
         f.Repo.Setup(r => r.GetByIdAsync(report.Id)).ReturnsAsync(report);
-        f.PackageService.Setup(p => p.GetByIdAsync(report.TargetId)).ReturnsAsync(TestData.Package(Guid.NewGuid()));
+        f.PackageService.Setup(p => p.GetNamesByIdsAsync(It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync(new Dictionary<Guid, string> { [report.TargetId] = "Test Package" });
 
         await f.Service.TakeActionAsync(report.Id, "Mislabeled");
 
-        f.PackageService.Verify(p => p.HideAsync(report.TargetId, "Mislabeled"), Times.Once);
+        f.PackageService.Verify(p => p.HideAsync(report.TargetId, "Mislabeled", false), Times.Once);
         Assert.Equal(ReportStatuses.ActionTaken, report.Status);
     }
 }

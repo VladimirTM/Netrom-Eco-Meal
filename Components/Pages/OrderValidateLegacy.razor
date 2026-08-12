@@ -1,0 +1,70 @@
+@page "/orders/validate/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Mvc
+@using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Controllers
+@rendermode InteractiveServer
+@inject OrderController OrderController
+@inject NavigationManager NavigationManager
+@attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
+
+<PageTitle>Confirm pickup — Eco Meal</PageTitle>
+
+@* Reachable by a QR code printed/saved before pickup passes gained their own PassId route segment
+   (see AddOrderPickupPasses migration) — resolves to the single pass a pre-migration order has
+   and forwards to OrderValidate.razor, rather than 404ing on a staff member scanning a still-valid
+   older ticket. *@
+<div class="validate-page">
+    @if (_forbidden)
+    {
+        <ForbiddenPanel Message="You don't manage this order's business." BackHref="/orders/manage" BackLabel="Back to orders"/>
+    }
+    else if (_notFound)
+    {
+        <NotFoundPanel Message="This order no longer exists." BackHref="/orders/manage" BackLabel="Back to orders"/>
+    }
+    else if (_ambiguous)
+    {
+        <NotFoundPanel Message="Couldn't tell which pickup pass this QR code refers to — ask the customer to show their current QR code." BackHref="/orders/manage" BackLabel="Back to orders"/>
+    }
+    else
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private bool _forbidden;
+    private bool _notFound;
+    private bool _ambiguous;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await OrderController.GetOrderForManagementAsync(Id);
+        if (result.Result is UnauthorizedResult)
+        {
+            _forbidden = true;
+            return;
+        }
+        if (result.Result is NotFoundResult || result.Value is null)
+        {
+            _notFound = true;
+            return;
+        }
+
+        var passes = result.Value.PickupPasses;
+        if (passes.Count != 1)
+        {
+            _ambiguous = true;
+            return;
+        }
+
+        NavigationManager.NavigateTo($"/orders/validate/{Id}/{passes.Single().Id}", replace: true);
+    }
+}

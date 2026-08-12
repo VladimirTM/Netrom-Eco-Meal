@@ -21,4 +21,14 @@ public class CurrentUserAccessor(AuthenticationStateProvider authenticationState
         var authState = await authenticationStateProvider.GetAuthenticationStateAsync();
         return authState.User.IsInRole(role);
     }
+
+    // Was copy-pasted as a private method across BusinessService, ReportService, UserService, and
+    // inline in AuditLogService — centralized here so a future change to the admin check (e.g.
+    // logging denied attempts) only has one place to land.
+    public async Task EnsureAdminAsync(string message = "Only an admin can perform this action.")
+    {
+        var (isAdmin, _) = await GetCurrentUserAsync();
+        if (!isAdmin)
+            throw new UnauthorizedAccessException(message);
+    }
 }

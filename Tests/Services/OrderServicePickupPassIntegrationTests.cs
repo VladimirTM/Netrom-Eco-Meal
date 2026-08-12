@@ -118,4 +118,33 @@ public class OrderServicePickupPassIntegrationTests(PostgresFixture fixture)
         var persisted = await db.OrderPickupPasses.FirstAsync(p => p.Id == pass.Id);
         Assert.NotNull(persisted.RedeemedAt);
     }
+
+    // Regression test: orders confirmed before pickup passes existed have zero pass rows. Without
+    // the backfill in GetMyOwnedOrderAsync, OrderPickupPass.razor renders blank for these — see
+    // BackfillPickupPassIfNeededAsync.
+    [Fact]
+    public async Task GetMyOrderAsync_RealDatabase_BackfillsMissingPickupPassForLegacyConfirmedOrder()
+    {
+        var (service, db, order) = await BuildConfirmedOrderAsync(passCount: 0);
+
+        var result = await service.GetMyOrderAsync(order.Id);
+
+        Assert.Single(result.PickupPasses);
+        var persisted = await db.OrderPickupPasses.Where(p => p.OrderId == order.Id).ToListAsync();
+        Assert.Single(persisted);
+    }
+
+    // Same backfill, exercised through the staff-facing lookup (GetOwnedOrderAsync) that backs
+    // the QR validation page and the legacy /orders/validate/{Id:guid} redirect.
+    [Fact]
+    public async Task GetOrderForManagementAsync_RealDatabase_BackfillsMissingPickupPassForLegacyConfirmedOrder()
+    {
+        var (service, db, order) = await BuildConfirmedOrderAsync(passCount: 0, actorRole: AppRoles.Admin);
+
+        var result = await service.GetOrderForManagementAsync(order.Id);
+
+        Assert.Single(result.PickupPasses);
+        var persisted = await db.OrderPickupPasses.Where(p => p.OrderId == order.Id).ToListAsync();
+        Assert.Single(persisted);
+    }
 }

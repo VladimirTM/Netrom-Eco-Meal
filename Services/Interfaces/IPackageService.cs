@@ -9,6 +9,7 @@ public interface IPackageService
     public Task<List<Package>> GetAllAsync();
     public Task<PaginatedList<Package>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessId, Guid? packageTypeId);
     public Task<Package?> GetByIdAsync(Guid id);
+    public Task<Dictionary<Guid, string>> GetNamesByIdsAsync(IEnumerable<Guid> ids);
     public Task AddAsync(Package package);
     public Task UpdateAsync(Package package);
     public Task DeleteAsync(Package package);
@@ -22,8 +23,11 @@ public interface IPackageService
     // client-side since it needs the viewer's local timezone for hour bucketing.
     public Task<List<Package>> GetForAnalyticsAsync(Guid? businessId, DateTime since);
 
-    // Moderation — hides a package from the storefront without deleting it. Same
-    // admin-or-own-business-staff authorization as the write methods above.
-    public Task HideAsync(Guid packageId, string reason);
+    // notify: false lets a caller (see ReportService.TakeActionAsync) defer the staff
+    // notification fan-out until after its own transaction commits, so outbound push calls
+    // don't hold DB locks open. Returns the hidden package (null if it was a no-op) so the
+    // caller has what NotifyHiddenAsync needs.
+    public Task<Package?> HideAsync(Guid packageId, string reason, bool notify = true);
+    public Task NotifyHiddenAsync(Package package, string reason);
     public Task UnhideAsync(Guid packageId);
 }

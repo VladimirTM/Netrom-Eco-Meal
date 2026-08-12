@@ -350,6 +350,21 @@ this, since its `SaveChangesAsync()` never touches a real database; the regressi
 in `OrderServicePickupPassIntegrationTests` (§11), which runs the real `OrderService` against a
 real Postgres container instead.
 
+Orders confirmed before this feature existed have zero pass rows. Rather than a one-time data
+migration, `GetMyOwnedOrderAsync`/`GetOwnedOrderAsync` — the two lookups behind every
+pickup-pass/QR-validation read — call a private `BackfillPickupPassIfNeededAsync` first, which
+lazily adds the single default pass a Confirmed order would otherwise have gotten at
+confirmation time. This means `OrderPickupPass.razor` never needs its own empty-state branch for
+"Confirmed with no passes." The same backfill is why an old QR code encoding the pre-multi-pass
+`/orders/validate/{Id:guid}` shape (no `PassId` segment) still works: `OrderValidateLegacy.razor`
+resolves the order, and since it's now guaranteed to have exactly one pass, forwards to
+`/orders/validate/{Id}/{that pass's Id}` — the same landing page a fresh two-segment scan reaches
+(see `FRONTEND_ARCHITECTURE.md` §10 "OrderValidate — the landing page"). Anything other than
+exactly one pass — zero (an order that was never Confirmed, so never got backfilled) or more than
+one (an ordinary group order the customer later split via `SplitPickupPassesAsync`, where an old
+single-QR scan genuinely can't tell which of the group's passes it meant) — renders "couldn't tell
+which pass this refers to" rather than guessing.
+
 #### Payment
 ```csharp
 public class Payment
@@ -479,7 +494,7 @@ public class Report
     public string? ResolvedByUserId { get; set; }
 }
 ```
-A customer-submitted flag on a business or package (the "report" half of Phase 9's "hide/report flow instead of only hard delete"). `TargetId`/`TargetType` are polymorphic like `AuditLog`'s, so there's no FK to the target — `ReportService` resolves the target's current name at read time via `IBusinessService.GetByIdAsync`/`IPackageService.GetByIdAsync` instead (small, admin-only "open reports" list, so the extra lookups are cheap). `SubmitAsync` is open to any signed-in user and needs no authorization beyond that; `DismissAsync`/`TakeActionAsync`/`GetOpenAsync` are admin-only. `TakeActionAsync` doesn't hide the target itself — it delegates to `IBusinessService.HideAsync`/`IPackageService.HideAsync` (using the report's own `Reason` as the hide reason) and lets those log their own `AuditLog` entry, then logs a second `ReportActionTaken` entry of its own, so the audit trail shows both "why the target was hidden" and "which report drove it." Indexed on `Status`, since "open reports" is the only query the admin UI ever runs.
+A customer-submitted flag on a business or package (the "report" half of Phase 9's "hide/report flow instead of only hard delete"). `TargetId`/`TargetType` are polymorphic like `AuditLog`'s, so there's no FK to the target — `ReportService` resolves target names at read time via `IBusinessService`/`IPackageService.GetNamesByIdsAsync` instead, one batched call per target type rather than a `GetByIdAsync` per report (see §5 `IReportService`). `SubmitAsync` is open to any signed-in user and needs no authorization beyond that; `DismissAsync`/`TakeActionAsync`/`GetOpenAsync` are admin-only. `TakeActionAsync` doesn't hide the target itself — it delegates to `IBusinessService.HideAsync`/`IPackageService.HideAsync` (using the report's own `Reason` as the hide reason) and lets those log their own `AuditLog` entry, then logs a second `ReportActionTaken` entry of its own, so the audit trail shows both "why the target was hidden" and "which report drove it." Indexed on `Status`, since "open reports" is the only query the admin UI ever runs.
 
 ### DateTime handling
 
@@ -575,9 +590,9 @@ Every service is `Scoped`. A few break that pattern deliberately: `OrderLifecycl
 | `IPackageService` | `PackageService` | CRUD, admin-or-own-business-manager on writes (`EnsureCanManageBusinessAsync`). `AddAsync`/`UpdateAsync` also notify (bell + email) every customer who's favorited the package's business when it's created in stock or restocked from `0` — see §3 Package. `DuplicateManyAsync`/`AdjustQuantityManyAsync`/`ExtendPickupWindowManyAsync` back the `/packages` bulk-action toolbar (Phase 8), each authorizing every affected package's business via `EnsureCanManageBusinessesAsync` (a thin loop over the single-package check) before mutating. `GetForAnalyticsAsync(businessId?, since)` backs the Dashboard's Business Analytics card — admin-only for a `null` businessId, otherwise requires `IsStaffAsync` on the requested one, same scoping shape as `OrderService.ResolveManagerBusinessIdAsync`. **Phase 9**: `HideAsync`/`UnhideAsync` — same `EnsureCanManageBusinessAsync` authorization as every other write, so either an admin or the package's own business staff can moderate it; both log to `IAuditLogService` |
 | `IPackageTemplateService` | `PackageTemplateService` | Same admin-or-own-business-manager authorization shape as `IPackageService`. `CreateFromPackageAsync`, `SetActiveAsync`, `DeleteAsync` are the manager-facing CRUD; `GenerateDueInstancesAsync` is the one method with **no** current-user check — system-triggered by `PackageTemplateGenerationService` (§8), same pattern as `OrderService`'s sweep methods |
 | `IReviewService` | `ReviewService` | `GetContextAsync(businessId)` → `ReviewContext(CanReview, MyReview, ReviewablePackages)` — `CanReview` is true once the customer has a completed order with the business, and only then is `ReviewablePackages` (`IOrderRepository.GetCompletedPackagesAsync`) populated; `SubmitAsync(businessId, rating, comment, packageId?)` updates an existing review in place if one exists, otherwise inserts, and re-validates `packageId` against that same reviewable set (dropping it silently if it isn't there) rather than trusting whatever the client sent — see §3 Review |
-| `IUserService` | `UserService` | Admin-only (`EnsureAdminAsync` on every method — enforced via `CurrentUserAccessor`, not an `[Authorize]` HTTP filter, since this is only ever called in-process; see §6). `UpdateRoleAsync` refuses to demote the platform's last remaining admin, and auto-releases whatever business a user managed if they're moved away from `BusinessManager`. Logs a `RoleChanged` `AuditLog` entry (old role → new role) on every successful change |
+| `IUserService` | `UserService` | Admin-only (`CurrentUserAccessor.EnsureAdminAsync` on every method, not an `[Authorize]` HTTP filter, since this is only ever called in-process; see §6). `UpdateRoleAsync` refuses to demote the platform's last remaining admin, and auto-releases whatever business a user managed if they're moved away from `BusinessManager`. Logs a `RoleChanged` `AuditLog` entry (old role → new role) on every successful change |
 | `IAuditLogService` | `AuditLogService` | `LogAsync(action, targetType, targetId?, targetName, details?)` — called from *inside* `BusinessService`/`PackageService`/`UserService`/`ReportService` after a mutation succeeds, never exposed as a standalone write endpoint (see §3 AuditLog). Resolves the actor's name itself via `CurrentUserAccessor` + `UserManager<ApplicationUser>`. `GetPagedAsync` (admin-only) backs `/audit-log` |
-| `IReportService` | `ReportService` | `SubmitAsync` — open to any signed-in user, no further authorization. `GetOpenAsync`/`DismissAsync`/`TakeActionAsync` — admin-only. `TakeActionAsync` delegates to `IBusinessService.HideAsync`/`IPackageService.HideAsync` (using the report's `Reason` as the hide reason) rather than mutating the target itself, so hiding always goes through the same authorized, audit-logged path regardless of whether it's triggered directly or via a report |
+| `IReportService` | `ReportService` | `SubmitAsync` — open to any signed-in user, no further authorization. `GetOpenAsync`/`DismissAsync`/`TakeActionAsync` — admin-only (`CurrentUserAccessor.EnsureAdminAsync`). `GetOpenAsync` batch-resolves every report's target name via `IBusinessService`/`IPackageService.GetNamesByIdsAsync` (two queries total) rather than one `GetByIdAsync` per report — the latter turned every open-reports page load into dozens of full-graph queries. `TakeActionAsync` delegates to `IBusinessService.HideAsync`/`IPackageService.HideAsync` (using the report's `Reason` as the hide reason, `notify: false`) rather than mutating the target itself, so hiding always goes through the same authorized, audit-logged path regardless of whether it's triggered directly or via a report; the staff notification fan-out is deferred until after the surrounding transaction commits (`HideAsync` returns the target, then `NotifyHiddenAsync` is called outside it) since it fans out a synchronous outbound push HTTP call per affected staff member that must not hold the transaction's row locks open |
 | `ICheckoutService` | `CheckoutService` (`Services/Payments/`) | Owns the "pay before the order exists" flow — see the deep dive below |
 | `IStripeGateway` | `StripeGateway` (`Services/Payments/`) | Thin wrapper over the Stripe SDK (`CreateCheckoutSessionAsync`, `GetSessionStatusAsync`, `RefundAsync`). Kept separate from `ICheckoutService` so `OrderService` (needs to issue refunds) doesn't have to depend on the order-creation side of checkout, and `ICheckoutService` (needs to place orders) doesn't have to depend back on `OrderService`'s refund path — breaks what would otherwise be a circular DI dependency. Reads `Stripe:SecretKey`/`Stripe:Currency` straight off `IConfiguration`, same style as `SmtpEmailSender`'s `Email:Smtp:*`; `EnsureConfigured` turns a missing key into "payments aren't configured yet" instead of a raw Stripe SDK exception, same degrade-gracefully pattern `SmtpEmailSender` uses for a missing `Email:Smtp:Host` |
 | `IOrderService` | `OrderService` | The biggest service — see the deep dive below |
@@ -589,9 +604,12 @@ public class CurrentUserAccessor(AuthenticationStateProvider authenticationState
 {
     public async Task<(bool IsAdmin, string? UserId)> GetCurrentUserAsync();
     public async Task<bool> IsInRoleAsync(string role);
+    public async Task EnsureAdminAsync(string message = "Only an admin can perform this action.");
 }
 ```
 Not behind an interface — it's a small, concrete helper every other service takes a direct dependency on to read "who is the caller and what role are they in" without depending on `HttpContext` (which Blazor Server's persistent SignalR-circuit model doesn't reliably expose the way a per-request HTTP pipeline does). Because it wraps `AuthenticationStateProvider.GetAuthenticationStateAsync()`, **it only works from inside a component's Blazor circuit** — calling it (directly or transitively, through any service that depends on it) from a genuine HTTP request throws `InvalidOperationException: Do not call GetAuthenticationStateAsync outside of the DI scope for a Razor component`. This bit `OrderExportController` during development (a real HTTP endpoint that briefly tried to call `IOrderService.GetOrdersInRangeAsync`) — see §6 for how that controller works around it instead of fighting it.
+
+`EnsureAdminAsync` centralizes a check that used to be a private method copy-pasted across `BusinessService`, `ReportService`, `UserService`, and inline in `AuditLogService` — every admin-only service method now calls this one instead, so a future change to the check itself (e.g. logging denied attempts) only has one place to land. The optional `message` lets each caller keep its own denial text (`"Only an admin can manage reports."`, `"...manage users."`, etc.) for the `UnauthorizedAccessException` it throws.
 
 ### OrderService — deep dive
 
@@ -821,7 +839,7 @@ It validates the same token directly against `IAntiforgery`, which `AddRazorComp
 | Pattern | Where | Effect |
 |---|---|---|
 | `[Authorize(Roles = AppRoles.Customer)]` | Orders, pickup pass pages | Customer-only |
-| `[Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]` | Businesses, Packages, OrderManagement, Payments, OrderScan, OrderValidate, Dashboard | Either management role |
+| `[Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]` | Businesses, Packages, OrderManagement, Payments, OrderScan, OrderValidate, OrderValidateLegacy, Dashboard | Either management role |
 | `[Authorize(Roles = AppRoles.Admin)]` | Users, Reports, Audit Log | Admin-only |
 | `[Authorize(Roles = $"{AppRoles.Customer},{AppRoles.BusinessManager}")]` | BusinessApply (`/businesses/apply`) | Self-service business signup — not Admin (they create directly via `/businesses/create`) |
 | No page-level attribute + service-side `CurrentUserAccessor` check | Every in-process controller/service | The real enforcement point for most rules — see §6 |

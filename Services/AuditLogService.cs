@@ -35,9 +35,7 @@ public class AuditLogService(
 
     public async Task<PaginatedList<AuditLog>> GetPagedAsync(int pageIndex, int pageSize, string? action, string? targetType, string? search)
     {
-        var (isAdmin, _) = await currentUser.GetCurrentUserAsync();
-        if (!isAdmin)
-            throw new UnauthorizedAccessException("Only an admin can view the audit log.");
+        await currentUser.EnsureAdminAsync("Only an admin can view the audit log.");
 
         return await auditLogRepository.GetPagedAsync(pageIndex, pageSize, action, targetType, search);
     }

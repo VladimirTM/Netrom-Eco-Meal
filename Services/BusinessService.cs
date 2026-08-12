@@ -38,6 +38,11 @@ public class BusinessService(
         return await businessRepository.GetByIdAsync(id);
     }
 
+    public async Task<Dictionary<Guid, string>> GetNamesByIdsAsync(IEnumerable<Guid> ids)
+    {
+        return await businessRepository.GetNamesByIdsAsync(ids);
+    }
+
     public async Task<List<Business>> GetByStaffUserIdAsync(string userId)
     {
         return await businessRepository.GetByStaffUserIdAsync(userId);
@@ -55,7 +60,7 @@ public class BusinessService(
 
     public async Task AddAsync(Business business)
     {
-        await EnsureAdminAsync();
+        await currentUser.EnsureAdminAsync();
 
         business.Status = BusinessStatuses.Approved;
         await businessRepository.AddAsync(business);
@@ -80,7 +85,7 @@ public class BusinessService(
 
     public async Task DeleteAsync(Business business)
     {
-        await EnsureAdminAsync();
+        await currentUser.EnsureAdminAsync();
 
         await businessRepository.DeleteAsync(business.Id);
         await businessRepository.SaveChangesAsync();
@@ -90,7 +95,7 @@ public class BusinessService(
 
     public async Task<bool> AddStaffAsync(Guid businessId, string userId, string? userName = null)
     {
-        await EnsureAdminAsync();
+        await currentUser.EnsureAdminAsync();
 
         bool added;
         try
@@ -115,7 +120,7 @@ public class BusinessService(
 
     public async Task<bool> RemoveStaffAsync(Guid businessId, string userId, string? userName = null)
     {
-        await EnsureAdminAsync();
+        await currentUser.EnsureAdminAsync();
 
         var removed = await businessRepository.RemoveStaffAsync(businessId, userId);
 
@@ -148,7 +153,7 @@ public class BusinessService(
 
     public async Task ApproveAsync(Guid businessId)
     {
-        await EnsureAdminAsync();
+        await currentUser.EnsureAdminAsync();
 
         var business = await businessRepository.GetByIdAsync(businessId);
         // Allows reconsidering a Rejected application, not just approving a fresh PendingApproval one.
@@ -193,7 +198,7 @@ public class BusinessService(
 
     public async Task RejectAsync(Guid businessId, string reason)
     {
-        await EnsureAdminAsync();
+        await currentUser.EnsureAdminAsync();
 
         var business = await businessRepository.GetByIdAsync(businessId);
         if (business is null || business.Status != BusinessStatuses.PendingApproval)
@@ -210,13 +215,13 @@ public class BusinessService(
                 $"Your business application \"{business.Name}\" wasn't approved: {reason}", null);
     }
 
-    public async Task HideAsync(Guid businessId, string reason)
+    public async Task<Business?> HideAsync(Guid businessId, string reason, bool notify = true)
     {
-        await EnsureAdminAsync();
+        await currentUser.EnsureAdminAsync();
 
         var business = await businessRepository.GetByIdAsync(businessId);
         if (business is null || business.Status != BusinessStatuses.Approved)
-            return;
+            return null;
 
         business.IsHidden = true;
         business.HiddenReason = reason;
@@ -224,13 +229,21 @@ public class BusinessService(
 
         await auditLogService.LogAsync(AuditActions.BusinessHidden, AuditTargetTypes.Business, business.Id.ToString(), business.Name, reason);
 
+        if (notify)
+            await NotifyHiddenAsync(business, reason);
+
+        return business;
+    }
+
+    public async Task NotifyHiddenAsync(Business business, string reason)
+    {
         foreach (var staff in business.Staff)
             await notificationService.CreateAsync(staff.UserId, $"\"{business.Name}\" has been hidden by an admin: {reason}", null);
     }
 
     public async Task UnhideAsync(Guid businessId)
     {
-        await EnsureAdminAsync();
+        await currentUser.EnsureAdminAsync();
 
         var business = await businessRepository.GetByIdAsync(businessId);
         if (business is null || business.Status != BusinessStatuses.Approved)
@@ -241,13 +254,6 @@ public class BusinessService(
         await businessRepository.SaveChangesAsync();
 
         await auditLogService.LogAsync(AuditActions.BusinessUnhidden, AuditTargetTypes.Business, business.Id.ToString(), business.Name);
-    }
-
-    private async Task EnsureAdminAsync()
-    {
-        var (isAdmin, _) = await currentUser.GetCurrentUserAsync();
-        if (!isAdmin)
-            throw new UnauthorizedAccessException("Only an admin can perform this action.");
     }
 
     // Shared by UpdateAsync and the hours/closures editors below — any of a business's own staff

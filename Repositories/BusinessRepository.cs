@@ -32,7 +32,7 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
         if (publicOnly)
             query = query.Where(b => b.Status == BusinessStatuses.Approved && !b.IsHidden);
         else if (!string.IsNullOrWhiteSpace(statusFilter))
-            query = statusFilter == "Hidden"
+            query = statusFilter == BusinessStatuses.HiddenFilter
                 ? query.Where(b => b.IsHidden)
                 : query.Where(b => b.Status == statusFilter && !b.IsHidden);
 
@@ -80,6 +80,12 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
     {
         return await context.Businesses.Include(b => b.Staff).ThenInclude(s => s.User).Include(b => b.BusinessType)
             .Include(b => b.Hours).Include(b => b.Closures).AsSplitQuery().FirstOrDefaultAsync(o => o.Id == id);
+    }
+
+    public async Task<Dictionary<Guid, string>> GetNamesByIdsAsync(IEnumerable<Guid> ids)
+    {
+        var idList = ids.ToList();
+        return await context.Businesses.Where(b => idList.Contains(b.Id)).ToDictionaryAsync(b => b.Id, b => b.Name);
     }
 
     public async Task<List<Business>> GetByStaffUserIdAsync(string userId)

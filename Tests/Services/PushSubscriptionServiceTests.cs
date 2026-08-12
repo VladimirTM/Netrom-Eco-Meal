@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Netrom_Eco_Meal.Repositories.Interfaces;
 using Netrom_Eco_Meal.Services;
@@ -22,7 +23,7 @@ public class PushSubscriptionServiceTests
         var repo = new Mock<IPushSubscriptionRepository>();
         var gateway = new Mock<IWebPushGateway>();
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId));
-        var service = new PushSubscriptionService(repo.Object, gateway.Object, currentUser);
+        var service = new PushSubscriptionService(repo.Object, gateway.Object, currentUser, NullLogger<PushSubscriptionService>.Instance);
         return new Fixture(service, repo, gateway);
     }
 

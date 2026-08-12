@@ -56,7 +56,7 @@
                 <option value="@BusinessStatuses.PendingApproval">Pending approval</option>
                 <option value="@BusinessStatuses.Approved">Approved</option>
                 <option value="@BusinessStatuses.Rejected">Rejected</option>
-                <option value="Hidden">Hidden</option>
+                <option value="@BusinessStatuses.HiddenFilter">Hidden</option>
             </select>
         }
         @if (!string.IsNullOrEmpty(_search) || _typeFilter != "" || _statusFilter != "")
