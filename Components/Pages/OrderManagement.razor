@@ -147,6 +147,10 @@
                         <td class="text-muted small">@PickupWindow(order)</td>
                         <td>
                             <span class="order-status-badge order-status-@order.Status.Name.ToLowerInvariant()">@order.Status.Name</span>
+                            @if (order.Status.Name == OrderStatuses.Confirmed && order.PickupPasses.Count > 1)
+                            {
+                                <span class="order-multi-pass-hint" title="Split across @order.PickupPasses.Count pickup passes"><i class="bi bi-people"></i> @order.PickupPasses.Count</span>
+                            }
                         </td>
                         <td>
                             @if (order.Payment is not null)

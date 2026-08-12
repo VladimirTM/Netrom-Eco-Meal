@@ -17,6 +17,7 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<BusinessType> BusinessTypes { get; set; }
     public DbSet<Order> Orders { get; set; }
     public DbSet<OrderPackage> OrderPackages { get; set; }
+    public DbSet<OrderPickupPass> OrderPickupPasses { get; set; }
     public DbSet<Package> Packages { get; set; }
     public DbSet<PackageType> PackageTypes { get; set; }
     public DbSet<Status> Statuses { get; set; }
@@ -71,6 +72,17 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
         modelBuilder.Entity<Order>()
             .HasIndex(o => o.OrderNumber)
             .IsUnique();
+
+        // A pass is always looked up by (OrderId, its own Id) from the pickup/validate routes —
+        // deleting the order deletes its passes along with it.
+        modelBuilder.Entity<OrderPickupPass>()
+            .HasOne(p => p.Order)
+            .WithMany(o => o.PickupPasses)
+            .HasForeignKey(p => p.OrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<OrderPickupPass>()
+            .HasIndex(p => p.OrderId);
 
         // One review per customer per business — resubmitting updates the existing row.
         modelBuilder.Entity<Review>()

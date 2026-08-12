@@ -23,4 +23,7 @@ public class Order
     public ICollection<OrderPackage> OrderPackages { get; set; } = [];
     // Null until CheckoutService.CompleteCheckoutAsync confirms the Stripe payment.
     public Payment? Payment { get; set; }
+    // Created once the order is Confirmed (one by default) — see OrderService.ApplyStatusChangeAsync
+    // and SplitPickupPassesAsync.
+    public ICollection<OrderPickupPass> PickupPasses { get; set; } = [];
 }

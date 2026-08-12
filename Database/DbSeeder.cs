@@ -591,6 +591,7 @@ public static class DbSeeder
         var now = DateTime.UtcNow;
         var payments = new List<Payment>();
         var newPackages = new List<Package>();
+        var pickupPasses = new List<OrderPickupPass>();
 
         // Every order now only exists once its Stripe Checkout payment is confirmed (see
         // CheckoutService), so each seeded order gets a matching Payment — refunded for the
@@ -612,6 +613,22 @@ public static class DbSeeder
             // Mirrors OrderService.ApplyStatusChangeAsync: only Confirmed/Completed reserve stock.
             if (statusName is OrderStatuses.Confirmed or OrderStatuses.Completed)
                 packagesById[packageId].Quantity -= quantity;
+
+            // Every order that ever reached Confirmed gets a pickup pass, same as
+            // OrderService.ApplyStatusChangeAsync — redeemed at completion time, left open for a
+            // no-show, and (for the still-Confirmed order below) split into several afterwards to
+            // demo the group-pickup feature.
+            if (statusName is OrderStatuses.Confirmed or OrderStatuses.Completed or OrderStatuses.NoShow)
+            {
+                pickupPasses.Add(new OrderPickupPass
+                {
+                    Id = Guid.NewGuid(),
+                    OrderId = order.Id,
+                    Label = "Pickup pass",
+                    CreatedAt = createdAt,
+                    RedeemedAt = statusName == OrderStatuses.Completed ? createdAt : null,
+                });
+            }
 
             payments.Add(new Payment
             {
@@ -636,6 +653,20 @@ public static class DbSeeder
         var noShow = MakeOrder(b3, new Guid("55555555-0000-0000-0000-000000000006"), 1, OrderStatuses.NoShow, now.AddDays(-4));
         var confirmed = MakeOrder(b2, new Guid("55555555-0000-0000-0000-000000000004"), 1, OrderStatuses.Confirmed, now.AddDays(-1));
         var pending = MakeOrder(b1, new Guid("55555555-0000-0000-0000-000000000008"), 1, OrderStatuses.Pending, now.AddMinutes(-20));
+
+        // Demos the Phase 1 group-pickup feature on a fresh database: swap this still-Confirmed
+        // order's single default pass for three, same as SplitPickupPassesAsync would.
+        pickupPasses.RemoveAll(p => p.OrderId == confirmed.Id);
+        pickupPasses.AddRange(new[] { "Pass 1", "Pass 2", "Pass 3" }.Select((label, i) => new OrderPickupPass
+        {
+            Id = Guid.NewGuid(),
+            OrderId = confirmed.Id,
+            Label = label,
+            // A millisecond apart, not identical — the pickup page sorts tabs by CreatedAt, and a
+            // gap under Postgres's timestamptz precision (microseconds) would round away to a tie,
+            // which Postgres doesn't break in insertion order.
+            CreatedAt = now.AddDays(-1).AddMilliseconds(i + 1),
+        }));
 
         // Backs the Phase 8 analytics card: closed pickup windows, each completed for less than
         // its full quantity, so sell-through lands below 100% and the hourly chart gets more than
@@ -684,6 +715,7 @@ public static class DbSeeder
         db.Orders.AddRange(oldCompleted, midCompleted, recentCompleted, cancelled, noShow, confirmed, pending,
             histCompleted1, histCompleted2, histCompleted3, histCompleted4, histCompleted5, histCompleted6, histCompleted7, histCompleted8, histCompleted9);
         db.Payments.AddRange(payments);
+        db.OrderPickupPasses.AddRange(pickupPasses);
 
         db.Favorites.AddRange(
             new Favorite { Id = Guid.NewGuid(), UserId = demoCustomer.Id, BusinessId = b1, CreatedAt = now },

@@ -92,6 +92,8 @@ ApplicationUser (IdentityUser)
   ├──< Order >──── Business ──── BusinessType
   │      │  │          │
   │      │  └──── Payment  (0..1 — set once Stripe Checkout confirms payment)
+  │      ├──< OrderPickupPass         (created on Confirm; split into several by the customer —
+  │      │                             see §3 OrderPickupPass)
   │      └──< OrderPackage >──── Package ──── PackageType
   │                                  │
   │                                  └──── PackageTemplate  (0..1, TemplateId — the template that
@@ -302,6 +304,51 @@ public class OrderPackage
 `OrderNumber` is **not** application-assigned — `EcoMealDbContext` maps it to `nextval('order_numbers')` via `HasDefaultValueSql`, backed by a real Postgres sequence (`modelBuilder.HasSequence<int>("order_numbers")`). This means two concurrent checkouts can never collide on the same human-friendly ticket number the way an app-side `MAX(OrderNumber) + 1` could. `OrderNumber` also carries its own unique index as a belt-and-suspenders check. Unlike the reviewed Smart Shopping Assistant project, `OrderPackage` does **not** snapshot the package's name/price at order time — it stays live-joined to `Package`, so a manager editing a package's name after the fact would (in principle) change how historical orders render. This hasn't come up as a real problem in practice since packages are re-created daily rather than edited after orders exist against them.
 
 An `Order` now only ever exists once its Stripe Checkout payment is confirmed — see `PendingCheckout` and `Payment` below, and `CheckoutService` in §5, for the bridge that makes that true.
+
+#### OrderPickupPass
+```csharp
+public class OrderPickupPass
+{
+    public Guid Id { get; set; }
+    public required Guid OrderId { get; set; }
+    public required string Label { get; set; }       // "Pickup pass" (single) or "Pass 1"/"Pass 2"/...
+    public DateTime CreatedAt { get; set; }
+    public DateTime? RedeemedAt { get; set; }
+    public Order Order { get; set; } = null!;
+}
+```
+Replaces the old implicit one-QR-per-order model with a first-class child entity, so a group
+order can be picked up by whoever from the group gets there first instead of forcing a single
+designated person to hold the only QR code. `OrderService.ApplyStatusChangeAsync` creates
+exactly one default pass the moment an order becomes Confirmed; the customer can later replace
+that set with up to `Constants.PickupPasses.MaxPasses` fresh ones via
+`OrderService.SplitPickupPassesAsync` (`OrderPickupPass.razor`'s "splitting with a group?"
+control) — always a full replace, never a partial edit, which is safe because a Confirmed
+order's passes are guaranteed unredeemed (see next paragraph). Each pass renders its own QR on
+`OrderPickupPass.razor` (`/orders/pickup/{orderId}`, tab-switchable when there's more than one)
+encoding `/orders/validate/{orderId}/{passId}`.
+
+`OrderService.RedeemPickupPassAsync` is the only place `RedeemedAt` gets set, and it always
+also completes the *whole* order in the same call (`ApplyStatusChangeAsync(order,
+Completed)`) — first scan wins for everyone in the group. That's why a Confirmed order's passes
+are always unredeemed: the instant any one of them is redeemed, the order stops being Confirmed,
+so `SplitPickupPassesAsync` never has to reason about orphaning an already-used pass.
+`OrderValidate.razor` (`/orders/validate/{orderId}/{passId}`) distinguishes "this pass was
+already used" from "the order was already picked up using a *different* pass" purely from
+`order.Status.Name` + `pass.RedeemedAt`, without any extra state.
+
+New passes are added via `dbContext.OrderPickupPasses.Add(...)`, **not** the
+`order.PickupPasses` collection navigation — a real bug hit during development. A brand-new
+entity discovered only through navigation-fixup, whose primary key is a client-assigned,
+non-default `Guid` (every entity in this app sets `Id = Guid.NewGuid()` itself rather than
+letting the database generate it), gets tracked as `EntityState.Modified` instead of `Added`.
+Npgsql then emits a no-op `UPDATE ... WHERE "Id" = @id` for a row that was never inserted,
+which Postgres correctly reports as 0 rows affected, and EF Core surfaces as a
+`DbUpdateConcurrencyException` — a confusing failure mode for what looks like a normal
+`Add()`. A mocked `IOrderRepository` (as `OrderServiceTests` uses everywhere else) can't catch
+this, since its `SaveChangesAsync()` never touches a real database; the regression test lives
+in `OrderServicePickupPassIntegrationTests` (§11), which runs the real `OrderService` against a
+real Postgres container instead.
 
 #### Payment
 ```csharp
@@ -894,5 +941,6 @@ Two kinds of tests, deliberately using different EF Core providers for different
 - **`Repositories/BusinessRepositoryTests.cs`** — the many-to-many `BusinessStaff` CRUD and the `SetHoursAsync`/`AddClosureAsync`/`RemoveClosureAsync` hours/closures methods against a real `EcoMealDbContext`, InMemory-provider-backed (`InMemoryDb.Create()`) rather than mocked — exercises `BusinessRepository`'s own query/persistence logic instead of `BusinessService`'s authorization, which `BusinessServiceTests.cs` above covers with the repository mocked out.
 - **`Models/BusinessHoursStatusTests.cs`** — pure-function coverage for `BusinessHoursStatus.IsOpenNow`/`ActiveClosure` (§3), no DbContext at all: today-in-window, today marked closed, no row for today, an active vs. an out-of-range `BusinessClosure`, and the overnight-window wraparound case (`CloseTime < OpenTime`).
 - **`Database/DbSeederTests.cs`** — integration tests that run `DbSeeder.SeedAsync` against a **real Postgres** container (`Testcontainers.PostgreSql`, `Tests/TestSupport/PostgresFixture.cs`), applying real EF migrations first via `MigrateAsync()` — exactly what `Program.cs` does on startup. This is deliberate, not incidental: an InMemory-provider test wouldn't replay real migration history, so it can't catch the class of bug this project has hit before (see §9 point 4's history and the old `SeedData`/`MoreSeedData` migrations vs. `DbSeeder` conflict) — only a real migration run proves the current seed data actually wins. One Postgres container is shared per test class; each test gets its own logical database on it (`CreateDatabaseAsync`) for isolation without paying container-startup cost per test. Requires Docker to be running locally.
+- **`Services/OrderServicePickupPassIntegrationTests.cs`** — the other reason `OrderServiceTests.cs`'s mocked `IOrderRepository` isn't enough on its own: it runs a **real** `OrderRepository` against the same Postgres-via-Testcontainers setup as `DbSeederTests.cs`, exercising `SplitPickupPassesAsync`/`RedeemPickupPassAsync` end-to-end. This is the regression test for the `dbContext.OrderPickupPasses.Add(...)` vs. `order.PickupPasses.Add(...)` bug described under §3 OrderPickupPass — a mocked repository's no-op `SaveChangesAsync()` can't observe an `EntityState.Modified` vs. `Added` mistake, since it never generates real SQL.
 
 Given this split, Postgres-only query behavior (`EF.Functions.ILike` in `OrderRepository`, the `xmin` optimistic-concurrency token on `Package`, the `order_numbers` sequence) is exercised by the seeding integration tests' real Postgres round-trip, not by the InMemory-backed unit tests.

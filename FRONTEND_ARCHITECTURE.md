@@ -49,9 +49,9 @@ Components/
 │   ├── PaymentReturn.razor       # /checkout/return — Stripe success redirect landing page, confirms payment
 │   ├── PaymentCancel.razor       # /checkout/cancel — Stripe cancel redirect landing page
 │   ├── Orders.razor              # /orders — customer order history + cancel + reorder
-│   ├── OrderPickupPass.razor     # /orders/pickup/{Id} — QR code for a Confirmed order
+│   ├── OrderPickupPass.razor     # /orders/pickup/{Id} — QR code(s) for a Confirmed order, splittable into several
 │   ├── OrderScan.razor(.js)      # /orders/scan — manager camera scanner
-│   ├── OrderValidate.razor       # /orders/validate/{Id} — confirm-pickup landing page (scanned or typed)
+│   ├── OrderValidate.razor       # /orders/validate/{Id}/{PassId} — confirm-pickup landing page (scanned or typed)
 │   ├── Login.razor / Register.razor
 │   ├── ForgotPassword.razor / ResetPassword.razor / ConfirmEmail.razor
 │   ├── AccessDenied.razor / NotFound.razor / Error.razor
@@ -495,15 +495,16 @@ Both `Pending` and `Confirmed` tickets show a "Cancel order" button (`ConfirmDia
 
 ## 10. Pickup Pass, QR Scan & Validate
 
-A three-page flow that hands a physical pickup confirmation off to a QR code, deliberately designed so each page works correctly no matter how the visitor actually arrived at it.
+A three-page flow that hands a physical pickup confirmation off to a QR code, deliberately designed so each page works correctly no matter how the visitor actually arrived at it. Since the group-pickup-pass rework (see `BACKEND_ARCHITECTURE.md` §3 OrderPickupPass), an order can have more than one pass — the QR payload and the validate route both carry a pass ID alongside the order ID, and redeeming *any one* pass completes the whole order.
 
 ```
 Customer's phone                          Manager's phone/device
 ─────────────────                          ──────────────────────
 OrderPickupPass.razor
   (Confirmed order only)
-  generates an SVG QR encoding
-  {BaseUri}/orders/validate/{orderId}
+  tab-switcher if >1 pass, each generating
+  its own SVG QR encoding
+  {BaseUri}/orders/validate/{orderId}/{passId}
         │
         │  customer shows screen to counter
         ▼
@@ -514,18 +515,18 @@ OrderPickupPass.razor
                                                    ▼
                                            OrderValidate.razor
                                              re-checks auth + order ownership itself
-                                             "Confirm pickup" → Completed
+                                             "Confirm pickup" → redeems this pass, order → Completed
 ```
 
-### OrderPickupPass — QR generation
+### OrderPickupPass — QR generation and the pass switcher
 
-Server-side, via the `QRCoder` NuGet package:
+Server-side, via the `QRCoder` NuGet package, regenerated whenever the selected pass changes:
 ```csharp
-var payloadUrl = $"{NavigationManager.BaseUri}orders/validate/{_order.Id}";
+var payloadUrl = $"{NavigationManager.BaseUri}orders/validate/{_order!.Id}/{pass.Id}";
 var qrData = new QRCodeGenerator().CreateQrCode(payloadUrl, QRCodeGenerator.ECCLevel.Q);
 _qrSvg = new SvgQRCode(qrData).GetGraphic(5, "#0b1f13", "#ffffff", true, SvgQRCode.SizingMode.ViewBoxAttribute);
 ```
-Rendered inline via `@((MarkupString)_qrSvg!)`. Only shown when `Order.Status == Confirmed` — every other status renders an explanatory empty state instead (`StatusExplanation` switch) rather than a broken/stale QR code.
+Rendered inline via `@((MarkupString)_qrSvg!)`. Only shown when `Order.Status == Confirmed` — every other status renders an explanatory empty state instead (`StatusExplanation` switch) rather than a broken/stale QR code. A Confirmed order with more than one pass shows a row of `.pickup-pass-tab` buttons above the ticket (labeled "Pass 1", "Pass 2"...) — clicking one swaps `_selectedPass` and regenerates the QR client-side, no server round-trip needed since the SVG is cheap to recompute. Below the ticket, "Splitting with a group? Get separate passes" reveals a `<select>` (1–`PickupPasses.MaxPasses`) + "Update passes" button calling `OrderController.SplitPickupPassesAsync`, then reloads the order and resets the selected pass to the first one.
 
 ### OrderScan — the camera scanner
 
@@ -542,7 +543,7 @@ Camera access is gated behind an explicit "Start scanning" tap rather than auto-
 ```js
 // OrderScan.razor.js
 import "/lib/jsqr/jsQR.js";
-const VALIDATE_PATH_PATTERN = /^\/orders\/validate\/[0-9a-fA-F-]{36}$/;
+const VALIDATE_PATH_PATTERN = /^\/orders\/validate\/[0-9a-fA-F-]{36}\/[0-9a-fA-F-]{36}$/;
 
 function tryNavigate(decoded) {
     const url = new URL(decoded, location.origin);   // throws → not a URL at all, ignore
@@ -552,15 +553,16 @@ function tryNavigate(decoded) {
     return true;
 }
 ```
-This is a deliberate security boundary, not just parsing convenience: a maliciously crafted QR code (or a genuine QR from some other app pointed at this camera by mistake) **cannot** redirect an authenticated manager's session off-app, because `tryNavigate` only ever calls `location.assign` for same-origin URLs matching the exact `/orders/validate/{guid}` shape — anything else is silently ignored and the scan loop just keeps running. A successful match does a **real browser navigation** (`location.assign`), not a callback into the Blazor circuit — the scan result reaches `OrderValidate.razor` the same way a manually-typed URL would.
+This is a deliberate security boundary, not just parsing convenience: a maliciously crafted QR code (or a genuine QR from some other app pointed at this camera by mistake) **cannot** redirect an authenticated manager's session off-app, because `tryNavigate` only ever calls `location.assign` for same-origin URLs matching the exact `/orders/validate/{guid}/{guid}` shape (order ID, then pass ID) — anything else is silently ignored and the scan loop just keeps running. A successful match does a **real browser navigation** (`location.assign`), not a callback into the Blazor circuit — the scan result reaches `OrderValidate.razor` the same way a manually-typed URL would. Getting this pattern out of sync with the actual route shape is a real, silent failure mode worth watching for: it fails closed (the scan loop just keeps running instead of navigating) rather than throwing anywhere visible, which is exactly what happened here when the route grew a second `{PassId:guid}` segment and this pattern wasn't updated in the same change.
 
 ### OrderValidate — the landing page
 
 ```razor
+@page "/orders/validate/{Id:guid}/{PassId:guid}"
 @* Reachable both from the in-app scanner and by any external QR reader opening this URL directly —
    must be fully self-sufficient and re-check authorization itself, never trust how the visitor arrived. *@
 ```
-Calls `OrderController.GetOrderForManagementAsync(Id)` on load — the exact same ownership check (`OrderService.GetOwnedOrderAsync`) any other manager-facing order read uses, regardless of whether this page was reached via the in-app scanner, a manually typed URL, or a third-party QR scanner app opening the link directly. "Confirm pickup" transitions the order to `Completed`; a `ConflictObjectResult` (someone else already completed/cancelled it — a duplicate scan, a race with the manager dashboard) re-fetches the order rather than leaving a stale status badge on screen.
+Calls `OrderController.GetOrderForManagementAsync(Id)` on load — the exact same ownership check (`OrderService.GetOwnedOrderAsync`) any other manager-facing order read uses, regardless of whether this page was reached via the in-app scanner, a manually typed URL, or a third-party QR scanner app opening the link directly. The matching pass is found client-side via `order.PickupPasses.FirstOrDefault(p => p.Id == PassId)` — a `PassId` that doesn't belong to this order renders a "This pickup pass doesn't exist" panel rather than falling through to a confusing state. "Confirm pickup" calls `OrderController.RedeemPickupPassAsync(Id, PassId)`, which redeems *this* pass and completes the whole order in one call; a `ConflictObjectResult` (already redeemed, a different pass on the same order already completed it, or the order was cancelled — a duplicate scan or a race with the manager dashboard) re-fetches the order rather than leaving a stale status badge on screen. `StatusExplanation` distinguishes "this pass was already used" from "the order was already picked up using a *different* pass" purely from `order.Status.Name` + `pass.RedeemedAt`.
 
 ---
 

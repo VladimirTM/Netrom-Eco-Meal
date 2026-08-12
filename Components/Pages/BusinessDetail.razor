@@ -325,9 +325,11 @@ else
     private static string HoursLabel(BusinessHours? row) =>
         row is null or { IsClosed: true } ? "Closed" : $"{row.OpenTime:HH:mm}–{row.CloseTime:HH:mm}";
 
+    // background-color stays set even when a URL is present, so a broken/unreachable image
+    // falls back to the forest placeholder instead of blank white (see Home.razor's MediaStyle).
     private string HeroStyle => string.IsNullOrWhiteSpace(_business?.ImageUrl)
         ? "background-color: var(--em-forest);"
-        : $"background-image: linear-gradient(180deg, rgba(11,31,19,0.15) 0%, rgba(11,31,19,0.85) 100%), url('{_business.ImageUrl}');";
+        : $"background-color: var(--em-forest); background-image: linear-gradient(180deg, rgba(11,31,19,0.15) 0%, rgba(11,31,19,0.85) 100%), url('{_business.ImageUrl}');";
 
     private string SwitchMessage => _pendingSwitch is null ? "" :
         $"Your basket has items from {CartService.BusinessName}. Adding \"{_pendingSwitch.Name}\" from {_pendingSwitch.Business.Name} will clear it and start a new one.";

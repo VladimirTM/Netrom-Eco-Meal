@@ -169,12 +169,16 @@ public class OrderRepository(EcoMealDbContext context) : IOrderRepository
         await context.SaveChangesAsync();
     }
 
+    // Split into separate SQL queries — PickupPasses and OrderPackages are both collections, and
+    // loading two collection navigations in one query would multiply rows (every pass × every line).
     private IQueryable<Order> OrdersWithIncludes() =>
         context.Orders
+            .AsSplitQuery()
             .Include(o => o.User)
             .Include(o => o.Business)
             .Include(o => o.Status)
             .Include(o => o.Payment)
+            .Include(o => o.PickupPasses)
             .Include(o => o.OrderPackages)
             .ThenInclude(op => op.Package)
             .ThenInclude(p => p.Business);

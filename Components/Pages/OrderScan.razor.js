@@ -4,7 +4,7 @@
 // Server circuit; a successful, validated decode does a real browser navigation instead.
 import "/lib/jsqr/jsQR.js";
 
-const VALIDATE_PATH_PATTERN = /^\/orders\/validate\/[0-9a-fA-F-]{36}$/;
+const VALIDATE_PATH_PATTERN = /^\/orders\/validate\/[0-9a-fA-F-]{36}\/[0-9a-fA-F-]{36}$/;
 
 let stream = null;
 let rafId = null;

@@ -426,9 +426,11 @@
     private List<Review> ReviewsFor(Guid businessId) =>
         _reviewsByBusiness.GetValueOrDefault(businessId, []);
 
+    // background-color stays set even with a URL present, so a broken image falls back to the
+    // forest placeholder instead of blank white — background-image has no failure event of its own.
     private static string MediaStyle(string? imageUrl) => string.IsNullOrWhiteSpace(imageUrl)
         ? "background-color: var(--em-forest);"
-        : $"background-image: url('{imageUrl}');";
+        : $"background-color: var(--em-forest); background-image: url('{imageUrl}');";
 
     private void OpenBusiness(Guid businessId) => NavigationManager.NavigateTo($"/businesses/{businessId}");
 

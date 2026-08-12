@@ -21,7 +21,8 @@ is just the capability summary.
   a saved location
 - View a business's live packages and add them to a basket
 - Check out via Stripe Checkout, and track past orders with pickup windows on `/orders`
-- Show a QR pickup pass for a confirmed order, scanned by the business at collection
+- Show a QR pickup pass for a confirmed order, scanned by the business at collection —
+  split a group order into several separate passes so whoever gets there first can scan
 - Leave a star rating and comment on a business once you've ordered from it
 - Report a business or package that looks wrong, and apply to list your own business for
   admin review on `/businesses/apply`
@@ -212,9 +213,18 @@ accounts are unaffected, since they're created pre-confirmed.
 
 `Stripe__SecretKey` is empty by default here too, so checkout shows the same "payments
 aren't configured yet" error until you set a real test-mode key — see [Payments](#payments)
-above. Set it as an environment variable before running `docker compose up`, or add it
-directly to `docker-compose.test.yml`; either way, no live/production Stripe key is ever
-needed to try the app.
+above. The safe way to do that locally is a gitignored `docker-compose.override.yml` next
+to this file (never edit `docker-compose.test.yml` itself — it's tracked, so a real key
+typed directly into it risks getting committed):
+```yaml
+services:
+  app:
+    environment:
+      Stripe__SecretKey: "sk_test_..."
+```
+then run `docker compose -f docker-compose.test.yml -f docker-compose.override.yml up --build`
+— Compose merges the two, and the key never touches a tracked file. An environment variable
+works too; either way, no live/production Stripe key is ever needed to try the app.
 
 The pickup QR scanner (`/orders/scan`) uses the device camera, which browsers only allow
 over HTTPS or on `localhost`. It works fine when you open the app as `localhost:8081`,
@@ -249,6 +259,8 @@ instead of an empty app:
 - **Customer** — demo.customer@ecomeal.local / Demo123! — has past orders in every status
   (completed, confirmed, cancelled, no-show, pending) across several businesses, so
   `/orders`, reorder, the QR pickup pass, favorites and reviews all show something real.
+  One confirmed order comes pre-split into 3 passes, to demo the group-pickup flow without
+  having to split one yourself first.
 - **BusinessManager** — demo.manager@ecomeal.local / Demo123! — staffs both Stadionul de
   Gusturi and VAR Bistro, so the sidebar's business switcher has something to switch
   between out of the box. Has a pending order waiting to be confirmed on `/orders/manage`

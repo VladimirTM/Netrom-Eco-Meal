@@ -106,6 +106,30 @@ public class OrderController(IOrderService orderService) : ControllerBase
         }
     }
 
+    public async Task<ActionResult<Order>> SplitPickupPassesAsync(Guid orderId, int passCount)
+    {
+        try
+        {
+            return await orderService.SplitPickupPassesAsync(orderId, passCount);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or InvalidOperationException)
+        {
+            return Conflict(ex.Message);
+        }
+    }
+
+    public async Task<ActionResult<Order>> RedeemPickupPassAsync(Guid orderId, Guid passId)
+    {
+        try
+        {
+            return await orderService.RedeemPickupPassAsync(orderId, passId);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or InvalidOperationException)
+        {
+            return Conflict(ex.Message);
+        }
+    }
+
     public async Task<ActionResult<decimal>> GetTotalKgSavedAsync()
     {
         return await orderService.GetTotalKgSavedAsync();

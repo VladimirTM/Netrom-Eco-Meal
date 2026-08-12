@@ -43,8 +43,24 @@
             <span class="text-muted small d-block">@StatusExplanation</span>
         </div>
     }
-    else
+    else if (_selectedPass is not null)
     {
+        var passes = _order.PickupPasses.OrderBy(p => p.CreatedAt).ToList();
+
+        @if (passes.Count > 1)
+        {
+            <div class="pickup-pass-switcher" role="tablist" aria-label="Pickup passes">
+                @foreach (var pass in passes)
+                {
+                    <button type="button" class="pickup-pass-tab @(pass.Id == _selectedPass.Id ? "active" : "")"
+                            role="tab" aria-selected="@(pass.Id == _selectedPass.Id)" @onclick="() => SelectPass(pass)">
+                        @pass.Label
+                    </button>
+                }
+            </div>
+            <p class="pickup-pass-switcher-hint">Each pass is its own QR code — hand a different one to each person picking up, whoever gets there first scans to complete the order.</p>
+        }
+
         <article class="order-ticket order-ticket--pass">
             <div class="order-ticket-main">
                 <div class="order-ticket-top">
@@ -89,9 +105,46 @@
                 <div class="order-ticket-stub-qr">
                     @((MarkupString)_qrSvg!)
                 </div>
+                @if (passes.Count > 1)
+                {
+                    <span class="order-ticket-stub-pass-label">@_selectedPass.Label</span>
+                }
                 <span class="order-ticket-stub-hint">Hand your phone to the counter — they'll scan this to confirm pickup</span>
             </div>
         </article>
+
+        <div class="pickup-pass-split">
+            @if (!_splitting)
+            {
+                <button type="button" class="pickup-pass-split-toggle" @onclick="() => _splitting = true">
+                    <i class="bi bi-people"></i> Splitting with a group? Get separate passes
+                </button>
+            }
+            else
+            {
+                <div class="pickup-pass-split-form">
+                    <label for="passCount">Number of passes</label>
+                    <select id="passCount" class="form-select form-select-sm" @bind="_passCount">
+                        @for (var n = PickupPasses.MinPasses; n <= PickupPasses.MaxPasses; n++)
+                        {
+                            <option value="@n">@n</option>
+                        }
+                    </select>
+                    <button type="button" class="btn btn-primary btn-sm" disabled="@_splitBusy" @onclick="SplitAsync">
+                        @if (_splitBusy)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        }
+                        Update passes
+                    </button>
+                    <button type="button" class="btn btn-link btn-sm" disabled="@_splitBusy" @onclick="() => _splitting = false">Cancel</button>
+                </div>
+                @if (_splitError is not null)
+                {
+                    <div class="alert alert-danger py-2 small mt-2" role="alert">@_splitError</div>
+                }
+            }
+        </div>
     }
 </div>
 
@@ -102,8 +155,19 @@
     private bool _forbidden;
     private bool _notFound;
     private string? _qrSvg;
+    private Entities.OrderPickupPass? _selectedPass;
+    private bool _splitting;
+    private bool _splitBusy;
+    private string? _splitError;
+    private int _passCount = PickupPasses.MinPasses;
 
     protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
+    }
+
+    private async Task LoadAsync()
     {
         var result = await OrderController.GetMyOrderAsync(Id);
         if (result.Result is UnauthorizedResult)
@@ -119,14 +183,43 @@
 
         _order = result.Value;
 
-        if (_order is not null && _order.Status.Name == OrderStatuses.Confirmed)
+        if (_order is not null && _order.Status.Name == OrderStatuses.Confirmed && _order.PickupPasses.Count > 0)
         {
-            var payloadUrl = $"{NavigationManager.BaseUri}orders/validate/{_order.Id}";
-            var qrData = new QRCodeGenerator().CreateQrCode(payloadUrl, QRCodeGenerator.ECCLevel.Q);
-            _qrSvg = new SvgQRCode(qrData).GetGraphic(5, "#0b1f13", "#ffffff", true, SvgQRCode.SizingMode.ViewBoxAttribute);
+            var previouslySelected = _selectedPass?.Id;
+            var passes = _order.PickupPasses.OrderBy(p => p.CreatedAt).ToList();
+            SelectPass(passes.FirstOrDefault(p => p.Id == previouslySelected) ?? passes[0]);
+            // Keep the split-count selector in sync with reality — otherwise "Update passes"
+            // silently regenerates a stale count and invalidates already-issued QR codes.
+            _passCount = passes.Count;
+        }
+    }
+
+    private void SelectPass(Entities.OrderPickupPass pass)
+    {
+        _selectedPass = pass;
+        var payloadUrl = $"{NavigationManager.BaseUri}orders/validate/{_order!.Id}/{pass.Id}";
+        var qrData = new QRCodeGenerator().CreateQrCode(payloadUrl, QRCodeGenerator.ECCLevel.Q);
+        _qrSvg = new SvgQRCode(qrData).GetGraphic(5, "#0b1f13", "#ffffff", true, SvgQRCode.SizingMode.ViewBoxAttribute);
+    }
+
+    private async Task SplitAsync()
+    {
+        _splitBusy = true;
+        _splitError = null;
+
+        var result = await OrderController.SplitPickupPassesAsync(Id, _passCount);
+        if (result.Result is ConflictObjectResult conflict)
+        {
+            _splitError = conflict.Value as string ?? "Couldn't update pickup passes.";
+        }
+        else if (result.Value is not null)
+        {
+            _selectedPass = null;
+            await LoadAsync();
+            _splitting = false;
         }
 
-        ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
+        _splitBusy = false;
     }
 
     private void HandleTimeZoneChanged() => InvokeAsync(StateHasChanged);

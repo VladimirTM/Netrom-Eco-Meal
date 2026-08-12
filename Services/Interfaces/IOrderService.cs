@@ -20,6 +20,11 @@ public interface IOrderService
     public Task<Order> GetOrderForManagementAsync(Guid orderId);
     public Task<Order> GetMyOrderAsync(Guid orderId);
     public Task<Order> CancelMyOrderAsync(Guid orderId);
+    // Customer-only — replaces a Confirmed order's pickup passes with passCount fresh ones, so a
+    // group order can be picked up as multiple independent QR codes instead of just one.
+    public Task<Order> SplitPickupPassesAsync(Guid orderId, int passCount);
+    // Manager/admin-only — redeeming any one pass on a Confirmed order completes the whole order.
+    public Task<Order> RedeemPickupPassAsync(Guid orderId, Guid passId);
     public Task<decimal> GetTotalKgSavedAsync();
     // System-triggered, no current-user auth — called by the background expiry sweep.
     public Task<int> ExpireStalePendingOrdersAsync();

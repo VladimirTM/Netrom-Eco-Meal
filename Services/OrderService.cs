@@ -167,23 +167,7 @@ public class OrderService(
     // Read-only counterpart used by the QR pickup validation page.
     public async Task<Order> GetOrderForManagementAsync(Guid orderId) => await GetOwnedOrderAsync(orderId);
 
-    public async Task<Order> GetMyOrderAsync(Guid orderId)
-    {
-        if (!await currentUser.IsInRoleAsync(AppRoles.Customer))
-            throw new UnauthorizedAccessException("Only customers can view their own orders.");
-
-        var (_, userId) = await currentUser.GetCurrentUserAsync();
-        if (userId is null)
-            throw new UnauthorizedAccessException("You must be signed in to view this order.");
-
-        var order = await orderRepository.GetByIdAsync(orderId)
-            ?? throw new InvalidOperationException("This order no longer exists.");
-
-        if (order.UserId != userId)
-            throw new UnauthorizedAccessException("You can only view your own orders.");
-
-        return order;
-    }
+    public async Task<Order> GetMyOrderAsync(Guid orderId) => await GetMyOwnedOrderAsync(orderId, "view");
 
     // Public aggregate for the home hero — no per-user data exposed, so no auth check needed.
     public async Task<decimal> GetTotalKgSavedAsync()
@@ -313,20 +297,86 @@ public class OrderService(
 
     public async Task<Order> CancelMyOrderAsync(Guid orderId)
     {
+        var order = await GetMyOwnedOrderAsync(orderId, "cancel");
+        return await ApplyStatusChangeAsync(order, OrderStatuses.Cancelled);
+    }
+
+    // A Confirmed order's passes are always unredeemed — the first redemption completes the whole
+    // order (see RedeemPickupPassAsync) — so this can freely replace the full set every time.
+    public async Task<Order> SplitPickupPassesAsync(Guid orderId, int passCount)
+    {
+        if (passCount is < PickupPasses.MinPasses or > PickupPasses.MaxPasses)
+            throw new InvalidOperationException($"Choose between {PickupPasses.MinPasses} and {PickupPasses.MaxPasses} pickup passes.");
+
+        var order = await GetMyOwnedOrderAsync(orderId, "manage pickup passes for");
+        if (order.Status.Name != OrderStatuses.Confirmed)
+            throw new InvalidOperationException("Pickup passes can only be changed while the order is confirmed.");
+
+        // Remove via the navigation (not DbSet.RemoveRange + Clear() on the same live collection —
+        // that dueling-removal-path combo corrupts EF's delete tracking against a real database).
+        // OrderId is required with cascade delete configured, so orphaning here marks them Deleted.
+        foreach (var pass in order.PickupPasses.ToList())
+            order.PickupPasses.Remove(pass);
+
+        var now = DateTime.UtcNow;
+        for (var i = 1; i <= passCount; i++)
+        {
+            // Adding via the DbSet (not just the order.PickupPasses navigation) matters here: a
+            // client-assigned non-default Guid key discovered only through navigation fixup gets
+            // tracked as Modified instead of Added, turning the INSERT into a no-op UPDATE.
+            dbContext.OrderPickupPasses.Add(new OrderPickupPass
+            {
+                Id = Guid.NewGuid(),
+                OrderId = order.Id,
+                Label = passCount == 1 ? "Pickup pass" : $"Pass {i}",
+                // A millisecond apart, not identical — the pickup page sorts tabs by CreatedAt, and
+                // a gap under Postgres's timestamptz precision (microseconds) would round away to a
+                // tie, which Postgres doesn't break in insertion order.
+                CreatedAt = now.AddMilliseconds(i),
+            });
+        }
+
+        await orderRepository.SaveChangesAsync();
+        return order;
+    }
+
+    public async Task<Order> RedeemPickupPassAsync(Guid orderId, Guid passId)
+    {
+        var order = await GetOwnedOrderAsync(orderId);
+
+        var pass = order.PickupPasses.FirstOrDefault(p => p.Id == passId)
+            ?? throw new InvalidOperationException("This pickup pass doesn't exist.");
+
+        if (order.Status.Name != OrderStatuses.Confirmed)
+            throw new InvalidOperationException(order.Status.Name == OrderStatuses.Completed
+                ? "This order was already picked up."
+                : $"This order can't be completed right now.");
+
+        if (pass.RedeemedAt is not null)
+            throw new InvalidOperationException("This pickup pass was already used.");
+
+        pass.RedeemedAt = DateTime.UtcNow;
+        return await ApplyStatusChangeAsync(order, OrderStatuses.Completed);
+    }
+
+    // Shared by GetMyOrderAsync/CancelMyOrderAsync/SplitPickupPassesAsync — the one place "does
+    // this customer own this order" is decided, so the check can't drift out of sync between them.
+    private async Task<Order> GetMyOwnedOrderAsync(Guid orderId, string action)
+    {
         if (!await currentUser.IsInRoleAsync(AppRoles.Customer))
-            throw new UnauthorizedAccessException("Only customers can cancel their own orders.");
+            throw new UnauthorizedAccessException($"Only customers can {action} their own orders.");
 
         var (_, userId) = await currentUser.GetCurrentUserAsync();
         if (userId is null)
-            throw new UnauthorizedAccessException("You must be signed in to cancel an order.");
+            throw new UnauthorizedAccessException($"You must be signed in to {action} this order.");
 
         var order = await orderRepository.GetByIdAsync(orderId)
             ?? throw new InvalidOperationException("This order no longer exists.");
 
         if (order.UserId != userId)
-            throw new UnauthorizedAccessException("You can only cancel your own orders.");
+            throw new UnauthorizedAccessException($"You can only {action} your own orders.");
 
-        return await ApplyStatusChangeAsync(order, OrderStatuses.Cancelled);
+        return order;
     }
 
     // Shared by manager/admin status changes and customer self-cancellation — keeps the
@@ -361,6 +411,19 @@ public class OrderService(
 
             foreach (var line in order.OrderPackages)
                 line.Package.Quantity -= line.Quantity;
+
+            // Every Confirmed order gets a pickup pass by default — customers who never bother
+            // splitting it (see SplitPickupPassesAsync) still get exactly the one QR they had before.
+            // Adding via the DbSet (not just the order.PickupPasses navigation) matters here: a
+            // client-assigned non-default Guid key discovered only through navigation fixup gets
+            // tracked as Modified instead of Added, turning the INSERT into a no-op UPDATE.
+            dbContext.OrderPickupPasses.Add(new OrderPickupPass
+            {
+                Id = Guid.NewGuid(),
+                OrderId = order.Id,
+                Label = "Pickup pass",
+                CreatedAt = DateTime.UtcNow,
+            });
         }
         else if (currentStatusName == OrderStatuses.Confirmed && statusName is OrderStatuses.Cancelled or OrderStatuses.NoShow)
         {

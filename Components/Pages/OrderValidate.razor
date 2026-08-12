@@ -1,4 +1,4 @@
-@page "/orders/validate/{Id:guid}"
+@page "/orders/validate/{Id:guid}/{PassId:guid}"
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Mvc
 @using Netrom_Eco_Meal.Constants
@@ -32,12 +32,16 @@
             </div>
         </div>
     }
+    else if (_pass is null)
+    {
+        <NotFoundPanel Message="This pickup pass doesn't exist." BackHref="/orders/manage" BackLabel="Back to orders"/>
+    }
     else
     {
         <div class="card border-0 shadow-sm validate-card">
             <div class="d-flex justify-content-between align-items-start mb-3">
                 <div>
-                    <span class="biz-modal-eyebrow">Order #@_order.OrderNumber.ToString("000")</span>
+                    <span class="biz-modal-eyebrow">Order #@_order.OrderNumber.ToString("000")@(_order.PickupPasses.Count > 1 ? $" · {_pass.Label}" : "")</span>
                     <h1 class="h4 fw-bold mb-0">@_order.Business.Name</h1>
                 </div>
                 <span class="order-status-badge order-status-@_order.Status.Name.ToLowerInvariant()">@_order.Status.Name</span>
@@ -86,8 +90,14 @@
                 <span class="order-ticket-total-value">@_order.OrderPackages.Sum(op => op.Quantity * op.Package.Price).ToString("C")</span>
             </div>
 
-            @if (_order.Status.Name == OrderStatuses.Confirmed)
+            @if (_order.Status.Name == OrderStatuses.Confirmed && _pass.RedeemedAt is null)
             {
+                @if (_order.PickupPasses.Count > 1)
+                {
+                    <p class="text-muted small mb-2">
+                        <i class="bi bi-people"></i> This order has @_order.PickupPasses.Count pickup passes — confirming this one completes the whole order.
+                    </p>
+                }
                 <button type="button" class="order-action-btn order-action-complete validate-confirm-btn" disabled="@_busy" @onclick="ConfirmPickupAsync">
                     @if (_busy)
                     {
@@ -108,8 +118,10 @@
 
 @code {
     [Parameter] public Guid Id { get; set; }
+    [Parameter] public Guid PassId { get; set; }
 
     private Order? _order;
+    private Entities.OrderPickupPass? _pass;
     private bool _forbidden;
     private bool _notFound;
     private bool _busy;
@@ -137,6 +149,7 @@
         }
 
         _order = result.Value;
+        _pass = _order?.PickupPasses.FirstOrDefault(p => p.Id == PassId);
     }
 
     private async Task ConfirmPickupAsync()
@@ -144,17 +157,18 @@
         _busy = true;
         _actionError = null;
 
-        var result = await OrderController.UpdateOrderStatusAsync(Id, OrderStatuses.Completed);
+        var result = await OrderController.RedeemPickupPassAsync(Id, PassId);
         if (result.Result is ConflictObjectResult conflict)
         {
-            // Someone else beat us to it (duplicate scan, manual complete, cancellation) —
-            // refresh from the server rather than leaving a stale status badge on screen.
+            // Someone else beat us to it (duplicate scan, another pass redeemed, manual complete,
+            // cancellation) — refresh from the server rather than leaving a stale status badge on screen.
             _actionError = conflict.Value as string ?? "This order couldn't be completed.";
             await LoadAsync();
         }
         else if (result.Value is not null)
         {
             _order = result.Value;
+            _pass = _order.PickupPasses.FirstOrDefault(p => p.Id == PassId);
             _completed = true;
         }
 
@@ -171,7 +185,9 @@
     private string StatusExplanation => _order!.Status.Name switch
     {
         OrderStatuses.Pending => "This order hasn't been confirmed by the business yet.",
-        OrderStatuses.Completed => "This order was already picked up.",
+        OrderStatuses.Completed => _pass?.RedeemedAt is null
+            ? "This order was already picked up using a different pass."
+            : "This order was already picked up.",
         OrderStatuses.Cancelled => "This order was cancelled.",
         _ => "This order can't be completed right now.",
     };

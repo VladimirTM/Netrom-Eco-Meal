@@ -480,6 +480,162 @@ public class OrderServiceTests
         f.NotificationService.Verify(n => n.CreateAsync(owner.Id, It.Is<string>(m => m.Contains("cancelled")), It.IsAny<string>()), Times.Once);
     }
 
+    // ---- Pickup passes (Phase 1: multiple pickup passes / split QR) --------
+
+    [Fact]
+    public async Task UpdateStatusAsync_Confirm_CreatesDefaultPickupPass()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 5);
+        var order = TestData.Order(user, businessId, OrderStatuses.Pending, (package, 2));
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        await f.Service.UpdateStatusAsync(order.Id, OrderStatuses.Confirmed);
+
+        // order is a hand-built, untracked POCO (not loaded via the real DbContext), so EF's
+        // relationship fixup can't populate order.PickupPasses from the DbSet.Add() call the way it
+        // would for a real, tracked order. orderRepository.SaveChangesAsync() is also mocked (a
+        // no-op), so a query against the DbSet wouldn't see it either — check the change tracker's
+        // local (unsaved) view instead, via OrderPickupPasses.Local.
+        var pass = Assert.Single(f.Db.OrderPickupPasses.Local, p => p.OrderId == order.Id);
+        Assert.Null(pass.RedeemedAt);
+    }
+
+    [Fact]
+    public async Task SplitPickupPassesAsync_NotOwner_Throws()
+    {
+        var f = Build(OtherCustomerId, AppRoles.Customer);
+        var owner = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        var order = TestData.Order(owner, businessId, OrderStatuses.Confirmed, (package, 1));
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.SplitPickupPassesAsync(order.Id, 3));
+    }
+
+    [Fact]
+    public async Task SplitPickupPassesAsync_OrderNotConfirmed_Throws()
+    {
+        var f = Build(CustomerId, AppRoles.Customer);
+        var owner = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        var order = TestData.Order(owner, businessId, OrderStatuses.Pending, (package, 1));
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => f.Service.SplitPickupPassesAsync(order.Id, 3));
+        Assert.Contains("confirmed", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(7)]
+    public async Task SplitPickupPassesAsync_OutOfRange_Throws(int passCount)
+    {
+        var f = Build(CustomerId, AppRoles.Customer);
+        var owner = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        var order = TestData.Order(owner, businessId, OrderStatuses.Confirmed, (package, 1));
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Service.SplitPickupPassesAsync(order.Id, passCount));
+    }
+
+    [Fact]
+    public async Task SplitPickupPassesAsync_Success_ReplacesPassesWithFreshSet()
+    {
+        var f = Build(CustomerId, AppRoles.Customer);
+        var owner = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        var order = TestData.Order(owner, businessId, OrderStatuses.Confirmed, (package, 1));
+        order.PickupPasses.Add(new OrderPickupPass { Id = Guid.NewGuid(), OrderId = order.Id, Label = "Pickup pass", CreatedAt = DateTime.UtcNow });
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        await f.Service.SplitPickupPassesAsync(order.Id, 3);
+
+        // order is a hand-built, untracked POCO, so fixup can't populate order.PickupPasses from
+        // the DbSet.Add() call, and SaveChangesAsync is mocked — check the change tracker's local
+        // (unsaved) view instead (see UpdateStatusAsync_Confirm_CreatesDefaultPickupPass).
+        var newPasses = f.Db.OrderPickupPasses.Local.Where(p => p.OrderId == order.Id).ToList();
+        Assert.Equal(3, newPasses.Count);
+        Assert.Equal(new[] { "Pass 1", "Pass 2", "Pass 3" }, newPasses.Select(p => p.Label).OrderBy(l => l));
+        Assert.All(newPasses, p => Assert.Null(p.RedeemedAt));
+    }
+
+    [Fact]
+    public async Task RedeemPickupPassAsync_UnknownPass_Throws()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        var order = TestData.Order(user, businessId, OrderStatuses.Confirmed, (package, 1));
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Service.RedeemPickupPassAsync(order.Id, Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task RedeemPickupPassAsync_AlreadyRedeemed_Throws()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 3);
+        var order = TestData.Order(user, businessId, OrderStatuses.Confirmed, (package, 2));
+        var pass = new OrderPickupPass { Id = Guid.NewGuid(), OrderId = order.Id, Label = "Pickup pass", CreatedAt = DateTime.UtcNow, RedeemedAt = DateTime.UtcNow };
+        order.PickupPasses.Add(pass);
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => f.Service.RedeemPickupPassAsync(order.Id, pass.Id));
+        Assert.Contains("already used", ex.Message);
+    }
+
+    [Fact]
+    public async Task RedeemPickupPassAsync_OrderNotConfirmed_Throws()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        var order = TestData.Order(user, businessId, OrderStatuses.Cancelled, (package, 1));
+        var pass = new OrderPickupPass { Id = Guid.NewGuid(), OrderId = order.Id, Label = "Pickup pass", CreatedAt = DateTime.UtcNow };
+        order.PickupPasses.Add(pass);
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Service.RedeemPickupPassAsync(order.Id, pass.Id));
+    }
+
+    [Fact]
+    public async Task RedeemPickupPassAsync_Success_RedeemsPassAndCompletesWholeOrder()
+    {
+        // Redeeming one pass out of several completes the whole order — the "whoever gets there
+        // first" semantics FEATURE_IDEAS.md's Phase 1 calls for.
+        var f = Build(AdminId, AppRoles.Admin);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 3);
+        var order = TestData.Order(user, businessId, OrderStatuses.Confirmed, (package, 2));
+        var pass1 = new OrderPickupPass { Id = Guid.NewGuid(), OrderId = order.Id, Label = "Pass 1", CreatedAt = DateTime.UtcNow };
+        var pass2 = new OrderPickupPass { Id = Guid.NewGuid(), OrderId = order.Id, Label = "Pass 2", CreatedAt = DateTime.UtcNow };
+        order.PickupPasses.Add(pass1);
+        order.PickupPasses.Add(pass2);
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        var result = await f.Service.RedeemPickupPassAsync(order.Id, pass1.Id);
+
+        Assert.Equal(TestStatusIds.Completed, result.StatusId);
+        Assert.NotNull(pass1.RedeemedAt);
+        Assert.Null(pass2.RedeemedAt);
+        // Completing an order never touches stock — it was already decremented at Confirm time.
+        Assert.Equal(3, package.Quantity);
+    }
+
     // ---- ExpireStalePendingOrdersAsync -------------------------------------
 
     [Fact]

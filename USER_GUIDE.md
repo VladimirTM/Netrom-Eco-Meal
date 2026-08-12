@@ -152,6 +152,12 @@ a QR code stub with the hint *"Hand your phone to the counter — they'll scan t
 pickup."* Scanning it (see [Confirm pickup with a QR scan](#confirm-pickup-with-a-qr-scan))
 is what actually moves the order to Completed.
 
+Picking it up as a group? Tap **Splitting with a group? Get separate passes**, choose how many
+people are collecting (up to 6), and each gets their own tab with its own QR code — hand a
+different one to each person. Whoever scans first completes the whole order for everyone; the
+rest just show "already picked up" if scanned afterward. Changing your mind about the count is
+free until someone actually redeems a pass.
+
 ### Leave a review
 
 Once you've completed at least one order with a kitchen, its detail page shows a review form
@@ -315,7 +321,10 @@ permission, you'll see: *"Camera access was denied. Allow camera access for this
 browser settings and try again."*; any other camera failure shows *"Couldn't start the camera.
 Make sure this device has one and try again."* Once scanning, point the camera at the
 customer's pickup pass — a successful decode takes you straight to that order's confirmation
-screen.
+screen. A Confirmed order split across a group shows a small "👥 N" hint next to its status in
+`/orders/manage` — scanning *any* one of that order's passes completes the whole order, so
+scanning a second one afterward just shows "This order was already picked up using a different
+pass."
 
 ### Keep an eye on things
 
