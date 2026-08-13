@@ -80,11 +80,10 @@ public class ReportService(
             return;
 
         // Hiding the target, resolving the report, and the audit log entry are each their own
-        // SaveChangesAsync — wrap them in one transaction so a failure partway through (e.g. a
-        // concurrent admin resolving the same report) can't leave the target hidden but the
-        // report still showing as Open. Notification is deliberately excluded from the
-        // transaction (notify: false) and sent after commit — it fans out a synchronous outbound
-        // push HTTP call per affected staff member, which must not hold these row locks open.
+        // SaveChangesAsync — wrap them in one transaction so a failure partway through (e.g. a concurrent
+        // admin resolving the same report) can't leave the target hidden but the report still Open.
+        // Notification is deliberately excluded (notify: false) and sent after commit — it fans out a
+        // synchronous outbound push HTTP call per affected staff member, which must not hold these row locks open.
         Business? hiddenBusiness = null;
         Package? hiddenPackage = null;
 

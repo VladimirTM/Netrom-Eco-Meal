@@ -13,6 +13,7 @@
 @inject BusinessController BusinessController
 @inject IBusinessService BusinessService
 @inject IBusinessTypeService BusinessTypeService
+@inject IImageUploadService ImageUploadService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
@@ -77,10 +78,28 @@
                         </div>
                     </div>
                     <div class="mb-4">
-                        <label for="imageUrl" class="form-label fw-semibold">
-                            Image URL <span class="text-muted fw-normal">(optional)</span>
+                        <label for="imageFile" class="form-label fw-semibold">
+                            Photo <span class="text-muted fw-normal">(optional)</span>
                         </label>
-                        <InputText id="imageUrl" class="form-control" placeholder="https://..." @bind-Value="_model.ImageUrl"/>
+                        <div class="d-flex align-items-start gap-3">
+                            @if (!string.IsNullOrWhiteSpace(_model.ImageUrl))
+                            {
+                                <img src="@_model.ImageUrl" alt="Business photo preview" class="form-image-preview"/>
+                            }
+                            <div class="flex-grow-1">
+                                <InputFile id="imageFile" class="form-control" accept="image/*" OnChange="OnImageSelectedAsync" disabled="@_uploadingImage"/>
+                                <div class="form-text">Or paste an image URL directly:</div>
+                                <InputText class="form-control form-control-sm mt-1" placeholder="https://..." @bind-Value="_model.ImageUrl"/>
+                                @if (_uploadingImage)
+                                {
+                                    <div class="text-muted small mt-1"><span class="spinner-border spinner-border-sm me-1" role="status"></span>Uploading…</div>
+                                }
+                                @if (_imageUploadError is not null)
+                                {
+                                    <div class="text-danger small mt-1">@_imageUploadError</div>
+                                }
+                            </div>
+                        </div>
                     </div>
                     <div class="mb-4">
                         <label class="form-label fw-semibold">
@@ -246,6 +265,8 @@
     private bool _notFound;
     private bool _locating;
     private string? _locationError;
+    private bool _uploadingImage;
+    private string? _imageUploadError;
 
     private static readonly DayOfWeek[] WeekOrder =
         [DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday];
@@ -386,6 +407,36 @@
         var result = await BusinessController.RemoveClosureAsync(Id!.Value, closureId);
         if (result is NoContentResult)
             _closures.RemoveAll(c => c.Id == closureId);
+    }
+
+    private async Task OnImageSelectedAsync(InputFileChangeEventArgs e)
+    {
+        _imageUploadError = null;
+
+        if (e.File.Size > ImageUpload.MaxSizeBytes)
+        {
+            _imageUploadError = $"Image is too large — max {ImageUpload.MaxSizeBytes / 1024 / 1024} MB.";
+            return;
+        }
+
+        _uploadingImage = true;
+        try
+        {
+            await using var stream = e.File.OpenReadStream(ImageUpload.MaxSizeBytes);
+            _model.ImageUrl = await ImageUploadService.SaveAsync(stream, e.File.Name, "businesses");
+        }
+        catch (InvalidOperationException ex)
+        {
+            _imageUploadError = ex.Message;
+        }
+        catch (IOException)
+        {
+            _imageUploadError = $"Image is too large — max {ImageUpload.MaxSizeBytes / 1024 / 1024} MB.";
+        }
+        finally
+        {
+            _uploadingImage = false;
+        }
     }
 
     private async Task Submit()

@@ -19,6 +19,10 @@ public interface IOrderRepository
     // package is this review about" picker.
     public Task<List<Package>> GetCompletedPackagesAsync(string userId, Guid businessId);
     public Task<decimal> GetTotalWeightSavedKgAsync();
+    // Top opted-in (ApplicationUser.ShowOnLeaderboard) rescuers by kg saved within [from, toExclusive)
+    // — feeds the /impact page. A user who never opted in never appears, full stop, not as an
+    // anonymized row.
+    public Task<List<LeaderboardEntry>> GetTopRescuersAsync(DateTime rangeStart, DateTime rangeEndExclusive, int take);
     // Pending orders past their confirm window or a closed pickup slot — feeds the expiry sweep.
     public Task<List<Order>> GetStalePendingOrdersAsync(DateTime createdBefore);
     // Confirmed orders whose pickup window has fully closed — feeds the no-show sweep.

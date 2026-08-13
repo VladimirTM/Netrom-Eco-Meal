@@ -1,166 +1,135 @@
 # Feature Ideas for Netrom Eco Meal
 
-A brainstorm of features that would extend the current app, organized into
-**implementation phases** based on value, difficulty, and dependencies between
-ideas. Each idea notes roughly what it touches in the existing codebase.
-Nothing here is committed to — just a menu, sequenced.
+A personal project, so this is just a running scratch list — no team to coordinate, no
+users to grow, no roadmap process to justify. Ideas get picked because they're fun to
+build, teach something new, or round out the app, not because of an ROI calculation. See
+[AI_FEATURE_IDEAS.md](AI_FEATURE_IDEAS.md) for the AI-specific ideas, split out because
+they all share one dependency (a local LLM) rather than being independent work.
 
-> **Status (2026-08-07):** Phases 1–7 are all shipped now, including payments — only the
-> opportunistic/reconsider items below are still open. Items marked `[x]` below are done;
-> `[ ]` are not.
+## Shipped so far
 
-## Where the app stands today
+A build log, grouped roughly by when each batch landed — not a promise of what's next.
 
-Blazor Server app, 3 roles (Customer / BusinessManager / Admin), Postgres + EF Core.
-Customers browse businesses (`/`), view live packages, add to a single-business cart
-(`CartService`, localStorage-backed), pay via Stripe Checkout, track orders (`/orders`),
-show a QR pickup pass, and leave one review per business. Managers/Admins run `/packages`,
-`/orders/manage`, `/orders/scan`, `/payments`, and a basic `/dashboard` with counts.
-This section is a snapshot from before Phases 1–7 shipped — see the phase list below for
-what's actually landed since.
+**Core storefront & impact tracking** — food-saved (kg) tracking end to end (package
+weight → order confirmation → personal and platform-wide totals on the home hero);
+package-level home page search (matches live packages, not just business name/type) plus
+a "closing soon" sort.
 
----
+**Foundations** — an in-app notification bell; a background sweep that auto-cancels
+stale Pending orders (this one was a real bug fix, not just a nice-to-have — an abandoned
+Pending order held a stock reservation indefinitely); favorites; dietary/allergen tags.
 
-## Phase 1 — Immediate, no dependencies ✅ shipped
+**Remaining quick wins** — reorder ("order again"), CSV export, a dashboard trend chart,
+and per-user rate limiting on order placement.
 
-Highest visible payoff, pure additions to existing pages, nothing else needs to
-land first. Start here.
+**Test suite** — an xUnit project: unit tests for `OrderService`'s status-transition/
+stock logic, plus integration tests for `DbSeeder` against a real Postgres container.
 
-- [x] **Impact tracking basics**: add a weight (kg) to `Package`/`PackageType`, show "X kg
-  saved" on order confirmation, `/orders` history, and the pickup pass; add a running
-  personal total and a platform-wide counter on the home hero (`Home.razor` already
-  has a `home-stats` row — natural 4th stat). This is the app's core "eco" value prop
-  and today nothing measures it at all.
-- [x] **Package-level search on the home page**: `Home.razor`'s search only matches
-  business name/type today, not what's actually in live packages (e.g. "bread"). Also
-  add a **"closing soon" sort** by nearest `PickupEnd` — small change, likely improves
-  conversion.
+**Email + no-show handling** — order-lifecycle emails, pickup reminders, and a `NoShow`
+status where the charge is deliberately kept (it doubles as the no-show fee).
 
-## Phase 2 — Quick wins that unblock later work ✅ shipped
+**Recurring packages + geolocation** — "repeat this every day" templates so a manager
+doesn't hand-recreate the same package every morning; lat/lng on `Business` plus
+distance sort and a Leaflet map view.
 
-Still small schema/UI changes, but prioritized because later phases depend on them.
+**Payments + multi-staff businesses** — real Stripe Checkout (test-mode); an `Order` is
+only created once Stripe confirms payment, bridged by a short-lived `PendingCheckout`
+row; automatic refund on cancel. `BusinessStaff` many-to-many replaced the old
+single-manager-per-business model, so a manager can staff more than one business.
 
-- [x] **In-app notification bell**: a `Notification` table + bell icon in
-  `MainLayout.razor`. No external service dependency, and it's the foundation Phase 5
-  (no-show alerts, back-in-stock) needs.
-- [x] **Background job to expire stale Pending orders**: orders that are never confirmed
-  just sit there today, holding a stock reservation via the `pendingElsewhere` check
-  in `OrderService.PlaceOrderAsync`. A scheduled sweep to auto-cancel them fixes a
-  real phantom-stock-lock bug, not just a nice-to-have — do this before order volume
-  grows.
-- [x] **Favorites / follow a business**: one `Favorite(UserId, BusinessId)` join table, a
-  heart icon on `BusinessDetail.razor` and business cards, a favorites filter on the
-  home page.
-- [x] **Allergens & dietary tags**: tags on `Package`/`PackageType` (vegetarian, vegan,
-  gluten-free, contains nuts...) shown in `PackageDetailModal.razor` — table-stakes
-  for a food app and currently completely missing.
+**Manager productivity + trust & safety** — bulk package actions (duplicate/adjust
+quantity/extend pickup window) and a business analytics card (sell-through rate, busiest
+pickup hours); self-service business applications with admin approval, hide/unhide
+moderation on businesses and packages, customer reports, and an audit log.
 
-## Phase 3 — Remaining quick wins ✅ shipped
+**Observability + business hours** — Serilog replaces the default console logger with
+structured, enriched logging (request timing/exceptions via `UseSerilogRequestLogging`,
+environment-aware minimum levels in config); `BusinessHours`/`BusinessClosure` give each
+business a weekly schedule plus holiday date ranges, surfaced as a "closed now" badge and
+an hours/closure panel on the home page, business cards, and business detail page.
 
-Cheap and independent — no reason to wait, but no other phase depends on them either.
+**Package-level reviews** — `Review` keeps its `(BusinessId, UserId)` scope but gains an
+optional `PackageId`, tagging a review to a specific package the reviewer actually
+completed an order for (`OrderRepository.GetCompletedPackagesAsync` backs the picker).
+Shows as a package-name pill on each review card, a per-package rating in
+`PackageDetailModal`, and an optional "which package?" dropdown on `BusinessDetail.razor`'s
+review form — an unrecognized/stale `PackageId` is silently dropped rather than rejected.
 
-- [x] **Reorder / "order again"**: one click from `/orders` history to re-add a past
-  order's packages to the cart, subject to current availability.
-- [x] **CSV export**: export orders or impact stats for a date range — mostly a query +
-  a download button.
-- [x] **Richer dashboard counts → trends**: `Dashboard.razor` only shows current totals;
-  charting orders/day or food-saved/week over time is a query change, not a redesign.
-- [x] **Rate limiting on order placement**: nothing stops one customer from spamming
-  `PlaceOrderAsync`; a simple per-user throttle closes an easy abuse path.
+**Web push notifications** — a service worker (`wwwroot/service-worker.js`) + PWA manifest
+(`wwwroot/manifest.webmanifest`) stand up the browser-push plumbing; the notification bell's
+panel gains an "enable browser alerts" toggle that subscribes via the Push API and hands the
+subscription to `PushSubscriptionController`. `NotificationService.CreateAsync` — the one
+choke point every existing notification (order lifecycle, restock, business
+approve/reject/hide...) already goes through — now also fires a best-effort push via
+`IWebPushGateway` (the `WebPush` NuGet package, VAPID-signed, no third-party account needed)
+to every subscription a user has, pruning any the push service reports as gone (404/410). No
+per-caller changes were needed anywhere else in the app.
 
-## Phase 4 — Pay down risk before the big bets ✅ shipped
+**Multiple pickup passes** — reworked the order/QR model from an implicit one-QR-per-order
+into `OrderPickupPass`, a first-class child of `Order`. A Confirmed order still gets exactly
+one pass by default (`OrderService.ApplyStatusChangeAsync`), but the customer can split it
+into up to `PickupPasses.MaxPasses` separate QR codes on `OrderPickupPass.razor` — one per
+person in a group order — via `OrderService.SplitPickupPassesAsync`. Each pass gets its own
+`/orders/validate/{orderId}/{passId}` URL; redeeming any single one
+(`OrderService.RedeemPickupPassAsync`) completes the whole order, so whoever from the group
+gets there first is the one who scans, and the rest just see "already picked up." Hit (and
+fixed) a real EF Core gotcha along the way: adding a new `OrderPickupPass` via the
+`order.PickupPasses` collection-navigation instead of `dbContext.OrderPickupPasses.Add(...)`
+gets tracked as `Modified` rather than `Added` — a client-assigned, non-default Guid key
+discovered only through relationship fixup looks like an existing row to EF Core — which
+turns the INSERT into a silent no-op UPDATE. A mocked `IOrderRepository` can't catch that
+class of bug, which is why `OrderServicePickupPassIntegrationTests` runs the real
+`OrderService` against a real Postgres container instead.
 
-- [x] **Automated test suite**: no test project exists yet. Unit tests around
-  `OrderService`'s status-transition/stock logic (the trickiest logic in the app)
-  plus integration tests around seeding aren't a "feature" but pay for themselves
-  once the codebase keeps growing. Do this **before**, not after, Phases 5–7 — those
-  touch the same order-flow code, and bugs there get more expensive to find once
-  more logic is layered on top.
+**Home page browsing polish** — a dietary/allergen filter dropdown next to the kitchen-type
+one on `Home.razor` (options straight from `Constants.DietaryTags.All`, split into a
+preference optgroup and a "Contains X" allergen-warning optgroup); a `dietaryTag` parameter
+threaded through `BusinessController`/`BusinessService`/`BusinessRepository.GetPagedAsync`
+narrows results to businesses with at least one live package carrying that tag, same
+server-side query shape as the existing kitchen-type filter. A red "Ends in N min" countdown
+badge shows on `BusinessDetail.razor`'s package rows (and `PackageDetailModal`) for anything
+closing within the hour — the same threshold the existing "closing soon" sort already used,
+now visible per package instead of only affecting sort order.
 
-## Phase 5 — Big bets unlocked by the Phase 2 notification bell ✅ shipped
+**Business/package type management + community impact leaderboard** — a new admin-only `/types`
+page gives `BusinessType`/`PackageType` a real write side (`BusinessTypeController`/
+`PackageTypeController` over the new `AddAsync`/`UpdateAsync`/`DeleteAsync` on their services),
+so a new kitchen or package category no longer needs a code change and a migration to add one
+row. Delete is blocked with a friendly `Conflict` (not a raw DB error) whenever a `Business`/
+`Package` still references that type — both FKs are required relationships with no explicit
+`OnDelete` configured, so EF Core's convention default is `Cascade`, and deleting a type in use
+would otherwise silently take every business/package of that type down with it. Separately, a
+new public `/impact` page ranks the current month's top rescuers by kg saved
+(`OrderRepository.GetTopRescuersAsync`, grouped server-side, not pulled into memory like the
+existing per-user kg stats on `/orders`/`/dashboard`) — opt-in only: `ApplicationUser` gained a
+`ShowOnLeaderboard` bool (off by default, flipped from a toggle right on `/impact` itself), and
+a customer with real Completed orders who never opted in simply never appears, not even as an
+anonymized row.
 
-- [x] **Email notifications**: order confirmed/cancelled, pickup reminders, back-in-stock
-  alerts. Bigger than the notification bell because it needs a real email sender, but
-  high leverage — ASP.NET Identity's email confirmation is already wired for
-  `RequireConfirmedAccount` and unused (`Program.cs`), so this also unlocks account
-  confirmation and password reset for free.
-- [x] **No-show / low-stock alerts**: flagging a Confirmed order that was never picked up
-  by `PickupEnd` needs a new status (`OrderStatuses` has no "NoShow") plus a delivery
-  channel (bell or email) — depends on the two items above.
+**Package/business image upload** — `Package.ImageUrl`/`Business.ImageUrl` stay plain text
+columns, but `BusinessForm.razor`/`PackageForm.razor` now offer a real upload next to the
+manual-URL fallback: an `InputFile` streams straight to the new `IImageUploadService`
+(`ImageUploadService`, local disk under `wwwroot/uploads/{businesses,packages}`, GUID
+filenames, extension allowlist from `Constants.ImageUpload`), which hands back the saved
+file's `/uploads/...` URL to drop into the same `ImageUrl` field a pasted link would've gone
+into — no schema change needed. The one real gotcha: `app.MapStaticAssets()` only serves the
+build-time static-web-assets manifest, so a file written to `wwwroot/uploads` *after* the app
+has started would 404 (or get swallowed by the Blazor Server fallback route) despite sitting
+right there on disk — `Program.cs` adds a small, separate `UseStaticFiles` middleware scoped to
+that one directory to cover it. `docker-compose.test.yml` mounts `wwwroot/uploads` as a named
+volume so uploads survive a `docker compose up --build`, and it's gitignored since it's runtime
+content, not source.
 
-## Phase 6 — Big bets, independent infra ✅ shipped
-
-Each needs new infrastructure or a bigger schema change, but doesn't depend on
-Phases 1–5.
-
-- [x] **Recurring/template packages**: managers currently hand-recreate the same package
-  every day (`PackageForm.razor`). A "repeat daily" template that auto-generates
-  tomorrow's `Package` rows removes the single most repetitive manager task, but
-  needs a scheduler and a template data model.
-- [x] **Geolocation / distance sorting + map view**: store lat/lng on `Business`, use
-  browser geolocation (there's already an `IJSRuntime` interop pattern in
-  `CartService` to follow) to sort/filter by distance; a map view is a natural
-  follow-on once coordinates exist. Meaningful UX upgrade, but touches data model,
-  JS interop, and possibly a mapping library.
-
-## Phase 7 — Highest ceiling, highest cost/risk
-
-Scope each of these separately from everything else; don't bundle with other work.
-
-- [x] **Payments (Stripe)**: checkout now redirects to a real Stripe Checkout Session
-  (test-mode; `Stripe:SecretKey` config, empty by default with a friendly "payments aren't
-  configured yet" error until it's set) — an `Order` is only created once Stripe confirms
-  payment, bridged by a short-lived `PendingCheckout` row (`ICheckoutService`) so an
-  abandoned payment never creates a phantom order. Confirmed on redirect back from Stripe
-  (`/checkout/return`), no webhook — simpler to run locally, no Stripe CLI/ngrok needed.
-  `Payment` is a new 1:1-with-`Order` entity; `OrderService` refunds automatically whenever
-  an order is Cancelled (manual or the stale-Pending sweep), but deliberately *not* on
-  NoShow — the kept charge doubles as the no-show fee with no extra fee-specific code. A new
-  `/payments` page gives managers/admins a lightweight payout ledger (reuses the existing
-  order-management query, no new controller/repository needed).
-- [x] **Multiple staff per business**: replaced `Business.ManagerId` with a `BusinessStaff`
-  many-to-many join table — a business can have several staff, and a staff member can be
-  assigned to more than one business. `IBusinessService.IsStaffAsync` centralizes the
-  authorization check that used to be duplicated per service; a new scoped
-  `ManagedBusinessContext` (mirrors `CartService`'s pattern) tracks a manager's currently
-  selected business with a switcher in `NavMenu.razor` when they staff more than one.
-  `Businesses.razor`/`Users.razor` now show staff as removable chips with an add dropdown.
-
----
-
-## Opportunistic fill-ins
-
-Don't plan a cycle around these on their own — slot them in when touching related
-code in one of the phases above.
-
-- [ ] **Bulk actions on `/packages`**: multi-select to duplicate, adjust quantity, or
-  extend pickup windows — natural alongside Phase 6's recurring-template work.
-- [ ] **Business hours & holiday closures**: `Business` has no operating-hours model
-  today (only packages' `PickupStart/PickupEnd`); explicit hours would let the home
-  page show "closed now."
-- [ ] **Audit log**: who promoted/demoted a user, who edited a business — `Users.razor`
-  and `BusinessForm.razor` make silent changes today with no history. Natural
-  alongside Phase 7's multi-staff/approval work.
-- [ ] **Business approval workflow**: today only Admins create businesses directly; a
-  "business signs up, admin approves" flow enables self-service onboarding.
-- [ ] **Package/business moderation**: hide/report flow instead of only hard delete.
-- [ ] **Structured logging / error tracking**: no telemetry beyond ASP.NET defaults —
-  fine for now, but do this before a real production deployment regardless of which
-  phase you're on.
-- [ ] **Referral / invite a friend**: lightweight growth loop on top of existing auth.
-- [ ] **Business-level analytics** (sell-through rate, busiest pickup hours): cheaper to
-  build once Phase 3's dashboard trend charts exist — building on top of those beats
-  building it standalone.
-
-## Reconsider — lower value or high effort relative to payoff
-
-Not worth prioritizing unless a specific need comes up.
-
-- [ ] **Package-level reviews**: `Review` is `(BusinessId, UserId)` scoped today; adding
-  per-package reviews means a schema change and UI for a fairly marginal signal gain
-  over the existing business-level rating.
-- [ ] **Multiple pickup passes / split QR across people**: real but niche use case,
-  meaningful rework of the order/QR model for a small slice of orders.
-- [ ] **Web push notifications**: same payoff as email/in-app bell for most use cases,
-  but higher implementation cost (service worker, subscription management) — only
-  worth it if going for a full PWA/install-as-app experience.
+**Live "sold out" stock updates** — went with "reusing Blazor Server's own circuit connections"
+over a standalone SignalR hub: a singleton `PackageStockBroadcaster` (the only service here that
+isn't `Scoped` or a `BackgroundService`) exposes one C# event, `BusinessStockChanged`.
+`OrderService`/`PackageService` call `NotifyBusinessChanged(businessId)` right after any
+stock-relevant `SaveChangesAsync` succeeds; `BusinessDetail.razor` subscribes with the same
+`OnChange` + `IDisposable`-unsubscribe idiom `CartService`/`ClientTimeZoneService` already use,
+except this event reaches every open circuit, not just its own. Hit a real EF Core gotcha along
+the way: `EcoMealDbContext` lives for a whole circuit, so a re-query after the broadcast kept
+returning the *first* query's tracked `Package` instances — EF's identity map ignores a query's
+fresh values for any row it already tracks. Fixed with `.AsNoTracking()` on
+`PackageRepository.GetPagedAsync`/`GetAllAsync` (pure read paths; every write re-fetches through
+`GetByIdAsync`/`GetByIdsAsync`). Caught only by a real two-tab browser test, not the unit suite —
+same class of bug the `OrderPickupPass` gotcha above needed a real database to catch.

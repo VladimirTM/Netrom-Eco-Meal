@@ -4,10 +4,11 @@ A detailed walkthrough of how to actually use the app, day to day, for each of t
 roles — what every button does, what the field validation rules are, and what happens in the
 less obvious cases (a sold-out package, a denied camera permission, a business with no saved
 location). For *what each role can do* at a glance instead, see the
-[README](README.md#what-each-role-can-do); this doc is the exhaustive version. Three demo
-accounts (`demo.customer@ecomeal.local`, `demo.manager@ecomeal.local`,
-`demo.manager2@ecomeal.local`, all `Demo123!`) already exist if you're following along on a
-fresh `docker compose up` — see [Seed data](README.md#seed-data).
+[README](README.md#what-each-role-can-do); this doc is the exhaustive version. Five demo
+accounts (`demo.customer@ecomeal.local`, `demo.customer2@ecomeal.local`,
+`demo.customer3@ecomeal.local`, `demo.manager@ecomeal.local`, `demo.manager2@ecomeal.local`,
+all `Demo123!`) already exist if you're following along on a fresh `docker compose up` — see
+[Seed data](README.md#seed-data).
 
 ---
 
@@ -39,6 +40,10 @@ and total kg of food saved to date.
   "bread" is nowhere on its profile.
 - **Filter** by kitchen type via a dropdown ("All kitchen types" plus one option per type:
   Restaurant, Bakery, Cafe, Grocery Store, Food Truck).
+- **Filter** by dietary preference or allergen via a second dropdown ("Any diet/allergen" plus
+  every tag from the same list managers pick from when tagging a package — Vegetarian, Vegan,
+  Gluten-Free, Dairy-Free, Halal in one group, the "Contains X" allergen warnings in another).
+  Only kitchens with at least one live package carrying that tag show up.
 - **Sort** by "Name (A–Z)", "Closing soon" (nearest pickup window first), or "Nearest" — the
   last option only appears in the dropdown once you've used **Near me**.
 - **Near me** button asks your browser for location permission, then sorts by real distance
@@ -72,7 +77,10 @@ Opening a kitchen shows its full profile — description, address, star rating, 
 now**/**Closed now** badge next to the address if the kitchen has set hours — and every
 currently-live package (already sorted soonest-closing first), each with its type, pickup
 window, description, price, dietary/allergen tag pills, and how many are left after everyone
-else's pending reservations are accounted for.
+else's pending reservations are accounted for. A package whose pickup window ends within the
+next hour also gets a red **Ends in N min** badge next to its pickup time — the same urgency
+the home page's "Closing soon" sort already uses, just visible per package instead of only
+affecting order.
 
 If the kitchen has set weekly hours, an **Opening hours** section lists all seven days with
 today highlighted; a day with no open/close time shown reads "Closed". If a holiday closure is
@@ -80,9 +88,11 @@ active right now, a banner above the hours reads *"Closed for the holidays until
 manager's reason, if one was given]."* A closure only affects this indicator and badge — it
 doesn't hide the kitchen's live packages or block ordering from them.
 
-Click a package (or **Add** directly from the list) to open its detail view. If a package has
-sold out since the page loaded, the button reads **Sold out** and is disabled instead of
-letting you add it. Otherwise, **Add to basket** adds one unit.
+The package list updates itself live — if someone else's order or a manager's edit changes
+what's available while you're on the page, the "N left" counts and **Sold out** state update on
+their own, no refresh needed. Click a package (or **Add** directly from the list) to open its
+detail view. A sold-out package shows **Sold out** and is disabled instead of letting you add
+it; otherwise, **Add to basket** adds one unit.
 
 A basket can only hold packages from **one kitchen at a time** — adding from a different
 kitchen than what's already in your basket opens a confirmation dialog ("Start a new basket?")
@@ -204,6 +214,15 @@ The small **bell icon** next to "Mark all read" turns these into real browser no
 even when the tab isn't open — click it once to grant your browser's notification permission.
 Click it again to turn them back off. It only appears if your browser supports it.
 
+### Community impact leaderboard
+
+The **trophy icon** in the header (visible whether or not you're signed in) opens `/impact`, a
+running ranking of this month's top rescuers by kg saved. It's opt-in: your name only shows up
+if you turn on **Appear on this leaderboard** — a toggle at the top of the page, visible only
+when you're signed in as a Customer, off by default. Flip it and your own row appears or
+disappears immediately, highlighted with a **You** badge among the ranked list. If nobody's
+opted in yet this month, the page just says so instead of showing an empty table.
+
 ---
 
 ## Business Manager
@@ -257,7 +276,8 @@ fields above them.
   time zone) — pickup end must be after pickup start and must still be in the future; when
   *editing* a package that's already mid-window, only the end time is checked, so an
   in-progress pickup window doesn't block your edit
-- **Image URL** (optional)
+- **Photo** (optional) — upload a JPG/PNG/WEBP/GIF up to 5 MB, or paste an image URL directly
+  into the smaller field underneath if you'd rather link one
 
 Ticking **Repeat this every day** while *creating* a package (not available when editing)
 turns it into a recurring template instead of a one-off: a background sweep auto-generates a
@@ -279,6 +299,9 @@ current page). Selecting one or more reveals a toolbar above the table:
 
 A selection persists as you page through or change filters, so you can build it up across
 multiple pages before acting — "Clear selection" or completing an action empties it again.
+
+Any of these — a quantity change, hiding a package, extending its window — shows up live on
+that business's page for anyone already browsing it, no refresh needed on their end.
 
 ### Manage recurring templates
 
@@ -305,6 +328,10 @@ Action buttons follow the same state machine customers see from the other side:
   once that order's pickup window has actually passed** — you can't mark someone a no-show
   early.
 - Any other status shows no actions.
+
+**Cancel** always asks for confirmation first ("Cancel order?", same dialog shape as the
+customer-side cancel) before actually refunding — a misclick here would otherwise refund a
+paying customer with no way to undo it.
 
 Export a date range as CSV with the **Export CSV** button next to the filters (pick "Export
 from"/"Export to" dates first) — handy for your own bookkeeping outside the app. The queue is
@@ -367,7 +394,8 @@ that, an existing Admin promotes further accounts via `/users`.
 
 - **Name**, **Description**, **Address** (all required)
 - **Type** (dropdown)
-- **Image URL** (optional)
+- **Photo** (optional) — upload a JPG/PNG/WEBP/GIF up to 5 MB, or paste an image URL directly
+  into the smaller field underneath if you'd rather link one
 - **Location** (optional — powers "near me" sort and the map view): latitude and longitude
   fields you can type by hand, or a **geo-pin button** next to them that asks your browser for
   its current position and fills both fields in automatically. If location can't be resolved,
@@ -448,6 +476,16 @@ business they were staffed to.
 The **Businesses** column here does the exact same staff-assignment as `/businesses`' Staff
 column, just organized by person instead of by business — add or remove businesses per user
 with the same chip-and-dropdown UI, shown only for BusinessManager accounts.
+
+### Manage kitchen and package types
+
+`/types` lets an Admin add, rename, or delete the categories businesses and packages pick from
+(Restaurant/Bakery/Cafe/... for kitchens, Surprise Bag/Meal Box/... for packages) without
+needing a code change or a database migration for a single new row. Each of the two lists (side
+by side) supports an inline rename (pencil icon → edit the name in place → check to save) and a
+delete (trash icon, confirmed before it happens). Deleting a type that's still used by at least
+one business or package is blocked with an explanation instead of silently breaking those rows —
+reassign or remove them first.
 
 ### Platform-wide visibility
 

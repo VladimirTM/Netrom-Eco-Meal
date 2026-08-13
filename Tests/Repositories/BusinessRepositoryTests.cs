@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Repositories;
 using Netrom_Eco_Meal.Tests.TestSupport;
@@ -214,6 +215,50 @@ public class BusinessRepositoryTests
 
         Assert.True(result);
         Assert.Empty(await db.BusinessClosures.Where(c => c.BusinessId == business.Id).ToListAsync());
+    }
+
+    // ---- GetPagedAsync dietaryTag filter (Phase 10) ------------
+
+    [Fact]
+    public async Task GetPagedAsync_DietaryTagFilter_OnlyReturnsBusinessesWithMatchingLivePackage()
+    {
+        await using var db = InMemoryDb.Create();
+        var repo = new BusinessRepository(db);
+        var veganBusiness = TestData.Business();
+        var otherBusiness = TestData.Business();
+        db.BusinessTypes.Add(new BusinessType { Id = veganBusiness.BusinessTypeId, Name = "Type A" });
+        db.BusinessTypes.Add(new BusinessType { Id = otherBusiness.BusinessTypeId, Name = "Type B" });
+        db.Businesses.AddRange(veganBusiness, otherBusiness);
+        var veganPackage = TestData.Package(veganBusiness.Id);
+        veganPackage.DietaryTags = [DietaryTags.Vegan];
+        var glutenPackage = TestData.Package(otherBusiness.Id);
+        glutenPackage.DietaryTags = [DietaryTags.ContainsGluten];
+        db.Packages.AddRange(veganPackage, glutenPackage);
+        await db.SaveChangesAsync();
+
+        var result = await repo.GetPagedAsync(1, 10, null, null, dietaryTag: DietaryTags.Vegan);
+
+        Assert.Single(result.Items);
+        Assert.Equal(veganBusiness.Id, result.Items[0].Id);
+    }
+
+    [Fact]
+    public async Task GetPagedAsync_DietaryTagFilter_IgnoresExpiredPackages()
+    {
+        await using var db = InMemoryDb.Create();
+        var repo = new BusinessRepository(db);
+        var business = TestData.Business();
+        db.BusinessTypes.Add(new BusinessType { Id = business.BusinessTypeId, Name = "Type A" });
+        db.Businesses.Add(business);
+        var expiredVeganPackage = TestData.Package(business.Id);
+        expiredVeganPackage.DietaryTags = [DietaryTags.Vegan];
+        expiredVeganPackage.PickupEnd = DateTime.UtcNow.AddHours(-1);
+        db.Packages.Add(expiredVeganPackage);
+        await db.SaveChangesAsync();
+
+        var result = await repo.GetPagedAsync(1, 10, null, null, dietaryTag: DietaryTags.Vegan);
+
+        Assert.Empty(result.Items);
     }
 
     [Fact]

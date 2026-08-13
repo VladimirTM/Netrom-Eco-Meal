@@ -108,6 +108,19 @@ public class OrderRepository(EcoMealDbContext context) : IOrderRepository
             .SumAsync(op => (decimal?)(op.Quantity * op.Package.WeightKg)) ?? 0m;
     }
 
+    public async Task<List<LeaderboardEntry>> GetTopRescuersAsync(DateTime rangeStart, DateTime rangeEndExclusive, int take)
+    {
+        var grouped = context.OrderPackages
+            .Where(op => op.Order.Status.Name == OrderStatuses.Completed
+                         && op.Order.CreatedAt >= rangeStart && op.Order.CreatedAt < rangeEndExclusive
+                         && op.Order.User.ShowOnLeaderboard)
+            .GroupBy(op => new { op.Order.UserId, op.Order.User.Name })
+            .Select(g => new { g.Key.UserId, g.Key.Name, KgSaved = g.Sum(op => op.Quantity * op.Package.WeightKg) });
+
+        var results = await grouped.OrderByDescending(g => g.KgSaved).Take(take).ToListAsync();
+        return results.Select(g => new LeaderboardEntry(g.UserId, g.Name, g.KgSaved)).ToList();
+    }
+
     public async Task<List<Order>> GetStalePendingOrdersAsync(DateTime createdBefore)
     {
         var now = DateTime.UtcNow;

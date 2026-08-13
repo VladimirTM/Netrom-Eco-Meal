@@ -82,6 +82,22 @@
                 }
             </select>
 
+            <select class="form-select home-business-filter" @bind="_dietaryTagFilter" @bind:after="FilterChangedAsync">
+                <option value="">Any diet/allergen</option>
+                <optgroup label="Dietary preference">
+                    @foreach (var tag in DietaryTags.All.Where(t => !DietaryTags.IsAllergen(t)))
+                    {
+                        <option value="@tag">@tag</option>
+                    }
+                </optgroup>
+                <optgroup label="Contains (allergen warning)">
+                    @foreach (var tag in DietaryTags.Allergens)
+                    {
+                        <option value="@tag">@tag</option>
+                    }
+                </optgroup>
+            </select>
+
             <button type="button" class="home-fav-toggle @(_sortBy == BusinessSortOptions.Distance ? "home-fav-toggle-active" : "")"
                     @onclick="ToggleNearMeAsync" disabled="@_locatingNearMe">
                 @if (_locatingNearMe)
@@ -244,6 +260,7 @@
     private string _search = "";
     private string _businessTypeFilter = "";
     private string _sortBy = BusinessSortOptions.Name;
+    private string _dietaryTagFilter = "";
     private bool _favoritesOnly;
     private int _pageIndex = 1;
     private const int PageSize = 9;
@@ -258,7 +275,7 @@
     private List<Business>? _mapBusinesses;
     private bool _mapNeedsRender;
 
-    private bool HasActiveFilters => _search != "" || _businessTypeFilter != "" || _sortBy != BusinessSortOptions.Name || _favoritesOnly;
+    private bool HasActiveFilters => _search != "" || _businessTypeFilter != "" || _dietaryTagFilter != "" || _sortBy != BusinessSortOptions.Name || _favoritesOnly;
 
     protected override async Task OnInitializedAsync()
     {
@@ -287,7 +304,7 @@
     private async Task LoadPageAsync()
     {
         Guid? typeId = Guid.TryParse(_businessTypeFilter, out var id) ? id : null;
-        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId, sortBy: _sortBy, favoritesOnly: _favoritesOnly, customerLat: _customerLat, customerLng: _customerLng, publicOnly: true)).Value;
+        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId, sortBy: _sortBy, favoritesOnly: _favoritesOnly, customerLat: _customerLat, customerLng: _customerLng, publicOnly: true, dietaryTag: _dietaryTagFilter == "" ? null : _dietaryTagFilter)).Value;
 
         // Only fetch reviews for the businesses actually shown on this page, not the whole table.
         var businessIds = _paged?.Items.Select(b => b.Id).ToList() ?? [];
@@ -319,6 +336,7 @@
     {
         _search = "";
         _businessTypeFilter = "";
+        _dietaryTagFilter = "";
         _sortBy = BusinessSortOptions.Name;
         _favoritesOnly = false;
         return FilterChangedAsync();

@@ -1,0 +1,117 @@
+@page "/impact"
+@layout PublicLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Models
+@rendermode InteractiveServer
+@inject ImpactController ImpactController
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Community Impact — Eco Meal</PageTitle>
+
+<section class="impact-hero">
+    <div class="impact-hero-inner">
+        <span class="home-hero-eyebrow"><i class="bi bi-trophy-fill"></i> This month's top rescuers</span>
+        <h1 class="home-hero-title">Community <span class="home-hero-highlight">Impact</span></h1>
+        <p class="home-hero-sub">
+            Every completed pickup keeps real food out of the bin. This board ranks the customers who've
+            saved the most this month — opt in below to add your own name to it.
+        </p>
+    </div>
+</section>
+
+<section class="impact-body">
+    <AuthorizeView Roles="@AppRoles.Customer" Context="optInAuth">
+        <Authorized>
+            <div class="impact-optin-card">
+                <div>
+                    <div class="fw-semibold">Appear on this leaderboard</div>
+                    <div class="text-muted small">Off by default — your name only shows once you opt in.</div>
+                </div>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="leaderboard-optin"
+                           checked="@_optedIn" disabled="@_optInBusy" @onchange="ToggleOptInAsync"/>
+                    <label class="form-check-label small" for="leaderboard-optin">@(_optedIn ? "Visible" : "Hidden")</label>
+                </div>
+            </div>
+        </Authorized>
+    </AuthorizeView>
+
+    @if (_leaderboard is null)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (_leaderboard.Count == 0)
+    {
+        <div class="home-empty">
+            <i class="bi bi-trophy fs-1 text-muted d-block mb-3"></i>
+            <p class="text-muted mb-0">No one has opted in yet this month — be the first rescuer on the board.</p>
+        </div>
+    }
+    else
+    {
+        <ol class="impact-list">
+            @for (var i = 0; i < _leaderboard.Count; i++)
+            {
+                var entry = _leaderboard[i];
+                var isMe = entry.UserId == _currentUserId;
+                <li class="impact-row @(isMe ? "impact-row-me" : "")" @key="entry.UserId">
+                    <span class="impact-rank @RankClass(i)">@(i + 1)</span>
+                    <span class="impact-avatar">@TextHelpers.GetInitial(entry.DisplayName)</span>
+                    <span class="impact-name">
+                        @entry.DisplayName
+                        @if (isMe)
+                        {
+                            <span class="badge rounded-pill bg-light text-muted border small fw-normal ms-1">You</span>
+                        }
+                    </span>
+                    <span class="impact-kg">@entry.KgSaved.ToString("0.#") kg</span>
+                </li>
+            }
+        </ol>
+    }
+</section>
+
+@code {
+    private List<LeaderboardEntry>? _leaderboard;
+    private bool _optedIn;
+    private bool _optInBusy;
+    private string? _currentUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _currentUserId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (authState.User.IsInRole(AppRoles.Customer))
+            _optedIn = (await ImpactController.GetMyOptInStatusAsync()).Value;
+
+        _leaderboard = (await ImpactController.GetMonthlyLeaderboardAsync()).Value ?? [];
+    }
+
+    private async Task ToggleOptInAsync(ChangeEventArgs e)
+    {
+        var newValue = e.Value is bool b && b;
+        _optInBusy = true;
+        await ImpactController.SetMyOptInStatusAsync(newValue);
+        _optedIn = newValue;
+        _optInBusy = false;
+
+        // Opting in/out changes whether the viewer's own row should now appear/disappear.
+        _leaderboard = (await ImpactController.GetMonthlyLeaderboardAsync()).Value ?? [];
+    }
+
+    private static string RankClass(int index) => index switch
+    {
+        0 => "impact-rank-gold",
+        1 => "impact-rank-silver",
+        2 => "impact-rank-bronze",
+        _ => ""
+    };
+}

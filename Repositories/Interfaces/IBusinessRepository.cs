@@ -7,7 +7,7 @@ namespace Netrom_Eco_Meal.Repositories.Interfaces;
 public interface IBusinessRepository
 {
     public Task<List<Business>> GetAllAsync(bool publicOnly = false);
-    public Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, string? favoritedByUserId = null, double? customerLat = null, double? customerLng = null, string? statusFilter = null, bool publicOnly = false);
+    public Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, string? favoritedByUserId = null, double? customerLat = null, double? customerLng = null, string? statusFilter = null, bool publicOnly = false, string? dietaryTag = null);
     public Task<Business?> GetByIdAsync(Guid id);
     // Name-only, no Include — for callers (e.g. ReportService) that just need display names for
     // a batch of ids and shouldn't pay for GetByIdAsync's Staff/Hours/Closures split query.

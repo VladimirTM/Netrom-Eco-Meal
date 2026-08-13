@@ -15,15 +15,13 @@ using Netrom_Eco_Meal.Tests.TestSupport;
 namespace Netrom_Eco_Meal.Tests.Services;
 
 // Runs OrderService's pickup-pass logic through a REAL OrderRepository against real Postgres
-// (Testcontainers), unlike OrderServiceTests which mocks IOrderRepository entirely. This class
-// exists because a real regression slipped past the mocked tests: adding a new OrderPickupPass via
-// order.PickupPasses.Add(...) (collection-navigation fixup) rather than
-// dbContext.OrderPickupPasses.Add(...) gets tracked as EntityState.Modified instead of Added — the
-// client-assigned, non-default Guid key looks like an existing row to EF Core when discovered only
-// through graph traversal. That turns the INSERT into a no-op UPDATE, which Npgsql then reports as
-// a DbUpdateConcurrencyException ("expected to affect 1 row(s), but actually affected 0"). A mocked
-// IOrderRepository can't catch this — SaveChangesAsync is a no-op there, so the bug only surfaces
-// against a real database with real Npgsql-generated SQL.
+// (Testcontainers), unlike OrderServiceTests which mocks IOrderRepository entirely. Exists because a
+// real regression slipped past the mocked tests: adding via order.PickupPasses.Add(...) (collection-
+// navigation fixup) instead of dbContext.OrderPickupPasses.Add(...) gets tracked as Modified rather
+// than Added — the client-assigned Guid key looks like an existing row when discovered only through
+// graph traversal, turning the INSERT into a no-op UPDATE (Npgsql reports it as a
+// DbUpdateConcurrencyException). A mocked IOrderRepository can't catch this since SaveChangesAsync
+// is a no-op there — the bug only surfaces against real Npgsql-generated SQL.
 [Collection(nameof(PostgresCollection))]
 public class OrderServicePickupPassIntegrationTests(PostgresFixture fixture)
 {
@@ -73,7 +71,7 @@ public class OrderServicePickupPassIntegrationTests(PostgresFixture fixture)
         var service = new OrderService(
             orderRepository, Mock.Of<IPackageRepository>(), Mock.Of<IBusinessService>(), Mock.Of<INotificationService>(),
             Mock.Of<IAppEmailSender>(), Mock.Of<IStripeGateway>(), Mock.Of<IAuditLogService>(), db, currentUser,
-            new ConfigurationBuilder().Build(), NullLogger<OrderService>.Instance);
+            new ConfigurationBuilder().Build(), new PackageStockBroadcaster(), NullLogger<OrderService>.Instance);
 
         return (service, db, order);
     }

@@ -4,14 +4,14 @@ using Netrom_Eco_Meal.Services.Interfaces;
 
 namespace Netrom_Eco_Meal.Controllers;
 
-// Hit via plain HTML form posts from Login/Register/logout, not injected into pages like the others.
-// Each form embeds <AntiforgeryToken /> so this validation has something to check.
-[ApiController]
+// Hit via plain HTML form posts from Login/Register/logout, not injected into pages like the others —
+// each embeds <AntiforgeryToken /> for this to validate. Deliberately NOT [ApiController]: its automatic
+// invalid-ModelState -> 400 short-circuit fires before the action body, swallowing the empty-field
+// redirect below (and RegisterAsync's equivalent).
 [Route("api/[controller]")]
 public class AuthController(IAuthService authService) : ControllerBase
 {
-    // Login/Register stay antiforgery-protected — forging either has real impact. Logout deliberately
-    // doesn't (see below).
+    // Login/Register stay antiforgery-protected (forging either matters); logout deliberately doesn't (see below).
     [HttpPost("login")]
     [ManualValidateAntiforgeryToken]
     public async Task<IActionResult> LoginAsync([FromForm] LoginRequest request, [FromForm] string? returnUrl)
@@ -43,8 +43,8 @@ public class AuthController(IAuthService authService) : ControllerBase
         if (outcome.Error is not null)
             return LocalRedirect($"/account/register?error={Uri.EscapeDataString(outcome.Error)}{refill}&returnUrl={returnUrl}");
 
-        // Info set (no error) means RequireConfirmedAccount left the user signed out — show the
-        // "check your email" message on the login page instead of continuing to returnUrl.
+        // Info (no error) means RequireConfirmedAccount left the user signed out — show "check
+        // your email" instead of continuing to returnUrl.
         if (outcome.Info is not null)
             return LocalRedirect($"/account/login?info={Uri.EscapeDataString(outcome.Info)}");
 
@@ -60,10 +60,9 @@ public class AuthController(IAuthService authService) : ControllerBase
         return LocalRedirect(returnUrl ?? "/account/login");
     }
 
-    // In-process only below: no HTTP verb attribute, so MVC never routes to these — called
-    // directly by ConfirmEmail/ForgotPassword/ResetPassword the same way OrderController etc. are
-    // injected into other pages. They don't touch the auth cookie, so they don't need the real
-    // HTTP round trip login/register/logout require.
+    // In-process only below: no HTTP verb attribute, so MVC never routes here — called directly by
+    // ConfirmEmail/ForgotPassword/ResetPassword like OrderController etc. are injected elsewhere.
+    // They don't touch the auth cookie, so they skip the real HTTP round trip login/register/logout need.
 
     public async Task<string?> ConfirmEmailAsync(string userId, string token) =>
         await authService.ConfirmEmailAsync(userId, token);

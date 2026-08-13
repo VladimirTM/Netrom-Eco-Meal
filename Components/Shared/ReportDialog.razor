@@ -11,6 +11,10 @@
         {
             <p class="text-danger small mb-0">@Error</p>
         }
+        else if (string.IsNullOrWhiteSpace(_reason))
+        {
+            <p class="text-muted small mb-0">A reason is required.</p>
+        }
         <div class="confirm-dialog-actions">
             <button type="button" class="btn btn-outline-secondary" disabled="@Busy" @onclick="Cancel">Cancel</button>
             <button type="button" class="btn btn-danger" disabled="@(Busy || string.IsNullOrWhiteSpace(_reason))" @onclick="Submit">

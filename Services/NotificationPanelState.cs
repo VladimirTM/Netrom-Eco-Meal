@@ -3,13 +3,11 @@ using Netrom_Eco_Meal.Entities;
 
 namespace Netrom_Eco_Meal.Services;
 
-// Per-circuit notification bell state, shared between the trigger button (rendered in the
-// sidebar/header) and the popup panel (rendered at the layout's top level — see NotificationPanel).
-// They can't be one component: the panel must render outside the sidebar's DOM subtree to avoid
-// being trapped in its stacking context (position:sticky always creates one, which silently
-// paints position:fixed descendants under <main> regardless of z-index), so trigger and panel
-// need a shared source of truth instead of parent/child state. Same scoped-service + OnChange
-// pattern as ManagedBusinessContext.
+// Per-circuit notification bell state, shared between the trigger button (sidebar/header) and the
+// popup panel (rendered at the layout's top level — see NotificationPanel). They can't be one
+// component: position:sticky always creates a stacking context that traps position:fixed descendants
+// under <main> regardless of z-index, so trigger and panel need a shared source of truth instead of
+// parent/child state. Same scoped-service + OnChange pattern as ManagedBusinessContext.
 public class NotificationPanelState(NotificationController notificationController) : IDisposable
 {
     private Timer? _pollTimer;

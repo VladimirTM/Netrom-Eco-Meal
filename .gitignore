@@ -6,3 +6,6 @@ riderModule.iml
 
 # Local-only Stripe test key etc — never commit real API keys, even test-mode ones.
 docker-compose.override.yml
+
+# Manager-uploaded package/business photos (ImageUploadService) — runtime content, not source.
+/wwwroot/uploads/

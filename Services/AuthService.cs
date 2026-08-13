@@ -27,6 +27,15 @@ public class AuthService(
 
     public async Task<RegisterOutcome> RegisterAsync(RegisterRequest request, string name)
     {
+        // ASP.NET Identity's own CreateAsync doesn't validate email *format*, only uniqueness/policy
+        // — a syntactically invalid address would otherwise create a real (unconfirmable) user row
+        // and then crash SmtpEmailSender's MailAddressCollection parse when sending the confirmation
+        // email, since that's the first place anything actually tries to parse it as an address.
+        if (!System.Net.Mail.MailAddress.TryCreate(request.Email, out _))
+        {
+            return new RegisterOutcome("Enter a valid email address.", null);
+        }
+
         if (await userManager.FindByEmailAsync(request.Email) is not null)
         {
             return new RegisterOutcome("An account with this email already exists.", null);

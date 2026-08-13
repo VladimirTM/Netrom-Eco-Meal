@@ -1,0 +1,317 @@
+@page "/types"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Mvc
+@using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@rendermode InteractiveServer
+@inject BusinessTypeController BusinessTypeController
+@inject PackageTypeController PackageTypeController
+@attribute [Authorize(Roles = AppRoles.Admin)]
+
+<PageTitle>Kitchen &amp; Package Types — Eco Meal</PageTitle>
+
+<div class="mb-4">
+    <h1 class="h3 fw-bold mb-1">Kitchen &amp; Package Types</h1>
+    <p class="text-muted small mb-0">Add, rename, or remove the categories businesses and packages pick from — no code change or migration needed for a new one.</p>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h6 fw-bold mb-3"><i class="bi bi-shop me-2"></i>Kitchen types</h2>
+
+                @if (_businessTypeError is not null)
+                {
+                    <div class="alert alert-danger py-2 small">@_businessTypeError</div>
+                }
+
+                @if (_businessTypes is null)
+                {
+                    <div class="d-flex justify-content-center py-4">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+                    </div>
+                }
+                else if (_businessTypes.Count == 0)
+                {
+                    <p class="text-muted small">No kitchen types yet.</p>
+                }
+                else
+                {
+                    <ul class="list-group list-group-flush mb-3">
+                        @foreach (var type in _businessTypes)
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0" @key="type.Id">
+                                @if (_editingBusinessTypeId == type.Id)
+                                {
+                                    <input type="text" class="form-control form-control-sm me-2" @bind="_editingBusinessTypeName" @bind:event="oninput"/>
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" title="Save" @onclick="() => SaveBusinessTypeAsync(type)"><i class="bi bi-check-lg"></i></button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" title="Cancel" @onclick="CancelEditBusinessType"><i class="bi bi-x-lg"></i></button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span>@type.Name</span>
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" title="Rename" @onclick="() => StartEditBusinessType(type)"><i class="bi bi-pencil"></i></button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" title="Delete" @onclick="() => RequestDeleteBusinessType(type)"><i class="bi bi-trash"></i></button>
+                                    </div>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+
+                <div class="input-group input-group-sm">
+                    <input type="text" class="form-control" placeholder="e.g. Food Truck" @bind="_newBusinessTypeName" @bind:event="oninput" @onkeyup="@(e => HandleNewTypeKeyUpAsync(e, AddBusinessTypeAsync))"/>
+                    <button type="button" class="btn btn-outline-primary" disabled="@_addingBusinessType" @onclick="AddBusinessTypeAsync">
+                        @if (_addingBusinessType)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-plus-lg"></i>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h6 fw-bold mb-3"><i class="bi bi-box-seam me-2"></i>Package types</h2>
+
+                @if (_packageTypeError is not null)
+                {
+                    <div class="alert alert-danger py-2 small">@_packageTypeError</div>
+                }
+
+                @if (_packageTypes is null)
+                {
+                    <div class="d-flex justify-content-center py-4">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+                    </div>
+                }
+                else if (_packageTypes.Count == 0)
+                {
+                    <p class="text-muted small">No package types yet.</p>
+                }
+                else
+                {
+                    <ul class="list-group list-group-flush mb-3">
+                        @foreach (var type in _packageTypes)
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0" @key="type.Id">
+                                @if (_editingPackageTypeId == type.Id)
+                                {
+                                    <input type="text" class="form-control form-control-sm me-2" @bind="_editingPackageTypeName" @bind:event="oninput"/>
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" title="Save" @onclick="() => SavePackageTypeAsync(type)"><i class="bi bi-check-lg"></i></button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" title="Cancel" @onclick="CancelEditPackageType"><i class="bi bi-x-lg"></i></button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span>@type.Name</span>
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" title="Rename" @onclick="() => StartEditPackageType(type)"><i class="bi bi-pencil"></i></button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" title="Delete" @onclick="() => RequestDeletePackageType(type)"><i class="bi bi-trash"></i></button>
+                                    </div>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+
+                <div class="input-group input-group-sm">
+                    <input type="text" class="form-control" placeholder="e.g. Salad Box" @bind="_newPackageTypeName" @bind:event="oninput" @onkeyup="@(e => HandleNewTypeKeyUpAsync(e, AddPackageTypeAsync))"/>
+                    <button type="button" class="btn btn-outline-primary" disabled="@_addingPackageType" @onclick="AddPackageTypeAsync">
+                        @if (_addingPackageType)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-plus-lg"></i>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<ConfirmDialog IsOpen="@(_pendingDelete is not null)"
+               Title="@($"Delete \"{_pendingDelete?.Name}\"?")"
+               Message="This can't be undone. It's blocked if anything still uses this type."
+               ConfirmLabel="Delete"
+               Busy="_deleteBusy"
+               OnConfirm="ConfirmDeleteAsync"
+               OnCancel="() => _pendingDelete = null"/>
+
+@code {
+    private List<BusinessType>? _businessTypes;
+    private List<PackageType>? _packageTypes;
+
+    private string _newBusinessTypeName = "";
+    private string _newPackageTypeName = "";
+    private bool _addingBusinessType;
+    private bool _addingPackageType;
+    private string? _businessTypeError;
+    private string? _packageTypeError;
+
+    private Guid? _editingBusinessTypeId;
+    private string _editingBusinessTypeName = "";
+    private Guid? _editingPackageTypeId;
+    private string _editingPackageTypeName = "";
+
+    private (string Kind, Guid Id, string Name)? _pendingDelete;
+    private bool _deleteBusy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadBusinessTypesAsync();
+        await ReloadPackageTypesAsync();
+    }
+
+    private async Task ReloadBusinessTypesAsync() => _businessTypes = (await BusinessTypeController.GetAllAsync()).Value ?? [];
+    private async Task ReloadPackageTypesAsync() => _packageTypes = (await PackageTypeController.GetAllAsync()).Value ?? [];
+
+    // Shared Enter-to-submit handler for both "add" inputs.
+    private static Task HandleNewTypeKeyUpAsync(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e, Func<Task> submit) =>
+        e.Key == "Enter" ? submit() : Task.CompletedTask;
+
+    private async Task AddBusinessTypeAsync()
+    {
+        _businessTypeError = null;
+        if (string.IsNullOrWhiteSpace(_newBusinessTypeName))
+            return;
+
+        _addingBusinessType = true;
+        var result = await BusinessTypeController.AddAsync(new BusinessType { Name = _newBusinessTypeName.Trim() });
+        _addingBusinessType = false;
+
+        if (result is UnauthorizedObjectResult unauthorized)
+        {
+            _businessTypeError = unauthorized.Value?.ToString() ?? "You can't do that.";
+            return;
+        }
+
+        _newBusinessTypeName = "";
+        await ReloadBusinessTypesAsync();
+    }
+
+    private void StartEditBusinessType(BusinessType type)
+    {
+        _editingBusinessTypeId = type.Id;
+        _editingBusinessTypeName = type.Name;
+    }
+
+    private void CancelEditBusinessType() => _editingBusinessTypeId = null;
+
+    private async Task SaveBusinessTypeAsync(BusinessType type)
+    {
+        _businessTypeError = null;
+        if (string.IsNullOrWhiteSpace(_editingBusinessTypeName))
+            return;
+
+        var result = await BusinessTypeController.UpdateAsync(new BusinessType { Id = type.Id, Name = _editingBusinessTypeName.Trim() });
+        if (result is UnauthorizedObjectResult unauthorized)
+        {
+            _businessTypeError = unauthorized.Value?.ToString() ?? "You can't do that.";
+            return;
+        }
+
+        _editingBusinessTypeId = null;
+        await ReloadBusinessTypesAsync();
+    }
+
+    private void RequestDeleteBusinessType(BusinessType type)
+    {
+        _businessTypeError = null;
+        _pendingDelete = ("business", type.Id, type.Name);
+    }
+
+    private async Task AddPackageTypeAsync()
+    {
+        _packageTypeError = null;
+        if (string.IsNullOrWhiteSpace(_newPackageTypeName))
+            return;
+
+        _addingPackageType = true;
+        var result = await PackageTypeController.AddAsync(new PackageType { Name = _newPackageTypeName.Trim() });
+        _addingPackageType = false;
+
+        if (result is UnauthorizedObjectResult unauthorized)
+        {
+            _packageTypeError = unauthorized.Value?.ToString() ?? "You can't do that.";
+            return;
+        }
+
+        _newPackageTypeName = "";
+        await ReloadPackageTypesAsync();
+    }
+
+    private void StartEditPackageType(PackageType type)
+    {
+        _editingPackageTypeId = type.Id;
+        _editingPackageTypeName = type.Name;
+    }
+
+    private void CancelEditPackageType() => _editingPackageTypeId = null;
+
+    private async Task SavePackageTypeAsync(PackageType type)
+    {
+        _packageTypeError = null;
+        if (string.IsNullOrWhiteSpace(_editingPackageTypeName))
+            return;
+
+        var result = await PackageTypeController.UpdateAsync(new PackageType { Id = type.Id, Name = _editingPackageTypeName.Trim() });
+        if (result is UnauthorizedObjectResult unauthorized)
+        {
+            _packageTypeError = unauthorized.Value?.ToString() ?? "You can't do that.";
+            return;
+        }
+
+        _editingPackageTypeId = null;
+        await ReloadPackageTypesAsync();
+    }
+
+    private void RequestDeletePackageType(PackageType type)
+    {
+        _packageTypeError = null;
+        _pendingDelete = ("package", type.Id, type.Name);
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_pendingDelete is not { } pending)
+            return;
+
+        _deleteBusy = true;
+        var result = pending.Kind == "business"
+            ? await BusinessTypeController.DeleteAsync(pending.Id)
+            : await PackageTypeController.DeleteAsync(pending.Id);
+        _deleteBusy = false;
+        _pendingDelete = null;
+
+        if (result is ConflictObjectResult conflict)
+        {
+            if (pending.Kind == "business")
+                _businessTypeError = conflict.Value?.ToString() ?? "That type is still in use.";
+            else
+                _packageTypeError = conflict.Value?.ToString() ?? "That type is still in use.";
+            return;
+        }
+
+        if (pending.Kind == "business")
+            await ReloadBusinessTypesAsync();
+        else
+            await ReloadPackageTypesAsync();
+    }
+}

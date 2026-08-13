@@ -206,6 +206,9 @@ namespace Netrom_Eco_Meal.Migrations
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
 
+                    b.Property<bool>("ShowOnLeaderboard")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("boolean");
 

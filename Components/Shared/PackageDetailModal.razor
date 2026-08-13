@@ -18,6 +18,10 @@
             <span class="biz-modal-eyebrow">@Package.PackageType.Name</span>
             <h2 class="pkg-modal-title" id="pkg-modal-title">@Package.Name</h2>
             <div class="pkg-modal-price">@Package.Price.ToString("C")</div>
+            @if (ClosingSoonLabel is not null)
+            {
+                <span class="biz-pkg-closing-badge mb-2"><i class="bi bi-alarm-fill"></i>@ClosingSoonLabel</span>
+            }
             @if (ReviewCount > 0)
             {
                 <StarRating Value="@RatingAverage" ShowValue="true" Count="@ReviewCount" Size="0.8rem"/>
@@ -95,6 +99,7 @@
     [Parameter] public Package? Package { get; set; }
     [Parameter] public int AvailableQuantity { get; set; }
     [Parameter] public string PickupLabel { get; set; } = "";
+    [Parameter] public string? ClosingSoonLabel { get; set; }
     [Parameter] public double RatingAverage { get; set; }
     [Parameter] public int ReviewCount { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }

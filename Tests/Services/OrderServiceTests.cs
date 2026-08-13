@@ -33,7 +33,8 @@ public class OrderServiceTests
         Mock<IAppEmailSender> EmailSender,
         Mock<IStripeGateway> StripeGateway,
         Mock<IAuditLogService> AuditLogService,
-        EcoMealDbContext Db);
+        EcoMealDbContext Db,
+        PackageStockBroadcaster StockBroadcaster);
 
     private static Fixture Build(string? userId, params string[] roles)
     {
@@ -47,12 +48,14 @@ public class OrderServiceTests
         var auditLogService = new Mock<IAuditLogService>();
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
         var configuration = new ConfigurationBuilder().Build();
+        var stockBroadcaster = new PackageStockBroadcaster();
 
         var service = new OrderService(
             orderRepo.Object, packageRepo.Object, businessService.Object, notificationService.Object,
-            emailSender.Object, stripeGateway.Object, auditLogService.Object, db, currentUser, configuration, NullLogger<OrderService>.Instance);
+            emailSender.Object, stripeGateway.Object, auditLogService.Object, db, currentUser, configuration,
+            stockBroadcaster, NullLogger<OrderService>.Instance);
 
-        return new Fixture(service, orderRepo, packageRepo, businessService, notificationService, emailSender, stripeGateway, auditLogService, db);
+        return new Fixture(service, orderRepo, packageRepo, businessService, notificationService, emailSender, stripeGateway, auditLogService, db, stockBroadcaster);
     }
 
     // ---- PlaceOrderAsync ---------------------------------------------------
@@ -762,5 +765,106 @@ public class OrderServiceTests
 
         Assert.Equal(0, count);
         f.OrderRepo.Verify(r => r.SaveChangesAsync(), Times.Never);
+    }
+
+    // ---- PackageStockBroadcaster (Phase 12) ---------------------------------
+
+    [Fact]
+    public async Task PlaceOrderAsync_Success_BroadcastsBusinessChanged()
+    {
+        var f = Build(CustomerId, AppRoles.Customer);
+        var user = TestData.User(CustomerId);
+        f.Db.Users.Add(user);
+        await f.Db.SaveChangesAsync();
+
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 5);
+        f.PackageRepo.Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>())).ReturnsAsync([package]);
+        f.BusinessService.Setup(b => b.GetByIdAsync(businessId)).ReturnsAsync(TestData.Business(businessId));
+        f.BusinessService.Setup(b => b.GetStaffAsync(businessId)).ReturnsAsync([]);
+
+        var broadcasts = new List<Guid>();
+        f.StockBroadcaster.BusinessStockChanged += broadcasts.Add;
+
+        await f.Service.PlaceOrderAsync(businessId, [new OrderLineRequest(package.Id, 2)]);
+
+        Assert.Equal([businessId], broadcasts);
+    }
+
+    [Fact]
+    public async Task UpdateStatusAsync_Confirm_BroadcastsBusinessChanged()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 5);
+        var order = TestData.Order(user, businessId, OrderStatuses.Pending, (package, 2));
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        var broadcasts = new List<Guid>();
+        f.StockBroadcaster.BusinessStockChanged += broadcasts.Add;
+
+        await f.Service.UpdateStatusAsync(order.Id, OrderStatuses.Confirmed);
+
+        Assert.Equal([businessId], broadcasts);
+    }
+
+    [Fact]
+    public async Task UpdateStatusAsync_Confirm_InsufficientStock_DoesNotBroadcast()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 1);
+        var order = TestData.Order(user, businessId, OrderStatuses.Pending, (package, 2));
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        var broadcasts = new List<Guid>();
+        f.StockBroadcaster.BusinessStockChanged += broadcasts.Add;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Service.UpdateStatusAsync(order.Id, OrderStatuses.Confirmed));
+
+        Assert.Empty(broadcasts);
+    }
+
+    [Fact]
+    public async Task ExpireStalePendingOrdersAsync_BroadcastsOncePerDistinctBusiness()
+    {
+        var f = Build(null);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        var stale = new List<Order>
+        {
+            TestData.Order(user, businessId, OrderStatuses.Pending, (package, 1)),
+            TestData.Order(user, businessId, OrderStatuses.Pending, (package, 1)),
+        };
+        f.OrderRepo.Setup(r => r.GetStalePendingOrdersAsync(It.IsAny<DateTime>())).ReturnsAsync(stale);
+
+        var broadcasts = new List<Guid>();
+        f.StockBroadcaster.BusinessStockChanged += broadcasts.Add;
+
+        await f.Service.ExpireStalePendingOrdersAsync();
+
+        // Two stale orders share one business — broadcast once, not twice.
+        Assert.Equal([businessId], broadcasts);
+    }
+
+    [Fact]
+    public async Task ExpireNoShowOrdersAsync_BroadcastsBusinessChanged()
+    {
+        var f = Build(null);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 3);
+        var overdue = TestData.Order(user, businessId, OrderStatuses.Confirmed, (package, 2));
+        f.OrderRepo.Setup(r => r.GetOverduePickupOrdersAsync(It.IsAny<DateTime>())).ReturnsAsync([overdue]);
+
+        var broadcasts = new List<Guid>();
+        f.StockBroadcaster.BusinessStockChanged += broadcasts.Add;
+
+        await f.Service.ExpireNoShowOrdersAsync();
+
+        Assert.Equal([businessId], broadcasts);
     }
 }

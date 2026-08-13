@@ -18,11 +18,10 @@ public class ManagedBusinessContext(IJSRuntime jsRuntime, IDbContextFactory<EcoM
 {
     private const string BaseStorageKey = "ecomeal.managedBusiness";
 
-    // NavMenu (layout) and the routed page both call EnsureLoadedAsync from their own
-    // OnInitializedAsync, which can interleave before either finishes. Caching the in-flight
-    // Task itself (not a bool flipped before the awaited load completes) means a concurrent
-    // second caller awaits the same load instead of reading MyBusinesses/SelectedBusinessId
-    // before the first caller ever populated them.
+    // NavMenu and the routed page both call EnsureLoadedAsync from their own OnInitializedAsync, which
+    // can interleave before either finishes. Caching the in-flight Task itself (not a bool flipped after
+    // the load completes) means a concurrent second caller awaits the same load instead of reading
+    // MyBusinesses/SelectedBusinessId before the first caller populated them.
     private Task? _loadTask;
     private string? _userId;
 

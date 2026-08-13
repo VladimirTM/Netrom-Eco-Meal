@@ -12,6 +12,14 @@ public static class DbSeeder
     // real accounts, so — unlike SeedAdmin — no reason to gate these behind configuration.
     private const string DemoCustomerEmail = "demo.customer@ecomeal.local";
     private const string DemoCustomerPassword = "Demo123!";
+    // Two more customer accounts purely to give the Phase 11 /impact leaderboard more than one
+    // row on a fresh database — one opted in, one deliberately opted OUT despite also having a
+    // Completed order, so the "opt-in, not just 'has orders'" privacy filter is visibly working
+    // rather than just true in theory. See SeedLeaderboardDemoDataAsync.
+    private const string DemoCustomerEmail2 = "demo.customer2@ecomeal.local";
+    private const string DemoCustomerPassword2 = "Demo123!";
+    private const string DemoCustomerEmail3 = "demo.customer3@ecomeal.local";
+    private const string DemoCustomerPassword3 = "Demo123!";
     private const string DemoManagerEmail = "demo.manager@ecomeal.local";
     private const string DemoManagerPassword = "Demo123!";
     // A second demo manager so a fresh database already demonstrates multiple staff per
@@ -53,6 +61,8 @@ public static class DbSeeder
         }
 
         var demoCustomer = await GetOrCreateUserAsync(userManager, DemoCustomerEmail, "Demo Customer", AppRoles.Customer, DemoCustomerPassword, logger);
+        var demoCustomer2 = await GetOrCreateUserAsync(userManager, DemoCustomerEmail2, "Demo Customer Two", AppRoles.Customer, DemoCustomerPassword2, logger);
+        var demoCustomer3 = await GetOrCreateUserAsync(userManager, DemoCustomerEmail3, "Demo Customer Three", AppRoles.Customer, DemoCustomerPassword3, logger);
         var demoManager = await GetOrCreateUserAsync(userManager, DemoManagerEmail, "Demo Manager", AppRoles.BusinessManager, DemoManagerPassword, logger);
         var demoManager2 = await GetOrCreateUserAsync(userManager, DemoManagerEmail2, "Demo Manager Two", AppRoles.BusinessManager, DemoManagerPassword2, logger);
 
@@ -76,7 +86,10 @@ public static class DbSeeder
             await SeedDemoActivityAsync(db, demoCustomer, demoManager.Id);
 
         if (demoCustomer is not null)
+        {
             await SeedReportsAndAuditLogAsync(db, demoCustomer, adminUser, demoManager?.Id, demoManager2?.Id);
+            await SeedLeaderboardDemoDataAsync(db, demoCustomer, demoCustomer2, demoCustomer3);
+        }
     }
 
     // Shared by the admin account above and the demo customer/manager below — same
@@ -235,6 +248,12 @@ public static class DbSeeder
         var today = DateTime.UtcNow.Date;
         DateTime At(int hour, int minute) => today.AddHours(hour).AddMinutes(minute);
 
+        // Anchored to "now" instead of a fixed hour, so this one package is always inside
+        // Home.razor's one-hour "closing soon" badge/sort window on a fresh seed, whatever time of
+        // day the app starts — demos Phase 10's countdown badge without waiting around for it.
+        var closingSoonDemoStart = DateTime.UtcNow.AddMinutes(-30);
+        var closingSoonDemoEnd = DateTime.UtcNow.AddMinutes(25);
+
         var seedPackages = new List<Package>
         {
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000001"), BusinessId = b1,  PackageTypeId = surpriseBag, Name = "Golden Boot Surprise Bag",     Description = "A top-scoring surprise selection of today's leftover dishes.",              Price = 12.99m, Quantity = 5,  WeightKg = 1.5m, PickupStart = At(17,  0), PickupEnd = At(20,  0), ImageUrl = "https://loremflickr.com/640/360/football,goldenboot/all?lock=301" },
@@ -250,7 +269,7 @@ public static class DbSeeder
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000011"), BusinessId = b6,  PackageTypeId = breadBag,    Name = "Corner Kick Bread Bag",        Description = "Fresh focaccia and bread ends, curved in fresh like a corner kick.",       Price =  5.50m, Quantity = 10, WeightKg = 1.4m, PickupStart = At(16,  0), PickupEnd = At(19,  0), ImageUrl = "https://loremflickr.com/640/360/football,corner/all?lock=311" },
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000012"), BusinessId = b6,  PackageTypeId = pastryBox,   Name = "Champions Pastry Box",         Description = "A finalist's assortment of the day's best leftover pastries.",             Price =  8.50m, Quantity = 6,  WeightKg = 0.6m, PickupStart = At(15,  0), PickupEnd = At(18,  0), ImageUrl = "https://loremflickr.com/640/360/football,champions/all?lock=312" },
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000013"), BusinessId = b7,  PackageTypeId = surpriseBag, Name = "Half-Time Surprise Bag",       Description = "Leftover sandwiches, muffins, and snacks from the cafe.",                  Price =  7.99m, Quantity = 4,  WeightKg = 1.5m, PickupStart = At(18,  0), PickupEnd = At(21,  0), ImageUrl = "https://loremflickr.com/640/360/football,halftime/all?lock=313" },
-            new Package { Id = new Guid("55555555-0000-0000-0000-000000000014"), BusinessId = b7,  PackageTypeId = pastryBox,   Name = "Stoppage Time Pastry Box",     Description = "The last few pastries added on before the counter closes for the day.",    Price =  6.99m, Quantity = 5,  WeightKg = 0.6m, PickupStart = At(19,  0), PickupEnd = At(21,  0), ImageUrl = "https://loremflickr.com/640/360/football,stoppagetime/all?lock=314" },
+            new Package { Id = new Guid("55555555-0000-0000-0000-000000000014"), BusinessId = b7,  PackageTypeId = pastryBox,   Name = "Stoppage Time Pastry Box",     Description = "The last few pastries added on before the counter closes for the day.",    Price =  6.99m, Quantity = 5,  WeightKg = 0.6m, PickupStart = closingSoonDemoStart, PickupEnd = closingSoonDemoEnd, ImageUrl = "https://loremflickr.com/640/360/football,stoppagetime/all?lock=314" },
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000015"), BusinessId = b8,  PackageTypeId = surpriseBag, Name = "Yellow Card Surprise Bag",     Description = "Leftover cakes, cookies, and quiches of the day — a caution against waste.",Price =  6.99m, Quantity = 5,  WeightKg = 1.5m, PickupStart = At(17,  0), PickupEnd = At(19,  0), ImageUrl = "https://loremflickr.com/640/360/football,yellowcard/all?lock=315" },
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000016"), BusinessId = b8,  PackageTypeId = pastryBox,   Name = "Red Card Pastry Box",          Description = "Dark chocolate and espresso pastries, sent off before they go stale.",     Price =  7.25m, Quantity = 5,  WeightKg = 0.6m, PickupStart = At(17, 30), PickupEnd = At(19, 30), ImageUrl = "https://loremflickr.com/640/360/football,redcard/all?lock=316" },
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000017"), BusinessId = b9,  PackageTypeId = veggieBox,   Name = "Offside Veggie Box",           Description = "Seasonal vegetables and fruit nearing best-before — still match-fit.",     Price =  5.50m, Quantity = 15, WeightKg = 2.0m, PickupStart = At(16,  0), PickupEnd = At(20,  0), ImageUrl = "https://loremflickr.com/640/360/vegetables,market/all?lock=317" },
@@ -260,7 +279,11 @@ public static class DbSeeder
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000021"), BusinessId = b11, PackageTypeId = mealBox,     Name = "World Cup Meal Box",           Description = "A full street-food meal inspired by host nations — tacos, gyros, or noodles.",Price = 10.00m, Quantity = 7,  WeightKg = 1.2m, PickupStart = At(18, 30), PickupEnd = At(21,  0), ImageUrl = "https://loremflickr.com/640/360/worldcup,streetfood/all?lock=321" },
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000022"), BusinessId = b11, PackageTypeId = surpriseBag, Name = "Fan Zone Surprise Bag",        Description = "Mixed snacks, sides, and small bites leftover from the day's service.",    Price =  5.99m, Quantity = 6,  WeightKg = 1.5m, PickupStart = At(20,  0), PickupEnd = At(22,  0), ImageUrl = "https://loremflickr.com/640/360/football,fanzone/all?lock=322" },
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000023"), BusinessId = b12, PackageTypeId = mealBox,     Name = "Top Scorer Meal Box",          Description = "The crowd favourite: a grilled meal box that scores every time.",          Price = 10.50m, Quantity = 6,  WeightKg = 1.2m, PickupStart = At(18,  0), PickupEnd = At(21,  0), ImageUrl = "https://loremflickr.com/640/360/football,grill/all?lock=323" },
-            new Package { Id = new Guid("55555555-0000-0000-0000-000000000024"), BusinessId = b12, PackageTypeId = surpriseBag, Name = "Stadium Snack Surprise Bag",   Description = "A grab-bag of grilled snacks and sides fresh from the fan zone grill.",    Price =  6.25m, Quantity = 8,  WeightKg = 1.5m, PickupStart = At(19,  0), PickupEnd = At(21, 30), ImageUrl = "https://loremflickr.com/640/360/football,snacks/all?lock=324" }
+            new Package { Id = new Guid("55555555-0000-0000-0000-000000000024"), BusinessId = b12, PackageTypeId = surpriseBag, Name = "Stadium Snack Surprise Bag",   Description = "A grab-bag of grilled snacks and sides fresh from the fan zone grill.",    Price =  6.25m, Quantity = 8,  WeightKg = 1.5m, PickupStart = At(19,  0), PickupEnd = At(21, 30), ImageUrl = "https://loremflickr.com/640/360/football,snacks/all?lock=324" },
+            // Phase 12 demo: deliberately Quantity = 1 so confirming a single order against it is
+            // enough to watch "1 left" flip to "Sold out" live on another open BusinessDetail.razor
+            // tab (PackageStockBroadcaster) without either tab refreshing.
+            new Package { Id = new Guid("55555555-0000-0000-0000-000000000025"), BusinessId = b1,  PackageTypeId = mealBox,     Name = "Last One Standing Box",        Description = "Down to the final portion of the day — first to confirm gets it.",         Price =  9.25m, Quantity = 1,  WeightKg = 1.2m, PickupStart = At(17,  0), PickupEnd = At(21,  0), ImageUrl = "https://loremflickr.com/640/360/football,lastminute/all?lock=325" }
         };
 
         // Plausible default tags per package type, so the feature has real demo data out of the box.
@@ -271,8 +294,18 @@ public static class DbSeeder
             [veggieBox] = [DietaryTags.Vegan, DietaryTags.Vegetarian, DietaryTags.GlutenFree, DietaryTags.DairyFree],
             [mealBox] = [DietaryTags.ContainsGluten, DietaryTags.ContainsDairy],
         };
+        // Per-package overrides so every tag in Constants.DietaryTags.All — including Halal and
+        // Contains Nuts, which no package-type default covers — has at least one real package to
+        // filter to on the Phase 10 home page filter.
+        var tagOverridesByPackage = new Dictionary<Guid, string[]>
+        {
+            [new Guid("55555555-0000-0000-0000-000000000021")] = [DietaryTags.Halal, DietaryTags.ContainsGluten, DietaryTags.ContainsDairy],
+            [new Guid("55555555-0000-0000-0000-000000000008")] = [DietaryTags.Vegetarian, DietaryTags.ContainsGluten, DietaryTags.ContainsDairy, DietaryTags.ContainsNuts],
+        };
         foreach (var seed in seedPackages)
-            seed.DietaryTags = [..defaultTagsByType.GetValueOrDefault(seed.PackageTypeId, [])];
+            seed.DietaryTags = tagOverridesByPackage.TryGetValue(seed.Id, out var overrideTags)
+                ? [..overrideTags]
+                : [..defaultTagsByType.GetValueOrDefault(seed.PackageTypeId, [])];
 
         // Refresh only the pickup window (not quantity, which reflects real orders) for known
         // seed packages once it's expired, instead of re-inserting or touching admin-added ones.
@@ -411,11 +444,10 @@ public static class DbSeeder
         await db.SaveChangesAsync();
     }
 
-    // Staffs the two demo manager accounts across the demo businesses, demonstrating both
-    // directions of the many-to-many: demoManagerId works Stadionul de Gusturi AND VAR Bistro
-    // (one staffer, several businesses), while demoManager2Id joins demoManagerId at Stadionul
-    // de Gusturi (several staff, one business). Idempotent by (BusinessId, UserId) pair, same
-    // reconcile-don't-clobber style as the rest of this file.
+    // Staffs the two demo managers across the demo businesses, demonstrating both directions of the
+    // many-to-many: demoManagerId works Stadionul de Gusturi AND VAR Bistro (one staffer, several
+    // businesses), while demoManager2Id joins them at Stadionul de Gusturi (several staff, one
+    // business). Idempotent by (BusinessId, UserId) pair, same reconcile-don't-clobber style as the rest.
     private static async Task SeedBusinessStaffAsync(EcoMealDbContext db, string? demoManagerId, string? demoManager2Id)
     {
         var pairs = new List<(Guid BusinessId, string UserId)>();
@@ -561,6 +593,71 @@ public static class DbSeeder
 
         db.AuditLogs.AddRange(entries);
 
+        await db.SaveChangesAsync();
+    }
+
+    private static readonly Guid LeaderboardOrder2AId = new("88888888-0000-0000-0000-000000000001");
+    private static readonly Guid LeaderboardOrder2BId = new("88888888-0000-0000-0000-000000000002");
+    private static readonly Guid LeaderboardOrder3AId = new("88888888-0000-0000-0000-000000000003");
+
+    // Phase 11: opts the primary demo customer into the /impact leaderboard (always — these are fake
+    // demo identities, not real preferences) and adds two more so the board has more than one row.
+    // demoCustomer3 also gets a real Completed order but stays opted OUT, so the "opt-in, not just
+    // 'has orders'" privacy filter is visibly working on a fresh database, not just true in theory.
+    private static async Task SeedLeaderboardDemoDataAsync(EcoMealDbContext db, ApplicationUser demoCustomer, ApplicationUser? demoCustomer2, ApplicationUser? demoCustomer3)
+    {
+        demoCustomer.ShowOnLeaderboard = true;
+        if (demoCustomer2 is not null) demoCustomer2.ShowOnLeaderboard = true;
+        if (demoCustomer3 is not null) demoCustomer3.ShowOnLeaderboard = false;
+        await db.SaveChangesAsync();
+
+        if (demoCustomer2 is null && demoCustomer3 is null) return;
+        if (await db.Orders.AnyAsync(o => o.Id == LeaderboardOrder2AId || o.Id == LeaderboardOrder2BId || o.Id == LeaderboardOrder3AId))
+            return;
+
+        var completedStatusId = await db.Statuses.Where(s => s.Name == OrderStatuses.Completed).Select(s => s.Id).FirstAsync();
+        var packageIds = new[]
+        {
+            new Guid("55555555-0000-0000-0000-000000000007"), // Golden Goal Bread Bag
+            new Guid("55555555-0000-0000-0000-000000000011"), // Corner Kick Bread Bag
+            new Guid("55555555-0000-0000-0000-000000000013"), // Half-Time Surprise Bag
+        };
+        var packages = await db.Packages.Where(p => packageIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id);
+        var now = DateTime.UtcNow;
+
+        Order MakeLeaderboardOrder(Guid id, ApplicationUser user, Guid packageId, int quantity, DateTime createdAt)
+        {
+            var package = packages[packageId];
+            var order = new Order
+            {
+                Id = id, UserId = user.Id, User = user, BusinessId = package.BusinessId,
+                StatusId = completedStatusId, CreatedAt = createdAt,
+            };
+            order.OrderPackages.Add(new OrderPackage { Id = Guid.NewGuid(), OrderId = id, PackageId = packageId, Quantity = quantity });
+            // Same "only Confirmed/Completed reserve stock" rule SeedDemoActivityAsync's MakeOrder follows.
+            package.Quantity -= quantity;
+
+            db.Payments.Add(new Payment
+            {
+                Id = Guid.NewGuid(), OrderId = id, Amount = quantity * package.Price, Currency = "ron",
+                StripeCheckoutSessionId = $"cs_demo_{id:N}", StripePaymentIntentId = $"pi_demo_{id:N}",
+                Status = PaymentStatuses.Succeeded, CreatedAt = createdAt,
+            });
+            db.OrderPickupPasses.Add(new OrderPickupPass { Id = Guid.NewGuid(), OrderId = id, Label = "Pickup pass", CreatedAt = createdAt, RedeemedAt = createdAt });
+
+            return order;
+        }
+
+        var newOrders = new List<Order>();
+        if (demoCustomer2 is not null)
+        {
+            newOrders.Add(MakeLeaderboardOrder(LeaderboardOrder2AId, demoCustomer2, packageIds[0], 2, now.AddDays(-2)));
+            newOrders.Add(MakeLeaderboardOrder(LeaderboardOrder2BId, demoCustomer2, packageIds[1], 3, now.AddDays(-1)));
+        }
+        if (demoCustomer3 is not null)
+            newOrders.Add(MakeLeaderboardOrder(LeaderboardOrder3AId, demoCustomer3, packageIds[2], 2, now.AddDays(-3)));
+
+        db.Orders.AddRange(newOrders);
         await db.SaveChangesAsync();
     }
 

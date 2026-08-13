@@ -53,6 +53,10 @@ services:
       WebPush__Subject: "mailto:admin@ecomeal.local"
     ports:
       - "8081:8080"
+    volumes:
+      # Manager-uploaded package/business photos (ImageUploadService) — otherwise lost on every
+      # `docker compose up --build` since the image itself is rebuilt from a clean publish.
+      - ecomeal-test-uploads:/app/wwwroot/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -61,3 +65,4 @@ services:
 
 volumes:
   ecomeal-test-db:
+  ecomeal-test-uploads:

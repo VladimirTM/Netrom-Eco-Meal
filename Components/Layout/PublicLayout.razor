@@ -17,6 +17,9 @@
             <AuthorizeView>
                 <Authorized>
                     <div class="d-flex align-items-center gap-2">
+                        <a href="/impact" class="public-cart-btn" title="Community impact leaderboard" aria-label="Community impact leaderboard">
+                            <i class="bi bi-trophy"></i>
+                        </a>
                         <NotificationBell TriggerClass="public-cart-btn"/>
                         @if (context.User.IsInRole(AppRoles.Customer))
                         {
@@ -53,6 +56,9 @@
                 </Authorized>
                 <NotAuthorized>
                     <div class="d-flex align-items-center gap-2">
+                        <a href="/impact" class="public-cart-btn" title="Community impact leaderboard" aria-label="Community impact leaderboard">
+                            <i class="bi bi-trophy"></i>
+                        </a>
                         <a href="/account/login" class="btn btn-outline-light btn-sm px-3">Sign in</a>
                         <a href="/account/register" class="btn btn-primary btn-sm px-3">Create account</a>
                     </div>

@@ -18,6 +18,7 @@
 @inject ReportController ReportController
 @inject CartService CartService
 @inject ClientTimeZoneService ClientTimeZoneService
+@inject PackageStockBroadcaster PackageStockBroadcaster
 
 <PageTitle>@(_business?.Name ?? "Business") — Eco Meal</PageTitle>
 
@@ -117,7 +118,10 @@ else
                 <div class="biz-modal-divider"></div>
 
                 <section class="biz-modal-section">
-                    <h3 class="biz-modal-section-title"><i class="bi bi-bag-check"></i> What's available</h3>
+                    <h3 class="biz-modal-section-title">
+                        <i class="bi bi-bag-check"></i> What's available
+                        <span class="biz-live-badge" title="Stock updates automatically while you browse"><span class="biz-card-live-dot"></span>Live</span>
+                    </h3>
 
                     @if (_loadingPackages)
                     {
@@ -142,6 +146,10 @@ else
                                             <span class="biz-pkg-type">@package.PackageType.Name</span>
                                             <span>&middot;</span>
                                             <span><i class="bi bi-clock"></i>@PickupLabel(package)</span>
+                                            @if (ClosingSoonBadge(package) is { } closingSoon)
+                                            {
+                                                <span class="biz-pkg-closing-badge"><i class="bi bi-alarm-fill"></i>@closingSoon</span>
+                                            }
                                         </div>
                                         <p class="biz-pkg-desc">@package.Description</p>
                                         @if (package.DietaryTags.Count > 0)
@@ -263,6 +271,7 @@ else
 <PackageDetailModal Package="_selectedPackage"
                      AvailableQuantity="@(_selectedPackage is null ? 0 : CartService.AvailableQuantity(_selectedPackage, _reservedByPackage.GetValueOrDefault(_selectedPackage.Id)))"
                      PickupLabel="@(_selectedPackage is null ? "" : PickupLabel(_selectedPackage))"
+                     ClosingSoonLabel="@(_selectedPackage is null ? null : ClosingSoonBadge(_selectedPackage))"
                      RatingAverage="@(_selectedPackage is null ? 0 : PackageRatingAverage(_selectedPackage.Id))"
                      ReviewCount="@(_selectedPackage is null ? 0 : PackageReviews(_selectedPackage.Id).Count)"
                      OnClose="() => _selectedPackage = null"
@@ -338,6 +347,7 @@ else
     {
         CartService.OnChange += HandleCartChanged;
         ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
+        PackageStockBroadcaster.BusinessStockChanged += HandleStockChanged;
     }
 
     protected override async Task OnParametersSetAsync()
@@ -358,15 +368,50 @@ else
         _loadingPackages = true;
         StateHasChanged();
 
+        await LoadPackagesAsync();
+        _loadingPackages = false;
+
+        await ReloadReviewsAsync(Id);
+    }
+
+    private async Task LoadPackagesAsync()
+    {
         var paged = (await PackageController.GetPagedAsync(1, 100, null, Id, null)).Value;
         _packages = paged?.Items
             .Where(p => p.PickupEnd > DateTime.UtcNow && !p.IsHidden)
             .OrderBy(p => p.PickupEnd)
             .ToList() ?? [];
         _reservedByPackage = (await OrderController.GetPendingReservedQuantitiesAsync(_packages.Select(p => p.Id))).Value ?? [];
-        _loadingPackages = false;
 
-        await ReloadReviewsAsync(Id);
+        // Keep the open detail modal (if any) pointed at the freshly-loaded package instance so its
+        // "left"/"Sold out" state updates live too — closes itself if the package dropped out of the
+        // live list entirely (hidden, deleted, or its pickup window just closed).
+        if (_selectedPackage is not null)
+            _selectedPackage = _packages.FirstOrDefault(p => p.Id == _selectedPackage.Id);
+    }
+
+    // The broadcaster is a singleton shared by every open BusinessDetail.razor circuit, so this
+    // fires for changes on *any* business — filter to our own before doing anything.
+    private void HandleStockChanged(Guid businessId)
+    {
+        if (businessId != Id)
+            return;
+
+        // InvokeAsync hands off to this component's own renderer — the broadcaster called us
+        // synchronously from whatever circuit's request actually caused the change. Swallow
+        // failures the same way NotificationPanelState's poll timer does: a circuit tearing down
+        // mid-reload isn't worth surfacing, and the next real change will just try again.
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await LoadPackagesAsync();
+                StateHasChanged();
+            }
+            catch (Exception)
+            {
+            }
+        });
     }
 
     private async Task ReloadReviewsAsync(Guid businessId)
@@ -387,6 +432,20 @@ else
         var start = ClientTimeZoneService.ToLocal(package.PickupStart);
         var end = ClientTimeZoneService.ToLocal(package.PickupEnd);
         return $"{start:MMM d} · {start:HH:mm}–{end:HH:mm}";
+    }
+
+    // Same "closing soon" window the home page's business sort cares about, just surfaced per
+    // package instead of only affecting sort order.
+    private const int ClosingSoonThresholdMinutes = 60;
+
+    private string? ClosingSoonBadge(Package package)
+    {
+        var remaining = package.PickupEnd - DateTime.UtcNow;
+        if (remaining <= TimeSpan.Zero || remaining > TimeSpan.FromMinutes(ClosingSoonThresholdMinutes))
+            return null;
+
+        var minutes = Math.Max(1, (int)Math.Ceiling(remaining.TotalMinutes));
+        return $"Ends in {minutes} min";
     }
 
     private List<Review> PackageReviews(Guid packageId) => _reviews.Where(r => r.PackageId == packageId).ToList();
@@ -476,5 +535,6 @@ else
     {
         CartService.OnChange -= HandleCartChanged;
         ClientTimeZoneService.OnChange -= HandleTimeZoneChanged;
+        PackageStockBroadcaster.BusinessStockChanged -= HandleStockChanged;
     }
 }

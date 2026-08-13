@@ -9,14 +9,18 @@ namespace Netrom_Eco_Meal.Repositories;
 // AddAsync/DeleteAsync only stage changes — call SaveChangesAsync to persist.
 public class PackageRepository(EcoMealDbContext context) : IPackageRepository
 {
+    // AsNoTracking on both — pure read/display paths, writes re-fetch via GetByIdAsync/GetByIdsAsync.
+    // Matters for correctness, not just perf: EcoMealDbContext lives for a whole Blazor circuit, so a
+    // tracked re-query returns the same stale instances via EF's identity map — PackageStockBroadcaster's
+    // live reload (BusinessDetail.razor) depends on this returning fresh Quantity every time.
     public async Task<List<Package>> GetAllAsync()
     {
-        return await context.Packages.Include(p => p.PackageType).Include(p => p.Business).ToListAsync();
+        return await context.Packages.AsNoTracking().Include(p => p.PackageType).Include(p => p.Business).ToListAsync();
     }
 
     public async Task<PaginatedList<Package>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessId, Guid? packageTypeId)
     {
-        var query = context.Packages.Include(p => p.PackageType).Include(p => p.Business).AsQueryable();
+        var query = context.Packages.AsNoTracking().Include(p => p.PackageType).Include(p => p.Business).AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(p =>

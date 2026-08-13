@@ -16,7 +16,8 @@ public class PackageService(
     IAppEmailSender emailSender,
     CurrentUserAccessor currentUser,
     IConfiguration configuration,
-    IAuditLogService auditLogService) : IPackageService
+    IAuditLogService auditLogService,
+    PackageStockBroadcaster stockBroadcaster) : IPackageService
 {
     // Same fallback/config-key convention as AuthService.BaseUrl — used to build an absolute
     // link for the back-in-stock email CTA.
@@ -48,6 +49,7 @@ public class PackageService(
 
         await packageRepository.AddAsync(package);
         await packageRepository.SaveChangesAsync();
+        stockBroadcaster.NotifyBusinessChanged(package.BusinessId);
 
         if (package.Quantity > 0)
             await NotifyFavoritingCustomersAsync(package.BusinessId, $"New package available: \"{package.Name}\".");
@@ -68,6 +70,7 @@ public class PackageService(
 
         UpdatePackage(package, packageFromDb);
         await packageRepository.SaveChangesAsync();
+        stockBroadcaster.NotifyBusinessChanged(packageFromDb.BusinessId);
 
         if (restocked)
             await NotifyFavoritingCustomersAsync(packageFromDb.BusinessId, $"Back in stock: \"{packageFromDb.Name}\".");
@@ -83,6 +86,7 @@ public class PackageService(
 
         await packageRepository.DeleteAsync(package.Id);
         await packageRepository.SaveChangesAsync();
+        stockBroadcaster.NotifyBusinessChanged(packageFromDb.BusinessId);
     }
 
     // Copies name/price/tags/pickup window as-is, for a manager to adjust afterward. TemplateId
@@ -115,6 +119,9 @@ public class PackageService(
             await packageRepository.AddAsync(duplicate);
         await packageRepository.SaveChangesAsync();
 
+        foreach (var businessId in duplicates.Select(p => p.BusinessId).Distinct())
+            stockBroadcaster.NotifyBusinessChanged(businessId);
+
         return duplicates;
     }
 
@@ -129,6 +136,9 @@ public class PackageService(
             package.Quantity = Math.Max(0, package.Quantity + delta);
 
         await packageRepository.SaveChangesAsync();
+
+        foreach (var businessId in packages.Select(p => p.BusinessId).Distinct())
+            stockBroadcaster.NotifyBusinessChanged(businessId);
     }
 
     // Pushes PickupEnd later, leaving PickupStart untouched — matches "extend" rather than shifting the whole window.
@@ -141,6 +151,11 @@ public class PackageService(
             package.PickupEnd += extension;
 
         await packageRepository.SaveChangesAsync();
+
+        // Extending a window that had already closed brings a package back into every viewer's
+        // live list, same as a stock change would — worth the same broadcast.
+        foreach (var businessId in packages.Select(p => p.BusinessId).Distinct())
+            stockBroadcaster.NotifyBusinessChanged(businessId);
     }
 
     public async Task<List<Package>> GetForAnalyticsAsync(Guid? businessId, DateTime since)
@@ -166,6 +181,7 @@ public class PackageService(
         package.IsHidden = true;
         package.HiddenReason = reason;
         await packageRepository.SaveChangesAsync();
+        stockBroadcaster.NotifyBusinessChanged(package.BusinessId);
 
         await auditLogService.LogAsync(AuditActions.PackageHidden, AuditTargetTypes.Package, package.Id.ToString(), package.Name, reason);
 
@@ -195,6 +211,7 @@ public class PackageService(
         package.IsHidden = false;
         package.HiddenReason = null;
         await packageRepository.SaveChangesAsync();
+        stockBroadcaster.NotifyBusinessChanged(package.BusinessId);
 
         await auditLogService.LogAsync(AuditActions.PackageUnhidden, AuditTargetTypes.Package, package.Id.ToString(), package.Name);
     }

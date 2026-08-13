@@ -9,12 +9,11 @@ using Netrom_Eco_Meal.Tests.TestSupport;
 
 namespace Netrom_Eco_Meal.Tests.Database;
 
-// Runs DbSeeder against a real Postgres (via Testcontainers), the same way Program.cs does on
-// startup: MigrateAsync() then SeedAsync(). This is the regression test for the migration-vs-
-// seeder conflict this codebase hit before (old EF migrations hardcoded seed rows that DbSeeder's
-// "if (await db.Packages.AnyAsync()) return;" guards would then silently defer to) — an
-// InMemory-provider unit test wouldn't replay real migration history, so it can't catch that class
-// of bug. Also covers idempotency: SeedAsync must be safe to run on every app startup.
+// Runs DbSeeder against a real Postgres (via Testcontainers), the same way Program.cs does on startup:
+// MigrateAsync() then SeedAsync(). Regression test for the migration-vs-seeder conflict this codebase
+// hit before (old EF migrations hardcoded seed rows that DbSeeder's "if (Any) return" guards then
+// silently deferred to) — an InMemory-provider test wouldn't replay real migration history and can't
+// catch that class of bug. Also covers idempotency: SeedAsync must be safe on every app startup.
 [Collection(nameof(PostgresCollection))]
 public class DbSeederTests(PostgresFixture fixture)
 {
@@ -63,8 +62,9 @@ public class DbSeederTests(PostgresFixture fixture)
 
         // 12 approved storefront kitchens + 2 Phase 9 self-service applications (1 pending, 1 rejected).
         Assert.Equal(14, await db.Businesses.CountAsync());
-        // 24 live storefront packages + 9 historical ones backing the Phase 8 analytics card.
-        Assert.Equal(33, await db.Packages.CountAsync());
+        // 25 live storefront packages (24 + the Phase 12 low-stock demo package) + 9 historical
+        // ones backing the Phase 8 analytics card.
+        Assert.Equal(34, await db.Packages.CountAsync());
     }
 
     [Fact]
@@ -171,8 +171,9 @@ public class DbSeederTests(PostgresFixture fixture)
 
         await using var finalDb = provider.GetRequiredService<EcoMealDbContext>();
         Assert.Equal(14, await finalDb.Businesses.CountAsync());
-        Assert.Equal(33, await finalDb.Packages.CountAsync());
-        Assert.Equal(16, await finalDb.Orders.CountAsync());
+        Assert.Equal(34, await finalDb.Packages.CountAsync());
+        // 16 original demo orders + 3 Phase 11 leaderboard-demo orders (2 for demo.customer2, 1 for demo.customer3).
+        Assert.Equal(19, await finalDb.Orders.CountAsync());
         Assert.Equal(3, await finalDb.Favorites.CountAsync());
         Assert.Equal(2, await finalDb.Reviews.CountAsync());
         // Two demo managers each staff one or two of the demo businesses — must not double-insert.
@@ -223,6 +224,32 @@ public class DbSeederTests(PostgresFixture fixture)
         Assert.NotNull(redCardPastryBox);
         Assert.True(redCardPastryBox!.IsHidden);
         Assert.False(string.IsNullOrWhiteSpace(redCardPastryBox.HiddenReason));
+    }
+
+    [Fact]
+    public async Task SeedAsync_FreshDatabase_SeedsLeaderboardDemoData()
+    {
+        await using var provider = await BuildSeededServicesAsync();
+        using var scope = provider.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var db = scope.ServiceProvider.GetRequiredService<EcoMealDbContext>();
+
+        var customer = await userManager.FindByEmailAsync("demo.customer@ecomeal.local");
+        var customer2 = await userManager.FindByEmailAsync("demo.customer2@ecomeal.local");
+        var customer3 = await userManager.FindByEmailAsync("demo.customer3@ecomeal.local");
+        Assert.NotNull(customer);
+        Assert.NotNull(customer2);
+        Assert.NotNull(customer3);
+
+        // The primary demo customer and demo.customer2 are opted in; demo.customer3 deliberately
+        // isn't, despite also having a real Completed order below — proves the privacy filter
+        // actually excludes them rather than just being untested.
+        Assert.True(customer!.ShowOnLeaderboard);
+        Assert.True(customer2!.ShowOnLeaderboard);
+        Assert.False(customer3!.ShowOnLeaderboard);
+
+        Assert.Equal(2, await db.Orders.CountAsync(o => o.UserId == customer2.Id));
+        Assert.Equal(1, await db.Orders.CountAsync(o => o.UserId == customer3.Id));
     }
 
     [Fact]

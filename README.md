@@ -17,26 +17,35 @@ is just the capability summary.
 **Customer** — what you get on self-registration:
 
 - Browse, search and filter businesses on the home page, sorted by name, "closing soon",
-  or "near me" (browser geolocation) — with an optional map view of every kitchen that has
-  a saved location
-- View a business's live packages and add them to a basket
+  or "near me" (browser geolocation) — filter by kitchen type or dietary/allergen tag, with
+  an optional map view of every kitchen that has a saved location
+- View a business's live packages, including its weekly hours/holiday closures, and add
+  packages to a basket — the package list (and "N left"/"Sold out" state) updates live for
+  anyone browsing it, with no refresh needed, if stock changes while they're looking
 - Check out via Stripe Checkout, and track past orders with pickup windows on `/orders`
 - Show a QR pickup pass for a confirmed order, scanned by the business at collection —
   split a group order into several separate passes so whoever gets there first can scan
-- Leave a star rating and comment on a business once you've ordered from it
+- Leave a star rating and comment on a business (optionally tagged to a specific package)
+  once you've ordered from it
 - Report a business or package that looks wrong, and apply to list your own business for
   admin review on `/businesses/apply`
+- Opt in to the `/impact` community leaderboard, ranking the month's top food-rescuers by kg
+  saved — off by default, and a customer who never opts in never appears on it
 
 **BusinessManager** — staff of one or more businesses (assigned by an Admin), scoped to
 whichever one they pick in the sidebar switcher:
 
-- Manage packages on `/packages` for the currently selected business, including "repeat
-  this every day" recurring templates managed on `/packages/templates`
+- Manage packages on `/packages` for the currently selected business — including a photo
+  (upload or paste a URL), "repeat this every day" recurring templates managed on
+  `/packages/templates`, and bulk duplicate/adjust-quantity/extend-pickup-window actions
+- Set your business's weekly opening hours and one-off holiday closures, and upload a
+  business photo, from the business edit page
 - Confirm, complete or cancel orders placed at the currently selected business on
   `/orders/manage` — cancelling automatically refunds the customer's Stripe payment
 - Scan a customer's pickup QR code on `/orders/scan` to confirm pickup
-- See stats scoped to the currently selected business on `/dashboard`, and a payout ledger
-  of every payment collected (and refunded) on `/payments`
+- See stats scoped to the currently selected business on `/dashboard` (including a
+  sell-through rate and busiest pickup hours), a payout ledger of every payment collected
+  (and refunded) on `/payments`, and export order history as CSV
 - Staffing more than one business surfaces a switcher in the sidebar to pick which one is
   "current" for every page above — staffing just one skips the switcher entirely
 
@@ -50,6 +59,8 @@ whichever one they pick in the sidebar switcher:
 - See store-wide stats on `/dashboard` and every payment across every business on `/payments`
 - Approve or reject self-service business applications on `/businesses`, hide/unhide a
   business or package without deleting it, and review customer reports on `/reports`
+- Add, rename or remove kitchen and package types on `/types` — no code change or
+  migration needed for a new category, and a type still in use can't be deleted
 - See who did what — role changes, business create/edit/delete/staffing, approvals,
   moderation — on `/audit-log`
 
@@ -191,7 +202,8 @@ docker compose -f docker-compose.test.yml up --build
 The app comes up on **http://localhost:8081**, backed by a Postgres container on port
 5433 (so it doesn't clash with a Postgres you might already have running locally on
 5432). Data persists in the `ecomeal-test-db` volume across restarts — tear it down with
-`docker compose -f docker-compose.test.yml down -v` if you want a clean slate.
+`docker compose -f docker-compose.test.yml down -v` if you want a clean slate. Manager-uploaded
+package/business photos persist the same way, in a separate `ecomeal-test-uploads` volume.
 
 A seeded admin account is created automatically:
 
@@ -276,6 +288,12 @@ instead of an empty app:
 This activity is only ever seeded once, the first time the app starts against a genuinely
 empty database — unlike the reference/demo-catalog data above, it won't touch orders
 placed for real afterward.
+
+Two more accounts — demo.customer2@ecomeal.local and demo.customer3@ecomeal.local (Demo123!
+each) — exist purely for the `/impact` leaderboard: both get a real Completed order, but only
+demo.customer2 opts in (`ShowOnLeaderboard`), so a fresh database visibly demonstrates the
+opt-in filter actually excluding someone with real order history, not just excluding people
+with none.
 
 It also seeds trust & safety demo data so `/businesses`, `/reports`, and `/audit-log` aren't
 empty on a fresh database: a `PendingApproval` and a `Rejected` business application (both

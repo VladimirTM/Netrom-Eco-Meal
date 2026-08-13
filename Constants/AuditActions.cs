@@ -19,6 +19,12 @@ public static class AuditActions
     public const string BusinessClosureRemoved = "BusinessClosureRemoved";
     public const string PackageHidden = "PackageHidden";
     public const string PackageUnhidden = "PackageUnhidden";
+    public const string BusinessTypeCreated = "BusinessTypeCreated";
+    public const string BusinessTypeUpdated = "BusinessTypeUpdated";
+    public const string BusinessTypeDeleted = "BusinessTypeDeleted";
+    public const string PackageTypeCreated = "PackageTypeCreated";
+    public const string PackageTypeUpdated = "PackageTypeUpdated";
+    public const string PackageTypeDeleted = "PackageTypeDeleted";
     public const string ReportDismissed = "ReportDismissed";
     public const string ReportActionTaken = "ReportActionTaken";
     public const string OrderConfirmed = "OrderConfirmed";

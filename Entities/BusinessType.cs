@@ -1,6 +1,6 @@
 namespace Netrom_Eco_Meal.Entities;
 
-// Lookup table (Restaurant, Bakery, ...) seeded by DbSeeder.
+// Lookup table (Restaurant, Bakery, ...) — seeded by DbSeeder, admin-manageable at /types.
 public class BusinessType
 {
     public Guid Id { get; set; }

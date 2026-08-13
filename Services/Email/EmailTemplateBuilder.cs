@@ -3,14 +3,11 @@ using System.Text;
 
 namespace Netrom_Eco_Meal.Services.Email;
 
-// Wraps every outgoing email (order lifecycle, back-in-stock, account confirmation, password
-// reset) in one branded HTML shell, so a customer's inbox reads as the same product as the app
-// instead of four inconsistent one-off snippets. Table-based layout with inline styles
-// throughout — the only approach that survives Outlook/older webmail clients, which ignore
-// <style> blocks and most modern CSS; nothing here depends on app.css or the Google Fonts link
-// in App.razor actually loading. Heading/paragraph/CTA text is HTML-encoded here, once, rather
-// than leaving every call site responsible for remembering to escape user-controlled text (a
-// customer's display name, a package name...).
+// Wraps every outgoing email (order lifecycle, back-in-stock, confirmation, password reset) in one
+// branded HTML shell instead of inconsistent one-off snippets. Table-based layout with inline styles
+// throughout — the only approach that survives Outlook/older webmail clients, which ignore <style>
+// blocks and modern CSS; nothing depends on app.css or the Google Fonts link actually loading.
+// Heading/paragraph/CTA text is HTML-encoded here once, not left to every call site to remember.
 public static class EmailTemplateBuilder
 {
     private const string Forest = "#0e2117";

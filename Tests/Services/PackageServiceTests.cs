@@ -19,7 +19,7 @@ public class PackageServiceTests
     private const string ManagerId = "manager-1";
     private const string OtherManagerId = "manager-2";
 
-    private sealed record Fixture(PackageService Service, Mock<IPackageRepository> Repo, Mock<IBusinessService> BusinessService, Mock<INotificationService> NotificationService);
+    private sealed record Fixture(PackageService Service, Mock<IPackageRepository> Repo, Mock<IBusinessService> BusinessService, Mock<INotificationService> NotificationService, PackageStockBroadcaster StockBroadcaster);
 
     private static Fixture Build(string? userId, params string[] roles)
     {
@@ -31,6 +31,7 @@ public class PackageServiceTests
         var auditLogService = new Mock<IAuditLogService>();
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
         var configuration = new ConfigurationBuilder().Build();
+        var stockBroadcaster = new PackageStockBroadcaster();
 
         // Default so HideAsync's staff-notification fan-out (NotifyHiddenAsync) has something to
         // enumerate; tests that care about notification content override this per-case.
@@ -38,9 +39,9 @@ public class PackageServiceTests
 
         var service = new PackageService(
             repo.Object, businessService.Object, favoriteRepo.Object, notificationService.Object,
-            emailSender.Object, currentUser, configuration, auditLogService.Object);
+            emailSender.Object, currentUser, configuration, auditLogService.Object, stockBroadcaster);
 
-        return new Fixture(service, repo, businessService, notificationService);
+        return new Fixture(service, repo, businessService, notificationService, stockBroadcaster);
     }
 
     // ---- DuplicateManyAsync -------------------------------------------------
@@ -289,5 +290,109 @@ public class PackageServiceTests
 
         Assert.False(package.IsHidden);
         Assert.Null(package.HiddenReason);
+    }
+
+    // ---- PackageStockBroadcaster (Phase 12) ---------------------------------
+
+    [Fact]
+    public async Task AdjustQuantityManyAsync_BroadcastsOncePerDistinctBusiness()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        var packages = new List<Package> { TestData.Package(businessId, quantity: 2), TestData.Package(businessId, quantity: 5) };
+        f.Repo.Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>())).ReturnsAsync(packages);
+
+        var broadcasts = new List<Guid>();
+        f.StockBroadcaster.BusinessStockChanged += broadcasts.Add;
+
+        await f.Service.AdjustQuantityManyAsync(packages.Select(p => p.Id).ToList(), 3);
+
+        // Both packages share one business — broadcast once, not twice.
+        Assert.Equal([businessId], broadcasts);
+    }
+
+    [Fact]
+    public async Task AdjustQuantityManyAsync_Unauthorized_DoesNotBroadcast()
+    {
+        var f = Build(ManagerId, AppRoles.BusinessManager);
+        var ownBusinessId = Guid.NewGuid();
+        var otherBusinessId = Guid.NewGuid();
+        var owned = TestData.Package(ownBusinessId, quantity: 2);
+        var notOwned = TestData.Package(otherBusinessId, quantity: 2);
+        f.Repo.Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>())).ReturnsAsync([owned, notOwned]);
+        f.BusinessService.Setup(b => b.IsStaffAsync(ownBusinessId, ManagerId)).ReturnsAsync(true);
+        f.BusinessService.Setup(b => b.IsStaffAsync(otherBusinessId, ManagerId)).ReturnsAsync(false);
+
+        var broadcasts = new List<Guid>();
+        f.StockBroadcaster.BusinessStockChanged += broadcasts.Add;
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.AdjustQuantityManyAsync([owned.Id, notOwned.Id], 5));
+
+        Assert.Empty(broadcasts);
+    }
+
+    [Fact]
+    public async Task DuplicateManyAsync_BroadcastsBusinessChanged()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 4);
+        f.Repo.Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>())).ReturnsAsync([package]);
+
+        var broadcasts = new List<Guid>();
+        f.StockBroadcaster.BusinessStockChanged += broadcasts.Add;
+
+        await f.Service.DuplicateManyAsync([package.Id]);
+
+        Assert.Equal([businessId], broadcasts);
+    }
+
+    [Fact]
+    public async Task ExtendPickupWindowManyAsync_BroadcastsBusinessChanged()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        f.Repo.Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>())).ReturnsAsync([package]);
+
+        var broadcasts = new List<Guid>();
+        f.StockBroadcaster.BusinessStockChanged += broadcasts.Add;
+
+        await f.Service.ExtendPickupWindowManyAsync([package.Id], TimeSpan.FromHours(2));
+
+        Assert.Equal([businessId], broadcasts);
+    }
+
+    [Fact]
+    public async Task HideAsync_BroadcastsBusinessChanged()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        f.Repo.Setup(r => r.GetByIdAsync(package.Id)).ReturnsAsync(package);
+
+        var broadcasts = new List<Guid>();
+        f.StockBroadcaster.BusinessStockChanged += broadcasts.Add;
+
+        await f.Service.HideAsync(package.Id, "reason");
+
+        Assert.Equal([businessId], broadcasts);
+    }
+
+    [Fact]
+    public async Task UnhideAsync_BroadcastsBusinessChanged()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        package.IsHidden = true;
+        f.Repo.Setup(r => r.GetByIdAsync(package.Id)).ReturnsAsync(package);
+
+        var broadcasts = new List<Guid>();
+        f.StockBroadcaster.BusinessStockChanged += broadcasts.Add;
+
+        await f.Service.UnhideAsync(package.Id);
+
+        Assert.Equal([businessId], broadcasts);
     }
 }

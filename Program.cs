@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Netrom_Eco_Meal.Components;
 using Netrom_Eco_Meal.Controllers;
 using Netrom_Eco_Meal.Database;
@@ -78,6 +79,7 @@ builder.Services.AddScoped<IPackageTemplateRepository, PackageTemplateRepository
 builder.Services.AddScoped<IPackageTemplateService, PackageTemplateService>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddScoped<IImpactService, ImpactService>();
 builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
 builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -93,17 +95,23 @@ builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
 builder.Services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();
 builder.Services.AddScoped<IWebPushGateway, WebPushGateway>();
+builder.Services.AddScoped<IImageUploadService, ImageUploadService>();
 builder.Services.AddScoped<IAppEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<IStripeGateway, StripeGateway>();
 builder.Services.AddScoped<ICheckoutService, CheckoutService>();
 builder.Services.AddScoped<CurrentUserAccessor>();
+// Singleton, not Scoped — see PackageStockBroadcaster's own comment for why one instance needs to
+// be shared across every circuit instead of living per-circuit like CartService below.
+builder.Services.AddSingleton<PackageStockBroadcaster>();
 builder.Services.AddScoped<CartService>();
 builder.Services.AddScoped<ClientTimeZoneService>();
 builder.Services.AddScoped<ManagedBusinessContext>();
 builder.Services.AddScoped<NotificationPanelState>();
 builder.Services.AddControllers();
 builder.Services.AddScoped<BusinessController>();
+builder.Services.AddScoped<BusinessTypeController>();
 builder.Services.AddScoped<PackageController>();
+builder.Services.AddScoped<PackageTypeController>();
 builder.Services.AddScoped<PackageTemplateController>();
 builder.Services.AddScoped<UserController>();
 builder.Services.AddScoped<OrderController>();
@@ -114,6 +122,7 @@ builder.Services.AddScoped<FavoriteController>();
 builder.Services.AddScoped<AuditLogController>();
 builder.Services.AddScoped<ReportController>();
 builder.Services.AddScoped<PushSubscriptionController>();
+builder.Services.AddScoped<ImpactController>();
 // Real HTTP endpoint for Login/Register/Logout (see AuthController), but also registered here so
 // ConfirmEmail/ForgotPassword/ResetPassword can inject it in-process like every other controller.
 builder.Services.AddScoped<AuthController>();
@@ -143,6 +152,18 @@ if (!app.Environment.IsDevelopment())
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
+
+// Package/business photos saved by ImageUploadService. MapStaticAssets below only serves the
+// build-time asset manifest, so files written to wwwroot/uploads at runtime need this separate,
+// always-on middleware instead — otherwise they'd 404 (or get swallowed by the Blazor Server
+// fallback route) despite sitting right there on disk.
+var uploadsPath = Path.Combine(app.Environment.WebRootPath, "uploads");
+Directory.CreateDirectory(uploadsPath);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(uploadsPath),
+    RequestPath = "/uploads"
+});
 
 app.UseAuthentication();
 app.UseAuthorization();

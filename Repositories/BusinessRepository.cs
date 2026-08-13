@@ -23,7 +23,7 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
         return await query.ToListAsync();
     }
 
-    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, string? favoritedByUserId = null, double? customerLat = null, double? customerLng = null, string? statusFilter = null, bool publicOnly = false)
+    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, string? favoritedByUserId = null, double? customerLat = null, double? customerLng = null, string? statusFilter = null, bool publicOnly = false, string? dietaryTag = null)
     {
         // Same AsSplitQuery reasoning as GetAllAsync.
         var query = context.Businesses.Include(b => b.BusinessType).Include(b => b.Staff).ThenInclude(s => s.User)
@@ -47,6 +47,9 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
 
         if (businessTypeId.HasValue)
             query = query.Where(b => b.BusinessTypeId == businessTypeId);
+
+        if (!string.IsNullOrWhiteSpace(dietaryTag))
+            query = query.Where(b => b.Packages.Any(p => p.PickupEnd > DateTime.UtcNow && p.DietaryTags.Contains(dietaryTag)));
 
         if (staffUserId is not null)
             query = query.Where(b => b.Staff.Any(s => s.UserId == staffUserId));

@@ -20,6 +20,7 @@ public class OrderService(
     EcoMealDbContext dbContext,
     CurrentUserAccessor currentUser,
     IConfiguration configuration,
+    PackageStockBroadcaster stockBroadcaster,
     ILogger<OrderService> logger) : IOrderService
 {
     // Same fallback/config-key convention as AuthService.BaseUrl — used to build absolute links
@@ -92,6 +93,11 @@ public class OrderService(
 
         await orderRepository.AddAsync(order);
         await orderRepository.SaveChangesAsync();
+
+        // A new Pending order reserves stock virtually (see the pendingElsewhere math above), so
+        // anyone else viewing this business just saw its effective availability drop even though
+        // Package.Quantity itself hasn't moved yet.
+        stockBroadcaster.NotifyBusinessChanged(businessId);
 
         var business = await businessService.GetByIdAsync(businessId);
         if (business is not null)
@@ -195,7 +201,11 @@ public class OrderService(
         }
 
         if (staleOrders.Count > 0)
+        {
             await orderRepository.SaveChangesAsync();
+            foreach (var businessId in staleOrders.Select(o => o.BusinessId).Distinct())
+                stockBroadcaster.NotifyBusinessChanged(businessId);
+        }
 
         return staleOrders.Count;
     }
@@ -222,7 +232,11 @@ public class OrderService(
         }
 
         if (overdueOrders.Count > 0)
+        {
             await orderRepository.SaveChangesAsync();
+            foreach (var businessId in overdueOrders.Select(o => o.BusinessId).Distinct())
+                stockBroadcaster.NotifyBusinessChanged(businessId);
+        }
 
         return overdueOrders.Count;
     }
@@ -470,6 +484,11 @@ public class OrderService(
             // Another confirm/cancel changed a package's stock (xmin token) — don't oversell.
             throw new InvalidOperationException("Stock for this order just changed — please refresh and try again.");
         }
+
+        // Only reached once the transition actually saved — Confirm/Cancel/NoShow are exactly the
+        // transitions that move Package.Quantity (see above), and even Pending->Cancelled changes
+        // effective availability for other viewers by releasing this order's reservation.
+        stockBroadcaster.NotifyBusinessChanged(order.BusinessId);
 
         var auditAction = statusName switch
         {
