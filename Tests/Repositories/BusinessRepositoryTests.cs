@@ -261,6 +261,50 @@ public class BusinessRepositoryTests
         Assert.Empty(result.Items);
     }
 
+    // ---- GetPagedAsync maxPrice filter (Phase 2) ------------
+
+    [Fact]
+    public async Task GetPagedAsync_MaxPriceFilter_OnlyReturnsBusinessesWithMatchingLivePackage()
+    {
+        await using var db = InMemoryDb.Create();
+        var repo = new BusinessRepository(db);
+        var cheapBusiness = TestData.Business();
+        var pricyBusiness = TestData.Business();
+        db.BusinessTypes.Add(new BusinessType { Id = cheapBusiness.BusinessTypeId, Name = "Type A" });
+        db.BusinessTypes.Add(new BusinessType { Id = pricyBusiness.BusinessTypeId, Name = "Type B" });
+        db.Businesses.AddRange(cheapBusiness, pricyBusiness);
+        var cheapPackage = TestData.Package(cheapBusiness.Id);
+        cheapPackage.Price = 15m;
+        var pricyPackage = TestData.Package(pricyBusiness.Id);
+        pricyPackage.Price = 45m;
+        db.Packages.AddRange(cheapPackage, pricyPackage);
+        await db.SaveChangesAsync();
+
+        var result = await repo.GetPagedAsync(1, 10, null, null, maxPrice: 30m);
+
+        Assert.Single(result.Items);
+        Assert.Equal(cheapBusiness.Id, result.Items[0].Id);
+    }
+
+    [Fact]
+    public async Task GetPagedAsync_MaxPriceFilter_IgnoresExpiredPackages()
+    {
+        await using var db = InMemoryDb.Create();
+        var repo = new BusinessRepository(db);
+        var business = TestData.Business();
+        db.BusinessTypes.Add(new BusinessType { Id = business.BusinessTypeId, Name = "Type A" });
+        db.Businesses.Add(business);
+        var expiredCheapPackage = TestData.Package(business.Id);
+        expiredCheapPackage.Price = 10m;
+        expiredCheapPackage.PickupEnd = DateTime.UtcNow.AddHours(-1);
+        db.Packages.Add(expiredCheapPackage);
+        await db.SaveChangesAsync();
+
+        var result = await repo.GetPagedAsync(1, 10, null, null, maxPrice: 30m);
+
+        Assert.Empty(result.Items);
+    }
+
     [Fact]
     public async Task RemoveClosureAsync_WrongBusinessId_ReturnsFalseAndDoesNotRemove()
     {

@@ -693,7 +693,7 @@ public static class DbSeeder
         // Every order now only exists once its Stripe Checkout payment is confirmed (see
         // CheckoutService), so each seeded order gets a matching Payment — refunded for the
         // cancelled one (mirrors OrderService's refund-on-cancel), kept Succeeded for the no-show
-        // (that's what makes the no-show fee real, per FEATURE_IDEAS.md's Phase 7).
+        // (that's what makes the no-show fee real).
         Order MakeOrder(Guid businessId, Guid packageId, int quantity, string statusName, DateTime createdAt, bool refunded = false)
         {
             var order = new Order

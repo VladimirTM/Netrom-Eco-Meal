@@ -324,6 +324,33 @@ The storefront. Loads `_livePackages` (all packages with `PickupEnd > now`, for 
 - Clicking a card calls `NavigationManager.NavigateTo($"/businesses/{id}")` — cards are rendered as `<button>` elements (not `<a>`) specifically so the per-card favorite-heart button can `@onclick:stopPropagation="true"` without fighting an anchor's default navigation.
 - **"Closed now" badge** — `IsClosedNow(business)` calls `Models.BusinessHoursStatus.IsOpenNow(business.Hours, business.Closures, ClientTimeZoneService.ToLocal(DateTime.UtcNow))` (`BACKEND_ARCHITECTURE.md` §3) and only renders the badge when that's explicitly `false` — a `null` (hours never configured) or `true` result shows nothing, so a business that hasn't set hours yet never looks closed. `Home.razor` subscribes to `ClientTimeZoneService.OnChange` (same pattern `BusinessDetail.razor` already used, §7) so the badge re-evaluates once the browser's real timezone resolves via JS interop, not just on the initial UTC-default render.
 
+### AI search bar (Phase 2)
+
+```csharp
+private async Task RunAiSearchAsync()
+{
+    var result = await BusinessController.ParseSearchIntentAsync(_aiQuery, _lastSearchIntent);
+    if (result.Result is ConflictObjectResult conflict)
+        _aiSearchError = conflict.Value?.ToString() ?? "The AI search assistant isn't available right now.";
+    else if (result.Value is not null)
+        await ApplyIntentAsync(result.Value);
+}
+
+private async Task ApplyIntentAsync(SearchIntent intent)
+{
+    _lastSearchIntent = intent;
+    _search = intent.Keywords ?? "";
+    _dietaryTagFilter = intent.DietaryTag ?? "";
+    _maxPriceFilter = intent.MaxPrice;
+    if (intent.NearMe && !_customerLat.HasValue) await TryLocateAsync();
+    _sortBy = intent.ClosingSoon ? BusinessSortOptions.ClosingSoon
+        : intent.NearMe && _customerLat.HasValue ? BusinessSortOptions.Distance : BusinessSortOptions.Name;
+    _pageIndex = 1;
+    await ReloadAsync();
+}
+```
+A second input above the literal search box (`.home-ai-search`), placeholder `"vegan dinner under 30 lei, closing soon"`, submitted on Enter (`OnAiSearchKeyDownAsync`) or the "Ask AI" button. `RunAiSearchAsync` calls `BusinessController.ParseSearchIntentAsync` in-process — same `ConflictObjectResult`-means-"AI not configured" convention `PackageForm.razor`'s `DraftDescriptionAsync` established (§ Packages) — then `ApplyIntentAsync` just **writes into the same filter fields the manual controls already bind to** (`_search`, `_dietaryTagFilter`, `_sortBy`), so the existing dropdowns visibly reflect what the AI understood and the "Clear" button already covers undoing it. `_maxPriceFilter` is new (no manual control sets it — only the AI search and its own dismissible chip, `.home-chip`, do) and threads through to `BusinessController.GetPagedAsync`'s new `maxPrice` parameter, filtering to businesses with a live package at or under that price (`BusinessRepository.GetPagedAsync`, `BACKEND_ARCHITECTURE.md` §4). `_lastSearchIntent` is fed back into the next `ParseSearchIntentAsync` call as refinement context, so "cheaper" or "gluten-free only" adjusts the prior turn instead of starting over (`BACKEND_ARCHITECTURE.md` §5). Only one sort slot exists in the UI, so when both `closingSoon` and `nearMe` are requested `closingSoon` wins it (no permission prompt needed, and it's the app's core food-waste signal) — `nearMe` still triggers a geolocation fetch either way, so the per-card distance badges (below) show up even when it loses that tie.
+
 ### "Near me" distance sort
 
 ```csharp
@@ -332,15 +359,23 @@ private async Task ToggleNearMeAsync()
     if (_sortBy == BusinessSortOptions.Distance) { _sortBy = BusinessSortOptions.Name; await FilterChangedAsync(); return; }
 
     _locatingNearMe = true;
-    var position = await JSRuntime.InvokeAsync<GeoPosition?>("EcoMeal.geo.getPosition");
-    if (position is null) { _locationError = "Couldn't get your location — check your browser's location permission."; return; }
+    var located = await TryLocateAsync();
+    _locatingNearMe = false;
+    if (!located) return;
 
-    (_customerLat, _customerLng) = (position.Lat, position.Lng);
     _sortBy = BusinessSortOptions.Distance;
     await FilterChangedAsync();
 }
+
+private async Task<bool> TryLocateAsync()
+{
+    var position = await JSRuntime.InvokeAsync<GeoPosition?>("EcoMeal.geo.getPosition");
+    if (position is null) { _locationError = "Couldn't get your location — check your browser's location permission."; return false; }
+    (_customerLat, _customerLng) = (position.Lat, position.Lng);
+    return true;
+}
 ```
-A toggle button, not a plain sort-dropdown option — selecting "distance" needs a customer coordinate the server doesn't have, so clicking it first requests browser geolocation (`EcoMeal.geo.getPosition`, §14) and only switches `_sortBy` once a position actually comes back. `EcoMeal.geo.getPosition` resolves to `null` rather than throwing on denial/timeout/unsupported (§14), so the failure path here is an ordinary `if`, not a `try/catch` — the sort dropdown itself only shows a "Nearest" `<option>` once `_customerLat` is set, so there's no way to select a sort mode the page can't yet fulfill. `_customerLat`/`_customerLng` are passed straight through to `BusinessController.GetPagedAsync` on every subsequent reload while this sort is active — see `BusinessRepository.GetPagedAsync`'s in-memory Haversine branch in `BACKEND_ARCHITECTURE.md` §4. Each business card also shows its own "X km away"/"X m away" badge (`GeoDistance.Km`, computed client-side against `_customerLat`/`_customerLng` purely for display) whenever both the customer's position and that business's `Latitude`/`Longitude` are known — independent of which sort mode is active, so the badge can show up even while sorted by name.
+A toggle button, not a plain sort-dropdown option — selecting "distance" needs a customer coordinate the server doesn't have, so clicking it first requests browser geolocation (`EcoMeal.geo.getPosition`, §14) and only switches `_sortBy` once a position actually comes back. The geolocation request itself lives in `TryLocateAsync` (Phase 2 pulled it out of `ToggleNearMeAsync` so `ApplyIntentAsync` above could reuse it for a `nearMe` intent without duplicating the button's own toggle-off logic) — it resolves to `null` rather than throwing on denial/timeout/unsupported (§14), so the failure path here is an ordinary `if`, not a `try/catch` — the sort dropdown itself only shows a "Nearest" `<option>` once `_customerLat` is set, so there's no way to select a sort mode the page can't yet fulfill. `_customerLat`/`_customerLng` are passed straight through to `BusinessController.GetPagedAsync` on every subsequent reload while this sort is active — see `BusinessRepository.GetPagedAsync`'s in-memory Haversine branch in `BACKEND_ARCHITECTURE.md` §4. Each business card also shows its own "X km away"/"X m away" badge (`GeoDistance.Km`, computed client-side against `_customerLat`/`_customerLng` purely for display) whenever both the customer's position and that business's `Latitude`/`Longitude` are known — independent of which sort mode is active, so the badge can show up even while sorted by name (or while `nearMe` lost the AI search's sort tie-break above).
 
 ### Map view
 

@@ -12,10 +12,10 @@ using Netrom_Eco_Meal.Tests.TestSupport;
 
 namespace Netrom_Eco_Meal.Tests.Services;
 
-// Covers OrderService's status-transition/stock logic — the trickiest logic in the app per
-// FEATURE_IDEAS.md's Phase 4. IOrderRepository/IPackageRepository/IBusinessService/
-// INotificationService are mocked; EcoMealDbContext is a real InMemory-backed instance since
-// OrderService queries it directly (rate limiting, status lookups, pending-reservation sums).
+// Covers OrderService's status-transition/stock logic — the trickiest logic in the app.
+// IOrderRepository/IPackageRepository/IBusinessService/INotificationService are mocked;
+// EcoMealDbContext is a real InMemory-backed instance since OrderService queries it directly
+// (rate limiting, status lookups, pending-reservation sums).
 public class OrderServiceTests
 {
     private const string CustomerId = "customer-1";
@@ -617,8 +617,8 @@ public class OrderServiceTests
     [Fact]
     public async Task RedeemPickupPassAsync_Success_RedeemsPassAndCompletesWholeOrder()
     {
-        // Redeeming one pass out of several completes the whole order — the "whoever gets there
-        // first" semantics FEATURE_IDEAS.md's Phase 1 calls for.
+        // Redeeming one pass out of several completes the whole order — deliberate "whoever
+        // gets there first" semantics.
         var f = Build(AdminId, AppRoles.Admin);
         var user = TestData.User(CustomerId);
         var businessId = Guid.NewGuid();

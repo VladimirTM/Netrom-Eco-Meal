@@ -469,8 +469,8 @@ public class OrderService(
         }
 
         // Refund on Cancelled, whichever state it came from — but deliberately not on NoShow: the
-        // customer already reserved/held the food and didn't collect it, so the kept charge is the
-        // no-show fee FEATURE_IDEAS.md calls for, with no extra fee-specific code needed.
+        // customer already reserved/held the food and didn't collect it, so the kept charge is
+        // the no-show fee itself, with no extra fee-specific code needed.
         var refundFailed = statusName == OrderStatuses.Cancelled && await RefundIfPaidAsync(order);
 
         order.StatusId = targetStatus.Id;

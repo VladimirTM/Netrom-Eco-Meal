@@ -35,6 +35,14 @@ The home page (`/`) is a live browse of every kitchen with something available r
 hero shows four running platform stats: packages live, portions to save, kitchens on board,
 and total kg of food saved to date.
 
+- **Ask AI** — a second search bar above the plain one where you can just describe what you
+  want in your own words, e.g. *"vegan dinner under 30 lei, closing soon"* or *"gluten-free
+  near me"*. It fills in the filters/sort below for you (and shows a dismissable "Under X RON"
+  chip for a price ceiling, since that's not otherwise a dropdown) rather than searching
+  separately — you can still edit anything it set by hand afterward. A follow-up like "cheaper"
+  or "gluten-free only" refines your last AI search instead of starting over. This is optional
+  and needs an AI feature to be configured on the server; if it isn't, you'll see a message
+  saying so instead of any filters changing.
 - **Search** (debounced 300ms as you type) matches kitchen name/description *and* what's
   actually in their live packages — searching "bread" surfaces a bakery even if the word
   "bread" is nowhere on its profile.

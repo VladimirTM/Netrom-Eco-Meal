@@ -20,7 +20,7 @@ public class BusinessService(
         return await businessRepository.GetAllAsync(publicOnly);
     }
 
-    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, bool favoritesOnly = false, double? customerLat = null, double? customerLng = null, string? statusFilter = null, bool publicOnly = false, string? dietaryTag = null)
+    public async Task<PaginatedList<Business>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, bool favoritesOnly = false, double? customerLat = null, double? customerLng = null, string? statusFilter = null, bool publicOnly = false, string? dietaryTag = null, decimal? maxPrice = null)
     {
         string? favoritedByUserId = null;
         if (favoritesOnly)
@@ -30,7 +30,7 @@ public class BusinessService(
             favoritedByUserId = userId ?? "";
         }
 
-        return await businessRepository.GetPagedAsync(pageIndex, pageSize, search, businessTypeId, staffUserId, sortBy, favoritedByUserId, customerLat, customerLng, statusFilter, publicOnly, dietaryTag);
+        return await businessRepository.GetPagedAsync(pageIndex, pageSize, search, businessTypeId, staffUserId, sortBy, favoritedByUserId, customerLat, customerLng, statusFilter, publicOnly, dietaryTag, maxPrice);
     }
 
     public async Task<Business?> GetByIdAsync(Guid id)

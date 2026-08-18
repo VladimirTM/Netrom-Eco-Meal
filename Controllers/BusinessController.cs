@@ -8,16 +8,30 @@ namespace Netrom_Eco_Meal.Controllers;
 // Also registered as a scoped service and injected directly into Razor pages, bypassing HTTP.
 [ApiController]
 [Route("/")]
-public class BusinessController(IBusinessService businessService) : ControllerBase
+public class BusinessController(IBusinessService businessService, ISearchIntentParser searchIntentParser) : ControllerBase
 {
     public async Task<ActionResult<List<Business>>> GetAllAsync(bool publicOnly = false)
     {
         return await businessService.GetAllAsync(publicOnly);
     }
 
-    public async Task<ActionResult<PaginatedList<Business>>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, bool favoritesOnly = false, double? customerLat = null, double? customerLng = null, string? statusFilter = null, bool publicOnly = false, string? dietaryTag = null)
+    public async Task<ActionResult<PaginatedList<Business>>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessTypeId, string? staffUserId = null, string? sortBy = null, bool favoritesOnly = false, double? customerLat = null, double? customerLng = null, string? statusFilter = null, bool publicOnly = false, string? dietaryTag = null, decimal? maxPrice = null)
     {
-        return await businessService.GetPagedAsync(pageIndex, pageSize, search, businessTypeId, staffUserId, sortBy, favoritesOnly, customerLat, customerLng, statusFilter, publicOnly, dietaryTag);
+        return await businessService.GetPagedAsync(pageIndex, pageSize, search, businessTypeId, staffUserId, sortBy, favoritesOnly, customerLat, customerLng, statusFilter, publicOnly, dietaryTag, maxPrice);
+    }
+
+    // previousIntent lets a follow-up utterance ("cheaper") refine the filters from an earlier
+    // turn in the same conversation — see Home.razor's AI search bar.
+    public async Task<ActionResult<SearchIntent>> ParseSearchIntentAsync(string utterance, SearchIntent? previousIntent = null)
+    {
+        try
+        {
+            return await searchIntentParser.ParseAsync(utterance, previousIntent);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(ex.Message);
+        }
     }
 
     public async Task<ActionResult<Business?>> GetByIdAsync(Guid id)

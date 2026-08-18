@@ -192,8 +192,9 @@ service workers (and so push) only work on `https://` or `localhost`.
 
 ## AI Features
 
-Only Phase 1 (a "Write it for me" button that drafts a package description) has shipped so
-far. Every AI feature in this app runs against a free, self-hosted
+Two AI features have shipped so far: a "Write it for me" button that drafts a package
+description on `PackageForm.razor`, and an AI search bar on the home page — try "vegan dinner
+under 30 lei, closing soon". Every AI feature in this app runs against a free, self-hosted
 [Ollama](https://ollama.com) instance via `Microsoft.Extensions.AI`'s `IChatClient` (backed by
 `OllamaSharp`) — there's no paid or hosted AI API anywhere in the stack. Configure it with:
 
@@ -207,9 +208,9 @@ aren't available yet" error instead of failing — same degrade-gracefully patte
 Stripe key or SMTP host; the rest of the app works normally either way.
 `docker-compose.test.yml` instead bundles an `ollama` container built from `Dockerfile.ollama`,
 which bakes `qwen2.5:7b` into the image at build time — `docker compose up --build` gives a
-fully working "Write it for me" button with no separate manual pull step. That first build
-downloads the model (a few GB), so it's slower than the app's own image the first time; the
-result persists in the `ecomeal-test-ollama` volume across restarts either way.
+fully working "Write it for me" button and AI search bar with no separate manual pull step.
+That first build downloads the model (a few GB), so it's slower than the app's own image the
+first time; the result persists in the `ecomeal-test-ollama` volume across restarts either way.
 
 ## Running with Docker
 
