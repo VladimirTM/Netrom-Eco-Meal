@@ -1,0 +1,14 @@
+FROM ollama/ollama:latest
+
+# Bakes the model into the image at build time so `docker compose up --build` has a fully
+# working "Write it for me" button out of the box — no separate manual `ollama pull` step.
+# Starts the server just for the duration of this RUN layer, retrying the pull a few times
+# since `ollama serve` takes a moment to come up in the background.
+ARG OLLAMA_MODEL=qwen2.5:7b
+ENV OLLAMA_MODEL=${OLLAMA_MODEL}
+
+RUN ollama serve & \
+    sleep 5 && \
+    for i in 1 2 3 4 5 6 7 8 9 10; do \
+      ollama pull "$OLLAMA_MODEL" && break || sleep 5; \
+    done

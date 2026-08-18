@@ -9,3 +9,7 @@ docker-compose.override.yml
 
 # Manager-uploaded package/business photos (ImageUploadService) — runtime content, not source.
 /wwwroot/uploads/
+
+# Internal planning notes, not meant to ship with the repo.
+/FEATURE_IDEAS.md
+/AI_FEATURE_IDEAS.md

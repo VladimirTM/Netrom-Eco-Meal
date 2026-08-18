@@ -4,6 +4,7 @@
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Mvc
 @using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
@@ -59,9 +60,26 @@
                         <ValidationMessage For="@(() => _model.Name)" class="validation-message small d-block mt-1"/>
                     </div>
                     <div class="mb-3">
-                        <label for="description" class="form-label fw-semibold">Description</label>
-                        <InputText id="description" class="form-control" placeholder="Short description of the package" @bind-Value="_model.Description"/>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <label for="description" class="form-label fw-semibold mb-0">Description</label>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(_draftingDescription || string.IsNullOrWhiteSpace(_model.Name))" @onclick="DraftDescriptionAsync">
+                                @if (_draftingDescription)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-magic me-1"></i>
+                                }
+                                Write it for me
+                            </button>
+                        </div>
+                        <InputText id="description" class="form-control mt-1" placeholder="Short description of the package" @bind-Value="_model.Description"/>
                         <ValidationMessage For="@(() => _model.Description)" class="validation-message small d-block mt-1"/>
+                        @if (_aiDraftError is not null)
+                        {
+                            <div class="text-danger small mt-1">@_aiDraftError</div>
+                        }
                     </div>
                     <div class="row g-3 mb-3">
                         <div class="col-sm-6">
@@ -190,6 +208,8 @@
     private bool _notFound;
     private bool _uploadingImage;
     private string? _imageUploadError;
+    private bool _draftingDescription;
+    private string? _aiDraftError;
 
     // Raw UTC, so the pickup fields can be re-derived if the timezone resolves late.
     private DateTime? _existingPickupStartUtc;
@@ -335,6 +355,25 @@
         finally
         {
             _uploadingImage = false;
+        }
+    }
+
+    private async Task DraftDescriptionAsync()
+    {
+        _aiDraftError = null;
+        _draftingDescription = true;
+        try
+        {
+            var packageTypeName = _packageTypes.FirstOrDefault(t => t.Id == _model.PackageTypeId)?.Name ?? "";
+            var result = await PackageController.DraftDescriptionAsync(_model.Name!, packageTypeName, _model.DietaryTags);
+            if (result.Result is ConflictObjectResult conflict)
+                _aiDraftError = conflict.Value?.ToString() ?? "The AI assistant isn't available right now.";
+            else if (result.Value is not null)
+                _model.Description = result.Value;
+        }
+        finally
+        {
+            _draftingDescription = false;
         }
     }
 

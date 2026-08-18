@@ -8,7 +8,7 @@ namespace Netrom_Eco_Meal.Controllers;
 // Also registered as a scoped service and injected directly into Razor pages, bypassing HTTP.
 [ApiController]
 [Route("/")]
-public class PackageController(IPackageService packageService) : ControllerBase
+public class PackageController(IPackageService packageService, IPackageAiAssistant aiAssistant) : ControllerBase
 {
     public async Task<ActionResult<List<Package>>> GetAllAsync()
     {
@@ -82,5 +82,17 @@ public class PackageController(IPackageService packageService) : ControllerBase
     {
         await packageService.UnhideAsync(packageId);
         return NoContent();
+    }
+
+    public async Task<ActionResult<string>> DraftDescriptionAsync(string name, string packageTypeName, List<string> dietaryTags)
+    {
+        try
+        {
+            return await aiAssistant.DraftDescriptionAsync(name, packageTypeName, dietaryTags);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(ex.Message);
+        }
     }
 }

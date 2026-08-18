@@ -23,6 +23,20 @@ services:
     ports:
       - "8025:8025"
 
+  # Free, self-hosted local model runtime — no paid API/account anywhere in the AI feature set.
+  # Dockerfile.ollama bakes the model into the image at build time (`docker compose up --build`),
+  # so there's no separate manual pull step — the named volume below just gets seeded from the
+  # image's /root/.ollama on first run and persists it (including any other model you pull later)
+  # across restarts.
+  ollama:
+    build:
+      context: .
+      dockerfile: Dockerfile.ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ecomeal-test-ollama:/root/.ollama
+
   app:
     build:
       context: .
@@ -51,6 +65,10 @@ services:
       WebPush__PublicKey: "BKRseuce1Oy0BD5nf9ougmmmY6F9A06j_-nqXnpXe5QaNpbvB3edTJmpxlgOTn6-_bPSdJadSW44eXkRCUzv6dM"
       WebPush__PrivateKey: "DNhXLRshYWgpQ2ZhGf7uAH5ka0UNe_uz5O5ZIO3r7dA"
       WebPush__Subject: "mailto:admin@ecomeal.local"
+      # Points at the ollama service below, which already has the model baked in — the "Write
+      # it for me" button works out of the box, no separate setup step.
+      Ollama__BaseUrl: "http://ollama:11434"
+      Ollama__ModelId: "qwen2.5:7b"
     ports:
       - "8081:8080"
     volumes:
@@ -62,7 +80,10 @@ services:
         condition: service_healthy
       mailpit:
         condition: service_started
+      ollama:
+        condition: service_started
 
 volumes:
   ecomeal-test-db:
   ecomeal-test-uploads:
+  ecomeal-test-ollama:

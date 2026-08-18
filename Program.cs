@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.FileProviders;
 using Netrom_Eco_Meal.Components;
 using Netrom_Eco_Meal.Controllers;
@@ -9,9 +10,11 @@ using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Repositories;
 using Netrom_Eco_Meal.Repositories.Interfaces;
 using Netrom_Eco_Meal.Services;
+using Netrom_Eco_Meal.Services.AI;
 using Netrom_Eco_Meal.Services.Email;
 using Netrom_Eco_Meal.Services.Interfaces;
 using Netrom_Eco_Meal.Services.Payments;
+using OllamaSharp;
 using Serilog;
 
 // Single-locale app: prices are always RON, so every ToString("C") call site (cart,
@@ -42,6 +45,17 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
 var stripeSecretKey = builder.Configuration["Stripe:SecretKey"];
 if (!string.IsNullOrWhiteSpace(stripeSecretKey))
     Stripe.StripeConfiguration.ApiKey = stripeSecretKey;
+
+// Left unregistered when Ollama:BaseUrl isn't configured — PackageAiAssistant's IChatClient?
+// constructor parameter then resolves to null and turns any AI-feature attempt into a friendly
+// "aren't available yet" error, same convention as Stripe:SecretKey above. Runs against a free,
+// self-hosted Ollama instance (docker-compose.test.yml) — no hosted/paid API involved.
+var ollamaBaseUrl = builder.Configuration["Ollama:BaseUrl"];
+if (!string.IsNullOrWhiteSpace(ollamaBaseUrl))
+{
+    var ollamaModelId = builder.Configuration["Ollama:ModelId"] ?? "qwen2.5:7b";
+    builder.Services.AddSingleton<IChatClient>(new OllamaApiClient(new Uri(ollamaBaseUrl), ollamaModelId));
+}
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -96,6 +110,7 @@ builder.Services.AddScoped<IPushSubscriptionRepository, PushSubscriptionReposito
 builder.Services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();
 builder.Services.AddScoped<IWebPushGateway, WebPushGateway>();
 builder.Services.AddScoped<IImageUploadService, ImageUploadService>();
+builder.Services.AddScoped<IPackageAiAssistant, PackageAiAssistant>();
 builder.Services.AddScoped<IAppEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<IStripeGateway, StripeGateway>();
 builder.Services.AddScoped<ICheckoutService, CheckoutService>();

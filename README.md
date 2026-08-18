@@ -74,6 +74,7 @@ whichever one they pick in the sidebar switcher:
 - Leaflet + OpenStreetMap tiles (CDN, no API key) for the home page's map view
 - Stripe Checkout (`Stripe.net`) for payment
 - Web Push (`WebPush`, VAPID-signed) + a service worker/PWA manifest for browser push notifications
+- `Microsoft.Extensions.AI` (`IChatClient`) backed by `OllamaSharp`, against a free, self-hosted [Ollama](https://ollama.com) instance — no paid/hosted AI API anywhere in the app
 
 ## Running locally
 
@@ -188,6 +189,27 @@ Leave any of the three unset and the "enable browser alerts" toggle hides itself
 same degrade-gracefully pattern as a missing Stripe key, just with no external signup behind
 it. The pickup QR scanner's HTTPS-or-localhost restriction (see below) applies here too:
 service workers (and so push) only work on `https://` or `localhost`.
+
+## AI Features
+
+Only Phase 1 (a "Write it for me" button that drafts a package description) has shipped so
+far. Every AI feature in this app runs against a free, self-hosted
+[Ollama](https://ollama.com) instance via `Microsoft.Extensions.AI`'s `IChatClient` (backed by
+`OllamaSharp`) — there's no paid or hosted AI API anywhere in the stack. Configure it with:
+
+```bash
+dotnet user-secrets set "Ollama:BaseUrl" "http://localhost:11434"
+dotnet user-secrets set "Ollama:ModelId" "qwen2.5:7b"
+```
+
+Leave `Ollama:BaseUrl` unset (the default) and every AI feature shows a friendly "AI features
+aren't available yet" error instead of failing — same degrade-gracefully pattern as a missing
+Stripe key or SMTP host; the rest of the app works normally either way.
+`docker-compose.test.yml` instead bundles an `ollama` container built from `Dockerfile.ollama`,
+which bakes `qwen2.5:7b` into the image at build time — `docker compose up --build` gives a
+fully working "Write it for me" button with no separate manual pull step. That first build
+downloads the model (a few GB), so it's slower than the app's own image the first time; the
+result persists in the `ecomeal-test-ollama` volume across restarts either way.
 
 ## Running with Docker
 

@@ -263,7 +263,11 @@ fields above them.
 
 `/packages` lists your current business's packages. **Add Package** opens a form for:
 
-- **Name** and **Description** (both required)
+- **Name** and **Description** (both required) — once you've typed a name, a **Write it for
+  me** button next to the Description label can draft a short customer-facing description from
+  the name, type, and any dietary tags you've picked, which you can still edit before saving.
+  This is optional and needs an AI feature to be configured on the server; if it isn't, the
+  button shows a message saying so instead of a description
 - **Business** (locked to yours unless you're an Admin) and **Type**
 - **Price** in RON, must be greater than 0 and no more than 10,000
 - **Quantity**, an integer from 1 to 1,000
