@@ -253,7 +253,9 @@
                     }
                 </div>
                 <div class="col-md-7">
-                    <div class="text-muted small mb-2">Busiest pickup hours <span class="text-muted">(completed pickups)</span></div>
+                    <div class="text-muted small mb-2" title="Every completed pickup in this period, by hour — unlike sell-through rate to the left, this isn't limited to packages whose pickup window has already closed.">
+                        Busiest pickup hours <span class="text-muted">(completed pickups)</span>
+                    </div>
                     <div class="dash-trend-chart" style="height: 56px;">
                         @for (var h = 0; h < 24; h++)
                         {

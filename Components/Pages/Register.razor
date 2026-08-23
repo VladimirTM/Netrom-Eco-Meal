@@ -15,8 +15,13 @@
 
         <h1 class="login-heading">Create account</h1>
 
-        @* Plain HTML post (not EditForm) so returnUrl round-trips as a form field to AuthController. *@
-        <form method="post" action="api/auth/register">
+        @* Plain HTML post (not EditForm) so returnUrl round-trips as a form field to AuthController.
+           data-enhance="false": without it, blazor.web.js's enhanced form handling intercepts the
+           POST/redirect and drops the ?error=/refill query string when patching the URL client-side,
+           so a failed registration (e.g. duplicate email) silently re-renders a blank form. Opting
+           out forces a real full-page navigation for the redirect, rendering the server-computed
+           error and refilled fields correctly. *@
+        <form method="post" action="api/auth/register" data-enhance="false">
             <AntiforgeryToken />
             <input type="hidden" name="returnUrl" value="@ReturnUrl"/>
             <div class="mb-3">

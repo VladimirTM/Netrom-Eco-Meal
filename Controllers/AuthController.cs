@@ -26,7 +26,13 @@ public class AuthController(IAuthService authService) : ControllerBase
             return LocalRedirect(returnUrl ?? "/");
         }
 
-        return LocalRedirect($"/account/login?error={Uri.EscapeDataString("Invalid login")}&returnUrl={returnUrl}");
+        // IsNotAllowed covers RequireConfirmedAccount rejecting an unconfirmed email — worth telling
+        // apart from a plain wrong password, since the fix ("check your inbox") is completely different.
+        var message = result.IsNotAllowed
+            ? "Confirm your email before signing in — check your inbox for the confirmation link."
+            : "Invalid login";
+
+        return LocalRedirect($"/account/login?error={Uri.EscapeDataString(message)}&returnUrl={returnUrl}");
     }
 
     [HttpPost("register")]

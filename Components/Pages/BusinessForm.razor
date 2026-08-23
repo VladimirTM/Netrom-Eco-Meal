@@ -215,7 +215,7 @@
                                             <div class="text-muted small">@closure.Reason</div>
                                         }
                                     </div>
-                                    <button type="button" class="btn btn-sm btn-outline-danger" title="Remove closure" @onclick="() => RemoveClosureAsync(closure.Id)">
+                                    <button type="button" class="btn btn-sm btn-outline-danger" title="Remove closure" @onclick="() => _pendingRemoveClosure = closure">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </li>
@@ -252,6 +252,14 @@
             </div>
         </div>
     </div>
+
+    <ConfirmDialog IsOpen="@(_pendingRemoveClosure is not null)"
+                   Title="Remove closure?"
+                   Message="@(_pendingRemoveClosure is null ? "" : $"The closure from {_pendingRemoveClosure.StartDate:MMM d, yyyy} to {_pendingRemoveClosure.EndDate:MMM d, yyyy} will be removed. This can't be undone.")"
+                   ConfirmLabel="Remove closure"
+                   Busy="@_removingClosure"
+                   OnConfirm="ConfirmRemoveClosureAsync"
+                   OnCancel="() => _pendingRemoveClosure = null"/>
 }
 
 @code {
@@ -282,6 +290,8 @@
     private string? _closureReason;
     private bool _addingClosure;
     private string? _closureError;
+    private BusinessClosure? _pendingRemoveClosure;
+    private bool _removingClosure;
 
     protected override async Task OnInitializedAsync()
     {
@@ -402,11 +412,19 @@
         }
     }
 
-    private async Task RemoveClosureAsync(Guid closureId)
+    private async Task ConfirmRemoveClosureAsync()
     {
-        var result = await BusinessController.RemoveClosureAsync(Id!.Value, closureId);
+        if (_pendingRemoveClosure is not { } closure)
+            return;
+
+        _removingClosure = true;
+        var result = await BusinessController.RemoveClosureAsync(Id!.Value, closure.Id);
+        _removingClosure = false;
+
         if (result is NoContentResult)
-            _closures.RemoveAll(c => c.Id == closureId);
+            _closures.RemoveAll(c => c.Id == closure.Id);
+
+        _pendingRemoveClosure = null;
     }
 
     private async Task OnImageSelectedAsync(InputFileChangeEventArgs e)

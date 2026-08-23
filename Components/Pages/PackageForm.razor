@@ -56,7 +56,7 @@
                     <DataAnnotationsValidator/>
                     <div class="mb-3">
                         <label for="name" class="form-label fw-semibold">Name</label>
-                        <InputText id="name" class="form-control" placeholder="e.g. Morning Pastry Box" @bind-Value="_model.Name"/>
+                        <InputText id="name" class="form-control" placeholder="e.g. Morning Pastry Box" maxlength="120" @bind-Value="_model.Name"/>
                         <ValidationMessage For="@(() => _model.Name)" class="validation-message small d-block mt-1"/>
                     </div>
                     <div class="mb-3">
@@ -430,9 +430,11 @@
     private class PackageFormModel : IValidatableObject
     {
         [Required(ErrorMessage = "Enter a package name.")]
+        [StringLength(120, ErrorMessage = "Name can't be longer than 120 characters.")]
         public string? Name { get; set; }
 
         [Required(ErrorMessage = "Enter a short description.")]
+        [StringLength(2000, ErrorMessage = "Description can't be longer than 2,000 characters.")]
         public string? Description { get; set; }
 
         [Range(0.01, 10000, ErrorMessage = "Price must be between 0.01 and 10,000.")]
