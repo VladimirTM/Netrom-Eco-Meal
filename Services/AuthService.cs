@@ -14,7 +14,8 @@ public class AuthService(
     UserManager<ApplicationUser> userManager,
     IOptions<IdentityOptions> identityOptions,
     IAppEmailSender emailSender,
-    IConfiguration configuration) : IAuthService
+    IConfiguration configuration,
+    CurrentUserAccessor currentUser) : IAuthService
 {
     // Absolute origin needed for email links — a Blazor page has no notion of "the app's public
     // URL" outside of an active HTTP request, and the background sweep has no request at all.
@@ -115,6 +116,49 @@ public class AuthService(
 
         var result = await userManager.ResetPasswordAsync(user, token, newPassword);
         return result.Succeeded ? null : string.Join(" ", result.Errors.Select(e => e.Description));
+    }
+
+    public async Task<string?> UpdateNameAsync(string newName)
+    {
+        if (string.IsNullOrWhiteSpace(newName))
+            return "Enter your name.";
+
+        var (_, userId) = await currentUser.GetCurrentUserAsync();
+        var user = userId is null ? null : await userManager.FindByIdAsync(userId);
+        if (user is null)
+            return "You must be signed in.";
+
+        user.Name = newName.Trim();
+        var result = await userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+            return string.Join(" ", result.Errors.Select(e => e.Description));
+
+        // Deliberately no SignInManager.RefreshSignInAsync here — it writes a Set-Cookie header,
+        // which throws when called mid-circuit from an interactive Blazor Server page (the initial
+        // HTTP response has already completed by the time this runs). Not needed anyway: nothing
+        // in this app reads the display name from a cookie claim, only from a fresh DB lookup.
+        return null;
+    }
+
+    // Takes userId explicitly rather than resolving it via CurrentUserAccessor: unlike every other
+    // method here, this is only ever called from AuthController's real HTTP change-password action
+    // (needed to refresh the auth cookie safely, see that action's own comment) rather than
+    // in-process from a Razor component — and CurrentUserAccessor's AuthenticationStateProvider
+    // throws when resolved outside an actual Blazor circuit's DI scope.
+    public async Task<string?> ChangePasswordAsync(string userId, string currentPassword, string newPassword)
+    {
+        var user = await userManager.FindByIdAsync(userId);
+        if (user is null)
+            return "You must be signed in.";
+
+        var result = await userManager.ChangePasswordAsync(user, currentPassword, newPassword);
+        if (!result.Succeeded)
+            return string.Join(" ", result.Errors.Select(e => e.Description));
+
+        // No SignInManager refresh here — this stays a plain service method; the caller (a real
+        // HTTP action, see above) is the one with a not-yet-started response, so it's the one
+        // responsible for refreshing the cookie once this returns successfully.
+        return null;
     }
 
     private async Task SendConfirmationEmailAsync(ApplicationUser user)

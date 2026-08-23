@@ -20,39 +20,53 @@ public class OrderExportController(IOrderRepository orderRepository, IBusinessSe
     [HttpGet("export")]
     public async Task<IActionResult> ExportCsvAsync(DateTime? from, DateTime? to, Guid? businessId = null)
     {
-        Guid? effectiveBusinessId;
-        if (User.IsInRole(AppRoles.Admin))
-        {
-            effectiveBusinessId = businessId;
-        }
-        else
-        {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var staffBusinesses = userId is null ? [] : await businessService.GetByStaffUserIdAsync(userId);
-            if (staffBusinesses.Count == 0)
-                return Unauthorized();
-
-            if (businessId is not null)
-            {
-                if (staffBusinesses.All(b => b.Id != businessId))
-                    return Forbid();
-                effectiveBusinessId = businessId;
-            }
-            else if (staffBusinesses.Count == 1)
-            {
-                effectiveBusinessId = staffBusinesses[0].Id;
-            }
-            else
-            {
-                return BadRequest("You manage more than one business — specify businessId.");
-            }
-        }
+        var (effectiveBusinessId, error) = await ResolveEffectiveBusinessIdAsync(businessId);
+        if (error is not null)
+            return error;
 
         var orders = await orderRepository.GetInRangeAsync(effectiveBusinessId, from, to);
 
         var csv = BuildCsv(orders);
         var bytes = Encoding.UTF8.GetBytes(csv);
         return File(bytes, "text/csv", $"orders-{DateTime.UtcNow:yyyyMMdd}.csv");
+    }
+
+    // Same scoping/auth rules as ExportCsvAsync above, but shaped for the payout ledger on
+    // /payments (payment status/dates) rather than order fulfillment.
+    [HttpGet("/api/payments/export")]
+    public async Task<IActionResult> ExportPaymentsCsvAsync(DateTime? from, DateTime? to, Guid? businessId = null)
+    {
+        var (effectiveBusinessId, error) = await ResolveEffectiveBusinessIdAsync(businessId);
+        if (error is not null)
+            return error;
+
+        var orders = await orderRepository.GetInRangeAsync(effectiveBusinessId, from, to);
+
+        var csv = BuildPaymentsCsv(orders);
+        var bytes = Encoding.UTF8.GetBytes(csv);
+        return File(bytes, "text/csv", $"payments-{DateTime.UtcNow:yyyyMMdd}.csv");
+    }
+
+    // Admin: trusts whatever businessId was passed (null = every business). Manager: scoped to
+    // whichever business(es) they actually staff — an explicit businessId must be one of theirs,
+    // and staffing more than one without specifying which is ambiguous rather than silently "all".
+    private async Task<(Guid? businessId, IActionResult? error)> ResolveEffectiveBusinessIdAsync(Guid? businessId)
+    {
+        if (User.IsInRole(AppRoles.Admin))
+            return (businessId, null);
+
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var staffBusinesses = userId is null ? [] : await businessService.GetByStaffUserIdAsync(userId);
+        if (staffBusinesses.Count == 0)
+            return (null, Unauthorized());
+
+        if (businessId is not null)
+            return staffBusinesses.All(b => b.Id != businessId) ? (null, Forbid()) : (businessId, null);
+
+        if (staffBusinesses.Count == 1)
+            return (staffBusinesses[0].Id, null);
+
+        return (null, BadRequest("You manage more than one business — specify businessId."));
     }
 
     private static string BuildCsv(List<Order> orders)
@@ -77,6 +91,29 @@ public class OrderExportController(IOrderRepository orderRepository, IBusinessSe
                 Csv(items),
                 Csv(total.ToString("0.00", CultureInfo.InvariantCulture)),
                 Csv(kgSaved.ToString("0.00", CultureInfo.InvariantCulture))));
+        }
+
+        return sb.ToString();
+    }
+
+    private static string BuildPaymentsCsv(List<Order> orders)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Order Number,Business,Customer,Amount,Currency,Payment Status,Paid At (UTC),Refunded At (UTC)");
+
+        foreach (var order in orders.Where(o => o.Payment is not null))
+        {
+            var payment = order.Payment!;
+
+            sb.AppendLine(string.Join(",",
+                Csv(order.OrderNumber.ToString("000")),
+                Csv(order.Business.Name),
+                Csv(order.User.Name),
+                Csv(payment.Amount.ToString("0.00", CultureInfo.InvariantCulture)),
+                Csv(payment.Currency.ToUpperInvariant()),
+                Csv(PaymentStatuses.Label(payment.Status)),
+                Csv(payment.CreatedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)),
+                Csv(payment.RefundedAt?.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) ?? "")));
         }
 
         return sb.ToString();

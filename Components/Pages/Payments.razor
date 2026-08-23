@@ -89,6 +89,20 @@
         }
         <span class="align-self-center text-muted small ms-auto">@_paged.TotalCount order@(_paged.TotalCount == 1 ? "" : "s")</span>
     </div>
+
+    <div class="d-flex align-items-end gap-2 mb-3 flex-wrap">
+        <div>
+            <label class="form-label small text-muted mb-1">Export from</label>
+            <input type="date" class="form-control" @bind="_exportFrom"/>
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Export to</label>
+            <input type="date" class="form-control" @bind="_exportTo"/>
+        </div>
+        <a class="btn btn-outline-secondary" href="@ExportHref" target="_blank">
+            <i class="bi bi-download me-1"></i> Export CSV
+        </a>
+    </div>
 }
 
 <div class="card border-0 shadow-sm">
@@ -173,6 +187,29 @@
     private decimal _collectedThisPage;
     private decimal _refundedThisPage;
     private int _refundFailedCountThisPage;
+
+    private DateOnly? _exportFrom;
+    private DateOnly? _exportTo;
+
+    // Hits OrderExportController's payments endpoint (a real HTTP endpoint), not the DI-only OrderController.
+    private string ExportHref
+    {
+        get
+        {
+            var query = new List<string>();
+            if (_exportFrom is { } from)
+                query.Add($"from={from:yyyy-MM-dd}");
+            // Inclusive of the whole "to" day, not just its midnight.
+            if (_exportTo is { } to)
+                query.Add($"to={to.AddDays(1):yyyy-MM-dd}");
+            if (_isAdmin && Guid.TryParse(_businessFilter, out var businessId))
+                query.Add($"businessId={businessId}");
+            else if (!_isAdmin && ManagedBusinessContext.SelectedBusinessId is { } selectedBusinessId)
+                query.Add($"businessId={selectedBusinessId}");
+
+            return "/api/payments/export" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {

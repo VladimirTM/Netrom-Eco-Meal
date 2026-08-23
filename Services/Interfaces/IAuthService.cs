@@ -18,4 +18,11 @@ public interface IAuthService
     // Always succeeds silently — never reveals whether an account exists for the given email.
     public Task RequestPasswordResetAsync(string email);
     public Task<string?> ResetPasswordAsync(string email, string token, string newPassword);
+    // Return null on success, or a user-facing error message on failure.
+    // Resolves the caller's own account via CurrentUserAccessor — only safe to call in-process
+    // from a Razor component's DI scope (not from a plain HTTP controller action).
+    public Task<string?> UpdateNameAsync(string newName);
+    // Takes userId explicitly rather than via CurrentUserAccessor — see the implementation's own
+    // comment for why.
+    public Task<string?> ChangePasswordAsync(string userId, string currentPassword, string newPassword);
 }

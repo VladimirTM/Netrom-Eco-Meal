@@ -426,6 +426,12 @@ h1, h2, h3, h4, h5, h6,
     color: #f87171;
 }
 
+/* Same shape as .sidebar-logout-btn, neutral (not danger-red) hover for non-destructive icon links. */
+.sidebar-icon-btn:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #fff;
+}
+
 /* ── Blazor error banner (shared across layouts, must not be CSS-isolation-scoped) ── */
 #blazor-error-ui {
     color-scheme: light only;
@@ -1810,6 +1816,13 @@ h1:focus {
     max-width: 420px;
     margin: 0 auto;
     padding: 1.75rem 1.5rem 4rem;
+}
+
+/* ── Account settings (name/password) ── */
+.account-settings-page {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
 }
 
 .order-ticket--pass {
@@ -3361,6 +3374,49 @@ h1:focus {
     display: flex;
     justify-content: center;
     margin-top: 1rem;
+}
+
+.scan-manual {
+    border-top: 1px dashed #e5e7eb;
+    padding-top: 1.25rem;
+}
+
+.scan-manual-label {
+    font-size: 0.85rem;
+    color: var(--em-muted);
+    margin-bottom: 0.6rem;
+}
+
+.scan-manual-form {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.scan-manual-results {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.scan-manual-results li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    background: var(--em-surface);
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+}
+
+.scan-manual-pass-picker {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
 }
 
 /* ── Pickup validation page ── */

@@ -1,0 +1,157 @@
+@page "/account/settings"
+@layout PublicLayout
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@rendermode InteractiveServer
+@inject AuthController AuthController
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthStateProvider
+@attribute [Authorize]
+
+<PageTitle>Account settings — Eco Meal</PageTitle>
+
+<div class="account-settings-page">
+    <h1 class="h3 fw-bold mb-1">Account settings</h1>
+    <p class="text-muted small mb-4">Update your display name or change your password.</p>
+
+    @if (_loading)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h2 class="h5 fw-bold mb-3">Profile</h2>
+
+                <div class="mb-3">
+                    <label class="form-label small text-muted mb-1">Email</label>
+                    <input class="form-control" value="@_email" disabled/>
+                </div>
+
+                <EditForm Model="@_nameModel" OnValidSubmit="SaveNameAsync" FormName="nameForm">
+                    <DataAnnotationsValidator/>
+                    <div class="mb-3">
+                        <label for="displayName" class="form-label small text-muted mb-1">Display name</label>
+                        <InputText id="displayName" class="form-control" @bind-Value="_nameModel.Name"/>
+                        <ValidationMessage For="@(() => _nameModel.Name)" class="validation-message small d-block mt-1"/>
+                    </div>
+
+                    @if (_nameError is not null)
+                    {
+                        <div class="alert alert-danger py-2 small">@_nameError</div>
+                    }
+                    @if (_nameSaved)
+                    {
+                        <div class="alert alert-success py-2 small"><i class="bi bi-check-circle-fill"></i> Name updated.</div>
+                    }
+
+                    <button type="submit" class="btn btn-primary" disabled="@_savingName">
+                        @if (_savingName)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        }
+                        Save name
+                    </button>
+                </EditForm>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h2 class="h5 fw-bold mb-3">Change password</h2>
+
+                @* Plain HTML post (not EditForm), same reason as Login/Register: ChangePasswordFormAsync
+                   needs a real HTTP response to refresh the auth cookie's security stamp, which an
+                   in-process Blazor circuit call can't provide. data-enhance="false" so the ?pwError=/
+                   ?pwChanged= redirect below actually renders instead of being dropped by blazor.web.js's
+                   enhanced navigation (see Login.razor's own comment for the full story). *@
+                <form method="post" action="api/auth/change-password" data-enhance="false">
+                    <AntiforgeryToken/>
+                    <div class="mb-3">
+                        <label for="currentPassword" class="form-label small text-muted mb-1">Current password</label>
+                        <input id="currentPassword" name="currentPassword" type="password" class="form-control" autocomplete="current-password" required/>
+                    </div>
+                    <div class="mb-3">
+                        <label for="newPassword" class="form-label small text-muted mb-1">New password</label>
+                        <input id="newPassword" name="newPassword" type="password" class="form-control" autocomplete="new-password" required/>
+                    </div>
+                    <div class="mb-3">
+                        <label for="confirmPassword" class="form-label small text-muted mb-1">Confirm new password</label>
+                        <input id="confirmPassword" name="confirmPassword" type="password" class="form-control" autocomplete="new-password" required/>
+                    </div>
+
+                    @if (PwError is not null)
+                    {
+                        <div class="alert alert-danger py-2 small">@PwError</div>
+                    }
+                    @if (PwChanged)
+                    {
+                        <div class="alert alert-success py-2 small"><i class="bi bi-check-circle-fill"></i> Password changed.</div>
+                    }
+
+                    <button type="submit" class="btn btn-primary">Change password</button>
+                </form>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private string _email = "";
+
+    private NameModel _nameModel = new();
+    private bool _savingName;
+    private string? _nameError;
+    private bool _nameSaved;
+
+    [SupplyParameterFromQuery(Name = "pwError")]
+    public string? PwError { get; set; }
+
+    [SupplyParameterFromQuery(Name = "pwChanged")]
+    public bool PwChanged { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(authState.User);
+        if (user is not null)
+        {
+            _email = user.Email ?? "";
+            _nameModel.Name = user.Name;
+        }
+
+        _loading = false;
+    }
+
+    private async Task SaveNameAsync()
+    {
+        _savingName = true;
+        _nameError = null;
+        _nameSaved = false;
+
+        var error = await AuthController.UpdateNameAsync(_nameModel.Name!);
+        if (error is not null)
+            _nameError = error;
+        else
+            _nameSaved = true;
+
+        _savingName = false;
+    }
+
+    private class NameModel
+    {
+        [Required(ErrorMessage = "Enter your name.")]
+        [StringLength(100, ErrorMessage = "Name can't be longer than 100 characters.")]
+        public string? Name { get; set; }
+    }
+}

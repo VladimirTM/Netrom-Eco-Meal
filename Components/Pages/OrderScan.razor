@@ -1,9 +1,18 @@
 @page "/orders/scan"
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Mvc
 @using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Services
 @rendermode InteractiveServer
 @implements IAsyncDisposable
 @inject IJSRuntime JSRuntime
+@inject OrderController OrderController
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ManagedBusinessContext ManagedBusinessContext
 @attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
 
 <PageTitle>Scan pickup — Eco Meal</PageTitle>
@@ -46,6 +55,51 @@
         }
     </div>
 
+    <div class="scan-manual">
+        <p class="scan-manual-label">No camera, or the code won't scan? Look the order up instead:</p>
+        <div class="scan-manual-form">
+            <input type="text" class="form-control" placeholder="Order number, e.g. 021"
+                   @bind="_manualSearch" @bind:event="oninput" @onkeydown="OnManualKeyDownAsync"/>
+            <button type="button" class="btn btn-outline-primary" disabled="@(_manualBusy || string.IsNullOrWhiteSpace(_manualSearch))" @onclick="ManualLookupAsync">
+                @if (_manualBusy)
+                {
+                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                }
+                Find order
+            </button>
+        </div>
+
+        @if (_manualError is not null)
+        {
+            <div class="alert alert-danger py-2 small mt-2" role="alert">@_manualError</div>
+        }
+
+        @if (_manualMatches is { Count: > 0 })
+        {
+            <ul class="scan-manual-results">
+                @foreach (var order in _manualMatches)
+                {
+                    <li>
+                        <span>Order #@order.OrderNumber.ToString("000") — @order.User.Name (@order.Business.Name)</span>
+                        @if (order.PickupPasses.Count == 1)
+                        {
+                            <a class="btn btn-sm btn-primary" href="/orders/validate/@order.Id/@order.PickupPasses.First().Id">Confirm pickup</a>
+                        }
+                        else
+                        {
+                            <div class="scan-manual-pass-picker">
+                                @foreach (var pass in order.PickupPasses.OrderBy(p => p.CreatedAt))
+                                {
+                                    <a class="btn btn-sm btn-outline-primary" href="/orders/validate/@order.Id/@pass.Id">@pass.Label</a>
+                                }
+                            </div>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+
     <a href="/orders/manage" class="biz-page-back scan-back-link"><i class="bi bi-arrow-left"></i> Back to order management</a>
 </div>
 
@@ -56,6 +110,60 @@
     private bool _scanning;
     private bool _starting;
     private string? _cameraError;
+
+    private bool _isAdmin;
+    private string _manualSearch = "";
+    private bool _manualBusy;
+    private string? _manualError;
+    private List<Order>? _manualMatches;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _isAdmin = authState.User.IsInRole(AppRoles.Admin);
+
+        if (!_isAdmin)
+            await ManagedBusinessContext.EnsureLoadedAsync();
+    }
+
+    private Task OnManualKeyDownAsync(KeyboardEventArgs e) =>
+        e.Key == "Enter" ? ManualLookupAsync() : Task.CompletedTask;
+
+    private async Task ManualLookupAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_manualSearch) || _manualBusy)
+            return;
+
+        _manualBusy = true;
+        _manualError = null;
+        _manualMatches = null;
+
+        // Admin searches every business; a manager is scoped to whichever one they've currently
+        // selected in the sidebar switcher (same rule /orders/manage and /payments use) — passing
+        // null for a manager isn't "search all mine", it's rejected outright, see
+        // OrderService.ResolveManagerBusinessIdAsync.
+        Guid? businessId = _isAdmin ? null : ManagedBusinessContext.SelectedBusinessId;
+
+        // Only Confirmed orders have a live, unredeemed pickup pass to confirm — matches what
+        // scanning a real QR code would land on (see OrderPickupPass.RedeemedAt's own comment).
+        var result = await OrderController.GetOrdersForManagementPagedAsync(1, 5, _manualSearch.Trim(), businessId, OrderStatuses.Confirmed);
+        _manualBusy = false;
+
+        if (result.Result is UnauthorizedResult)
+        {
+            _manualError = "You don't manage a business yet, so there's nothing to look up.";
+            return;
+        }
+
+        var matches = result.Value?.Items ?? [];
+        if (matches.Count == 0)
+        {
+            _manualError = "No confirmed order matches that number — check it hasn't already been picked up, or that it's been confirmed yet.";
+            return;
+        }
+
+        _manualMatches = matches;
+    }
 
     // Camera init must be gated behind an explicit tap rather than firing on render — required
     // for reliable behavior on iOS Safari, and avoids prompting for camera permission before the

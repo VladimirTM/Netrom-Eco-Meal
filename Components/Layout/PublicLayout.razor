@@ -44,6 +44,9 @@
                                 <i class="bi bi-shop-window"></i>
                             </a>
                         }
+                        <a href="/account/settings" class="public-cart-btn" title="Account settings" aria-label="Account settings">
+                            <i class="bi bi-person-gear"></i>
+                        </a>
                         @* Clears the localStorage cart so it doesn't leak into the next session. *@
                         <form method="post" action="api/auth/logout">
                             <AntiforgeryToken />
