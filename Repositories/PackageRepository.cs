@@ -72,6 +72,15 @@ public class PackageRepository(EcoMealDbContext context) : IPackageRepository
         return await query.ToListAsync();
     }
 
+    public async Task<List<Package>> GetNearExpiryUnclaimedAsync(DateTime now, DateTime closingBefore)
+    {
+        return await context.Packages
+            .Include(p => p.Business)
+            .Where(p => !p.IsHidden && p.Quantity > 0 && p.NearExpiryNudgeSentAt == null
+                && p.PickupEnd > now && p.PickupEnd <= closingBefore)
+            .ToListAsync();
+    }
+
     public async Task AddAsync(Package package)
     {
         await context.Packages.AddAsync(package);

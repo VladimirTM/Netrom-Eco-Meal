@@ -100,6 +100,15 @@ public class OrderRepository(EcoMealDbContext context) : IOrderRepository
             .ToListAsync();
     }
 
+    public async Task<List<ApplicationUser>> GetPastCustomersAsync(Guid businessId)
+    {
+        return await context.Orders
+            .Where(o => o.BusinessId == businessId && o.Status.Name == OrderStatuses.Completed)
+            .Select(o => o.User)
+            .Distinct()
+            .ToListAsync();
+    }
+
     // Platform-wide impact stat for the home hero — only orders actually picked up count as "saved".
     public async Task<decimal> GetTotalWeightSavedKgAsync()
     {

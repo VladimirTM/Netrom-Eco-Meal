@@ -254,6 +254,12 @@ public static class DbSeeder
         var closingSoonDemoStart = DateTime.UtcNow.AddMinutes(-30);
         var closingSoonDemoEnd = DateTime.UtcNow.AddMinutes(25);
 
+        // Same "anchored to now" trick, at the demo customer's own favorited + previously-ordered
+        // business — demos the AI near-expiry nudge's dietary-tag match against the demo
+        // customer's earlier "Final Whistle Meal Box" order (same mealBox default tags).
+        var nearExpiryNudgeDemoStart = DateTime.UtcNow.AddMinutes(-15);
+        var nearExpiryNudgeDemoEnd = DateTime.UtcNow.AddMinutes(20);
+
         var seedPackages = new List<Package>
         {
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000001"), BusinessId = b1,  PackageTypeId = surpriseBag, Name = "Golden Boot Surprise Bag",     Description = "A top-scoring surprise selection of today's leftover dishes.",              Price = 12.99m, Quantity = 5,  WeightKg = 1.5m, PickupStart = At(17,  0), PickupEnd = At(20,  0), ImageUrl = "https://loremflickr.com/640/360/football,goldenboot/all?lock=301" },
@@ -283,7 +289,10 @@ public static class DbSeeder
             // Phase 12 demo: deliberately Quantity = 1 so confirming a single order against it is
             // enough to watch "1 left" flip to "Sold out" live on another open BusinessDetail.razor
             // tab (PackageStockBroadcaster) without either tab refreshing.
-            new Package { Id = new Guid("55555555-0000-0000-0000-000000000025"), BusinessId = b1,  PackageTypeId = mealBox,     Name = "Last One Standing Box",        Description = "Down to the final portion of the day — first to confirm gets it.",         Price =  9.25m, Quantity = 1,  WeightKg = 1.2m, PickupStart = At(17,  0), PickupEnd = At(21,  0), ImageUrl = "https://loremflickr.com/640/360/football,lastminute/all?lock=325" }
+            new Package { Id = new Guid("55555555-0000-0000-0000-000000000025"), BusinessId = b1,  PackageTypeId = mealBox,     Name = "Last One Standing Box",        Description = "Down to the final portion of the day — first to confirm gets it.",         Price =  9.25m, Quantity = 1,  WeightKg = 1.2m, PickupStart = At(17,  0), PickupEnd = At(21,  0), ImageUrl = "https://loremflickr.com/640/360/football,lastminute/all?lock=325" },
+            // Phase 3 demo: closing soon, stock unclaimed, at a business the demo customer both
+            // favorites and has a Completed order from — see nearExpiryNudgeDemoStart/End above.
+            new Package { Id = new Guid("55555555-0000-0000-0000-000000000026"), BusinessId = b1,  PackageTypeId = mealBox,     Name = "Late Save Meal Box",           Description = "One more meal box rescued in the closing minutes before the counter shuts.",Price =  9.75m, Quantity = 2,  WeightKg = 1.2m, PickupStart = nearExpiryNudgeDemoStart, PickupEnd = nearExpiryNudgeDemoEnd, ImageUrl = "https://loremflickr.com/640/360/football,latesave/all?lock=326" }
         };
 
         // Plausible default tags per package type, so the feature has real demo data out of the box.
@@ -329,6 +338,10 @@ public static class DbSeeder
             {
                 existing.PickupStart = seed.PickupStart;
                 existing.PickupEnd = seed.PickupEnd;
+                // A refreshed window re-enters "closing soon" territory (see
+                // closingSoonDemoStart/nearExpiryNudgeDemoStart above) — let NearExpiryNudgeService
+                // reconsider it instead of treating a previous run's nudge as still current.
+                existing.NearExpiryNudgeSentAt = null;
             }
 
             if (IsStalePlaceholderImage(existing.ImageUrl))

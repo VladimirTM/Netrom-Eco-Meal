@@ -192,11 +192,14 @@ service workers (and so push) only work on `https://` or `localhost`.
 
 ## AI Features
 
-Two AI features have shipped so far: a "Write it for me" button that drafts a package
-description on `PackageForm.razor`, and an AI search bar on the home page — try "vegan dinner
-under 30 lei, closing soon". Every AI feature in this app runs against a free, self-hosted
-[Ollama](https://ollama.com) instance via `Microsoft.Extensions.AI`'s `IChatClient` (backed by
-`OllamaSharp`) — there's no paid or hosted AI API anywhere in the stack. Configure it with:
+Three AI features have shipped so far: a "Write it for me" button that drafts a package
+description on `PackageForm.razor`, an AI search bar on the home page — try "vegan dinner
+under 30 lei, closing soon" — and a periodic background sweep that nudges a business's
+favoriters/past customers when one of its packages is closing soon with stock still unclaimed,
+personalizing the copy when it matches something they've ordered before. Every AI feature in
+this app runs against a free, self-hosted [Ollama](https://ollama.com) instance via
+`Microsoft.Extensions.AI`'s `IChatClient` (backed by `OllamaSharp`) — there's no paid or hosted
+AI API anywhere in the stack. Configure it with:
 
 ```bash
 dotnet user-secrets set "Ollama:BaseUrl" "http://localhost:11434"
@@ -208,7 +211,8 @@ aren't available yet" error instead of failing — same degrade-gracefully patte
 Stripe key or SMTP host; the rest of the app works normally either way.
 `docker-compose.test.yml` instead bundles an `ollama` container built from `Dockerfile.ollama`,
 which bakes `qwen2.5:7b` into the image at build time — `docker compose up --build` gives a
-fully working "Write it for me" button and AI search bar with no separate manual pull step.
+fully working "Write it for me" button, AI search bar, and near-expiry nudge sweep with no
+separate manual pull step.
 That first build downloads the model (a few GB), so it's slower than the app's own image the
 first time; the result persists in the `ecomeal-test-ollama` volume across restarts either way.
 

@@ -24,6 +24,8 @@ public class Package
     // Admin/manager moderation flag — hides the package from the storefront without deleting it.
     public bool IsHidden { get; set; }
     public string? HiddenReason { get; set; }
+    // Set once NearExpiryNudgeService has notified interested customers — keeps the sweep from re-notifying every tick.
+    public DateTime? NearExpiryNudgeSentAt { get; set; }
     [ForeignKey(nameof(BusinessId))]
     public Business Business { get; set; } = null!;
     [ForeignKey(nameof(PackageTypeId))]

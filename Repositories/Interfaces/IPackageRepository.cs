@@ -14,6 +14,9 @@ public interface IPackageRepository
     public Task<Dictionary<Guid, string>> GetNamesByIdsAsync(IEnumerable<Guid> ids);
     // Includes the OrderPackages/Order/Status graph so analytics can aggregate without a second round-trip.
     public Task<List<Package>> GetForAnalyticsAsync(Guid? businessId, DateTime since);
+    // Live, unhidden, stock-remaining packages whose pickup window closes within closingBefore and
+    // haven't been nudged yet — feeds NearExpiryNudgeService's sweep.
+    public Task<List<Package>> GetNearExpiryUnclaimedAsync(DateTime now, DateTime closingBefore);
     public Task AddAsync(Package package);
     public Task DeleteAsync(Guid id);
     public Task SaveChangesAsync();

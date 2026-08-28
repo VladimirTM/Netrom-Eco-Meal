@@ -112,6 +112,8 @@ builder.Services.AddScoped<IWebPushGateway, WebPushGateway>();
 builder.Services.AddScoped<IImageUploadService, ImageUploadService>();
 builder.Services.AddScoped<IPackageAiAssistant, PackageAiAssistant>();
 builder.Services.AddScoped<ISearchIntentParser, SearchIntentParser>();
+builder.Services.AddScoped<INearExpiryNudgeComposer, NearExpiryNudgeComposer>();
+builder.Services.AddScoped<INearExpiryNudgeService, NearExpiryNudgeService>();
 builder.Services.AddScoped<IAppEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<IStripeGateway, StripeGateway>();
 builder.Services.AddScoped<ICheckoutService, CheckoutService>();
@@ -144,6 +146,7 @@ builder.Services.AddScoped<ImpactController>();
 builder.Services.AddScoped<AuthController>();
 builder.Services.AddHostedService<OrderLifecycleSweepService>();
 builder.Services.AddHostedService<PackageTemplateGenerationService>();
+builder.Services.AddHostedService<NearExpiryNudgeSweepService>();
 
 var app = builder.Build();
 

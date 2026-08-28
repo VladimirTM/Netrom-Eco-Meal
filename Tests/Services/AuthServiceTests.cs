@@ -8,6 +8,7 @@ using Moq;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Services;
 using Netrom_Eco_Meal.Services.Interfaces;
+using Netrom_Eco_Meal.Tests.TestSupport;
 
 namespace Netrom_Eco_Meal.Tests.Services;
 
@@ -42,7 +43,8 @@ public class AuthServiceTests
         var identityOptions = Options.Create(new IdentityOptions());
         var emailSender = new Mock<IAppEmailSender>();
         var configuration = new ConfigurationBuilder().Build();
-        return new AuthService(signInManager, userManager.Object, identityOptions, emailSender.Object, configuration);
+        var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(null));
+        return new AuthService(signInManager, userManager.Object, identityOptions, emailSender.Object, configuration, currentUser);
     }
 
     [Fact]

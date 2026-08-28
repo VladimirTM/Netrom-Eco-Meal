@@ -18,6 +18,9 @@ public interface IOrderRepository
     // Distinct packages a customer has a Completed order for at a business — feeds the "which
     // package is this review about" picker.
     public Task<List<Package>> GetCompletedPackagesAsync(string userId, Guid businessId);
+    // Distinct customers with a Completed order at a business — feeds NearExpiryNudgeService's
+    // audience, alongside IFavoriteRepository.GetFavoritingUsersAsync.
+    public Task<List<ApplicationUser>> GetPastCustomersAsync(Guid businessId);
     public Task<decimal> GetTotalWeightSavedKgAsync();
     // Top opted-in (ApplicationUser.ShowOnLeaderboard) rescuers by kg saved within [from, toExclusive)
     // — feeds the /impact page. A user who never opted in never appears, full stop, not as an

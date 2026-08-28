@@ -215,8 +215,11 @@ with relative timestamps ("just now", "5m ago", "2h ago", "3d ago"); a **Mark al
 appears whenever you have unread ones. Clicking any notification marks it read and navigates
 you straight to the relevant order or kitchen. This covers order confirmations/cancellations/
 no-shows, pickup reminders shortly before a window closes, back-in-stock alerts for kitchens
-you've favorited, and — if you've applied to list a business — its approval or rejection, each
-with a matching email sent in parallel.
+you've favorited, an AI-drafted nudge when a package at a kitchen you favorite or have ordered
+from before is closing soon with stock still unclaimed (personalized when it matches something
+you've ordered there before — needs the same optional AI feature as Ask AI above), and — if
+you've applied to list a business — its approval or rejection, each with a matching email sent
+in parallel.
 
 The small **bell icon** next to "Mark all read" turns these into real browser notifications too,
 even when the tab isn't open — click it once to grant your browser's notification permission.
