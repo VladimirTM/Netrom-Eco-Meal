@@ -15,7 +15,7 @@
                     <span class="biz-modal-eyebrow">Order #@Order.OrderNumber.ToString("000")</span>
                     <h2 class="pkg-modal-title" id="order-modal-title">@Order.Business.Name</h2>
                 </div>
-                <span class="order-status-badge order-status-@Order.Status.Name.ToLowerInvariant()">@Order.Status.Name</span>
+                <span class="order-status-badge order-status-@Order.Status.Name.ToLowerInvariant()">@OrderStatuses.Label(Order.Status.Name)</span>
             </div>
 
             @if (Order.Payment is not null)

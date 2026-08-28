@@ -40,7 +40,7 @@
                         }
                         @if (context.User.IsInRole(AppRoles.Customer) || context.User.IsInRole(AppRoles.BusinessManager))
                         {
-                            <a href="/businesses/apply" class="btn btn-outline-light btn-sm px-3" title="List your business">
+                            <a href="/businesses/apply" class="public-cart-btn" title="List your business" aria-label="List your business">
                                 <i class="bi bi-shop-window"></i>
                             </a>
                         }

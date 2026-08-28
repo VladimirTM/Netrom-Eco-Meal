@@ -91,6 +91,12 @@
             </NavLink>
         </div>
 
+        <div class="nav-item">
+            <NavLink class="nav-link" href="account/settings">
+                <i class="bi bi-person-gear me-2"></i>Account Settings
+            </NavLink>
+        </div>
+
         <AuthorizeView Roles="@AppRoles.Admin">
             <Authorized>
                 <div class="nav-section-label">Admin</div>
@@ -132,9 +138,6 @@
                 <div class="sidebar-user-role">@DisplayRole(context.User)</div>
             </div>
             <NotificationBell TriggerClass="sidebar-notif-btn"/>
-            <a href="/account/settings" class="sidebar-logout-btn sidebar-icon-btn" title="Account settings" aria-label="Account settings">
-                <i class="bi bi-person-gear"></i>
-            </a>
             <form method="post" action="api/auth/logout">
                 <AntiforgeryToken />
                 <button type="submit" class="sidebar-logout-btn" title="Sign out"

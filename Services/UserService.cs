@@ -100,7 +100,7 @@ public class UserService(
         await userManager.RemoveFromRolesAsync(user, currentRoles);
         await userManager.AddToRoleAsync(user, role);
 
-        await auditLogService.LogAsync(AuditActions.RoleChanged, AuditTargetTypes.User, user.Id, user.Name, $"{previousRole} → {role}");
+        await auditLogService.LogAsync(AuditActions.RoleChanged, AuditTargetTypes.User, user.Id, user.Name, $"{AppRoles.Label(previousRole)} → {AppRoles.Label(role)}");
 
         // Moving away from BusinessManager releases every business they were staff of.
         if (role != AppRoles.BusinessManager)

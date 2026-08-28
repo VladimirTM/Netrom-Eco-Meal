@@ -44,7 +44,7 @@
                     <span class="biz-modal-eyebrow">Order #@_order.OrderNumber.ToString("000")@(_order.PickupPasses.Count > 1 ? $" · {_pass.Label}" : "")</span>
                     <h1 class="h4 fw-bold mb-0">@_order.Business.Name</h1>
                 </div>
-                <span class="order-status-badge order-status-@_order.Status.Name.ToLowerInvariant()">@_order.Status.Name</span>
+                <span class="order-status-badge order-status-@_order.Status.Name.ToLowerInvariant()">@OrderStatuses.Label(_order.Status.Name)</span>
             </div>
 
             @if (_actionError is not null)

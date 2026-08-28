@@ -426,12 +426,6 @@ h1, h2, h3, h4, h5, h6,
     color: #f87171;
 }
 
-/* Same shape as .sidebar-logout-btn, neutral (not danger-red) hover for non-destructive icon links. */
-.sidebar-icon-btn:hover {
-    background-color: rgba(255, 255, 255, 0.08);
-    color: #fff;
-}
-
 /* ── Blazor error banner (shared across layouts, must not be CSS-isolation-scoped) ── */
 #blazor-error-ui {
     color-scheme: light only;
@@ -550,7 +544,7 @@ h1:focus {
     white-space: nowrap;
 }
 
-@media (max-width: 420px) {
+@media (max-width: 576px) {
     .public-header-inner {
         padding: 0.7rem 1rem;
         gap: 0.5rem;
@@ -568,6 +562,26 @@ h1:focus {
     .public-header-inner .btn {
         padding: 0.35rem 0.6rem;
         font-size: 0.78rem;
+    }
+
+    /* The Authorized icon row (trophy/bell/orders/basket/apply/settings/logout) can run to 7
+       buttons — at 38px+gap each that overflows the viewport well before 420px and pushes
+       Sign out off-screen with no way back short of scrolling the whole page. Shrink the
+       buttons and the gap between them so the full row still fits. */
+    .public-header-inner .d-flex.gap-2 {
+        gap: 0.3rem !important;
+    }
+
+    .public-cart-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 0.85rem;
+        border-radius: 8px;
+    }
+
+    .public-header-logout {
+        width: 30px;
+        height: 30px;
     }
 }
 
@@ -769,6 +783,16 @@ h1:focus {
 
 .home-ai-search-btn {
     white-space: nowrap;
+}
+
+/* The example placeholder is intentionally long (it's showing off what the AI search
+   understands) — without this it hard-clips mid-word with no "…" once the input is narrower
+   than the full string, instead of trailing off legibly. text-overflow only takes effect
+   with overflow+white-space set explicitly, not just on ::placeholder. */
+.home-ai-search-input {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .home-filter-bar {

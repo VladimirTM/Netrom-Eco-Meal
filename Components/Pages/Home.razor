@@ -62,7 +62,7 @@
         <div class="home-ai-search">
             <div class="input-group">
                 <span class="input-group-text bg-white border-end-0"><i class="bi bi-stars text-muted"></i></span>
-                <input type="text" class="form-control border-start-0 ps-0" placeholder="Or describe what you want — “vegan dinner under 30 lei, closing soon”…"
+                <input type="text" class="form-control border-start-0 ps-0 home-ai-search-input" placeholder="Or describe what you want — “vegan dinner under 30 lei, closing soon”…"
                        @bind="_aiQuery" @bind:event="oninput" @onkeydown="OnAiSearchKeyDownAsync"/>
                 <button type="button" class="btn btn-primary home-ai-search-btn" disabled="@(_parsingAiSearch || string.IsNullOrWhiteSpace(_aiQuery))" @onclick="RunAiSearchAsync">
                     @if (_parsingAiSearch)

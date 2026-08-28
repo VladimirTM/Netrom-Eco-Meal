@@ -190,7 +190,7 @@ public class BusinessService(
             await userManager.RemoveFromRolesAsync(applicant, roles);
             await userManager.AddToRoleAsync(applicant, AppRoles.BusinessManager);
             await auditLogService.LogAsync(AuditActions.RoleChanged, AuditTargetTypes.User, applicant.Id, applicant.Name,
-                $"{roles.FirstOrDefault() ?? AppRoles.Customer} → {AppRoles.BusinessManager}");
+                $"{AppRoles.Label(roles.FirstOrDefault() ?? AppRoles.Customer)} → {AppRoles.Label(AppRoles.BusinessManager)}");
         }
 
         await AddStaffAsync(business.Id, applicant.Id, applicant.Name);

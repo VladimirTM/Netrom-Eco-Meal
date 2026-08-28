@@ -300,7 +300,7 @@
     {
         _roleError = null;
 
-        var result = await BusinessController.AddStaffAsync(businessId, user.Id);
+        var result = await BusinessController.AddStaffAsync(businessId, user.Id, user.Name);
         if (result is ConflictResult)
             _roleError = "That staff assignment already exists. Please try again.";
 

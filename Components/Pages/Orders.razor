@@ -63,7 +63,7 @@
             {
                 <button type="button" class="orders-chip @(_statusFilter == status ? "orders-chip-active" : "")"
                         @onclick="() => FilterChangedAsync(status)">
-                    @status
+                    @OrderStatuses.Label(status)
                 </button>
             }
         </div>
@@ -106,7 +106,7 @@
                                 <div class="order-ticket-business"><i class="bi bi-shop"></i>@order.Business.Name</div>
                                 <div class="order-ticket-address"><i class="bi bi-geo-alt"></i>@order.Business.Address</div>
                             </div>
-                            <span class="order-status-badge order-status-@order.Status.Name.ToLowerInvariant()">@order.Status.Name</span>
+                            <span class="order-status-badge order-status-@order.Status.Name.ToLowerInvariant()">@OrderStatuses.Label(order.Status.Name)</span>
                         </div>
 
                         @if (order.Payment is not null)

@@ -64,7 +64,7 @@
             <option value="">All statuses</option>
             @foreach (var s in StatusOrder)
             {
-                <option value="@s">@s</option>
+                <option value="@s">@OrderStatuses.Label(s)</option>
             }
         </select>
         @if (!string.IsNullOrEmpty(_search) || _businessFilter != "" || _statusFilter != "")
@@ -146,7 +146,7 @@
                         <td class="fw-semibold">@order.OrderPackages.Sum(op => op.Quantity * op.Package.Price).ToString("C")</td>
                         <td class="text-muted small">@PickupWindow(order)</td>
                         <td>
-                            <span class="order-status-badge order-status-@order.Status.Name.ToLowerInvariant()">@order.Status.Name</span>
+                            <span class="order-status-badge order-status-@order.Status.Name.ToLowerInvariant()">@OrderStatuses.Label(order.Status.Name)</span>
                             @if (order.Status.Name == OrderStatuses.Confirmed && order.PickupPasses.Count > 1)
                             {
                                 <span class="order-multi-pass-hint" title="Split across @order.PickupPasses.Count pickup passes"><i class="bi bi-people"></i> @order.PickupPasses.Count</span>
