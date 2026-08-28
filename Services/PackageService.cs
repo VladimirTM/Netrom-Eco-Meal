@@ -17,7 +17,8 @@ public class PackageService(
     CurrentUserAccessor currentUser,
     IConfiguration configuration,
     IAuditLogService auditLogService,
-    PackageStockBroadcaster stockBroadcaster) : IPackageService
+    PackageStockBroadcaster stockBroadcaster,
+    IMarkdownPricingAgent markdownPricingAgent) : IPackageService
 {
     // Same fallback/config-key convention as AuthService.BaseUrl — used to build an absolute
     // link for the back-in-stock email CTA.
@@ -173,6 +174,56 @@ public class PackageService(
         }
 
         return await packageRepository.GetForAnalyticsAsync(businessId, since);
+    }
+
+    public async Task<List<Package>> GetMarkdownCandidatesAsync(Guid? businessId)
+    {
+        var (isAdmin, userId) = await currentUser.GetCurrentUserAsync();
+        if (!isAdmin)
+        {
+            if (userId is null || businessId is null || !await businessService.IsStaffAsync(businessId.Value, userId))
+                throw new UnauthorizedAccessException("You can only view markdown candidates for your own business.");
+        }
+
+        var now = DateTime.UtcNow;
+        return await packageRepository.GetMarkdownCandidatesAsync(businessId, now, now + MarkdownSettings.ClosingWindow);
+    }
+
+    public async Task<MarkdownSuggestion?> GetMarkdownSuggestionAsync(Guid packageId, CancellationToken cancellationToken = default)
+    {
+        var package = await packageRepository.GetByIdAsync(packageId);
+        if (package is null)
+            return null;
+
+        await EnsureCanManageBusinessAsync(package.BusinessId);
+
+        var since = DateTime.UtcNow.AddDays(-MarkdownSettings.LookbackDays);
+        var pastPackages = await packageRepository.GetSellThroughHistoryAsync(package.BusinessId, package.Id, since);
+        var now = DateTime.UtcNow;
+
+        var history = pastPackages.Select(p => new PackageSellThroughRecord(
+            p.Name,
+            p.PackageTypeId,
+            p.PackageType.Name,
+            p.Price,
+            p.OrderPackages.Where(op => op.Order.Status.Name == OrderStatuses.Completed).Sum(op => op.Quantity),
+            p.OrderPackages.Where(op => op.Order.Status.Name == OrderStatuses.Completed).Sum(op => op.Quantity) + p.Quantity,
+            [..p.DietaryTags],
+            (int)Math.Round((now - p.PickupEnd).TotalDays))).ToList();
+
+        return await markdownPricingAgent.SuggestMarkdownAsync(package, history, cancellationToken);
+    }
+
+    public async Task DismissMarkdownSuggestionAsync(Guid packageId)
+    {
+        var package = await packageRepository.GetByIdAsync(packageId);
+        if (package is null)
+            return;
+
+        await EnsureCanManageBusinessAsync(package.BusinessId);
+
+        package.MarkdownDismissedAt = DateTime.UtcNow;
+        await packageRepository.SaveChangesAsync();
     }
 
     public async Task<Package?> HideAsync(Guid packageId, string reason, bool notify = true)

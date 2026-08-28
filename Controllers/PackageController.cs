@@ -72,6 +72,50 @@ public class PackageController(IPackageService packageService, IPackageAiAssista
         }
     }
 
+    public async Task<ActionResult<List<Package>>> GetMarkdownCandidatesAsync(Guid? businessId)
+    {
+        try
+        {
+            return await packageService.GetMarkdownCandidatesAsync(businessId);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized();
+        }
+    }
+
+    // Success (including "no suggestion right now") flows through the implicit T conversion so
+    // an in-process caller reads it straight off .Value, same convention as GetByIdAsync; only
+    // the error paths return an explicit ActionResult (checked via .Result).
+    public async Task<ActionResult<MarkdownSuggestion?>> GetMarkdownSuggestionAsync(Guid packageId)
+    {
+        try
+        {
+            return await packageService.GetMarkdownSuggestionAsync(packageId);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(ex.Message);
+        }
+    }
+
+    public async Task<ActionResult> DismissMarkdownSuggestionAsync(Guid packageId)
+    {
+        try
+        {
+            await packageService.DismissMarkdownSuggestionAsync(packageId);
+            return NoContent();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized();
+        }
+    }
+
     public async Task<ActionResult> HideAsync(Guid packageId, string reason)
     {
         await packageService.HideAsync(packageId, reason);

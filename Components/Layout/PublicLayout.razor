@@ -39,7 +39,9 @@
                         }
                         @if (context.User.IsInRole(AppRoles.Admin) || context.User.IsInRole(AppRoles.BusinessManager))
                         {
-                            <a href="/dashboard" class="btn btn-outline-light btn-sm px-3">Dashboard</a>
+                            <a href="/dashboard" class="public-cart-btn" title="Dashboard" aria-label="Dashboard">
+                                <i class="bi bi-house-door"></i>
+                            </a>
                         }
                         @if (context.User.IsInRole(AppRoles.Customer) || context.User.IsInRole(AppRoles.BusinessManager))
                         {

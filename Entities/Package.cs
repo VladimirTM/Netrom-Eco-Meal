@@ -26,6 +26,8 @@ public class Package
     public string? HiddenReason { get; set; }
     // Set once NearExpiryNudgeService has notified interested customers — keeps the sweep from re-notifying every tick.
     public DateTime? NearExpiryNudgeSentAt { get; set; }
+    // Set when a manager dismisses the markdown-pricing suggestion for this package — keeps it from reappearing on /packages.
+    public DateTime? MarkdownDismissedAt { get; set; }
     [ForeignKey(nameof(BusinessId))]
     public Business Business { get; set; } = null!;
     [ForeignKey(nameof(PackageTypeId))]

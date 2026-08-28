@@ -37,7 +37,8 @@ whichever one they pick in the sidebar switcher:
 
 - Manage packages on `/packages` for the currently selected business — including a photo
   (upload or paste a URL), "repeat this every day" recurring templates managed on
-  `/packages/templates`, and bulk duplicate/adjust-quantity/extend-pickup-window actions
+  `/packages/templates`, bulk duplicate/adjust-quantity/extend-pickup-window actions, and an
+  AI markdown-price suggestion for any package closing soon with stock still unsold
 - Set your business's weekly opening hours and one-off holiday closures, and upload a
   business photo, from the business edit page
 - Confirm, complete or cancel orders placed at the currently selected business on
@@ -192,13 +193,16 @@ service workers (and so push) only work on `https://` or `localhost`.
 
 ## AI Features
 
-Four AI features have shipped so far: a "Write it for me" button that drafts a package
+Five AI features have shipped so far: a "Write it for me" button that drafts a package
 description on `PackageForm.razor`, an AI search bar on the home page — try "vegan dinner
 under 30 lei, closing soon" — a periodic background sweep that nudges a business's
 favoriters/past customers when one of its packages is closing soon with stock still unclaimed
-(personalizing the copy when it matches something they've ordered before), and a `/plan-basket`
+(personalizing the copy when it matches something they've ordered before), a `/plan-basket`
 page where a customer gives a headcount/budget/dietary tag and a tool-calling agent proposes a
-basket of real, in-stock packages from a single kitchen for approval before it touches the cart.
+basket of real, in-stock packages from a single kitchen for approval before it touches the cart,
+and a 🏷️ badge on `/packages` for any package closing soon with stock left, where a manager can
+ask a tool-calling agent for a markdown price suggestion grounded in that business's own real
+sell-through history — shown as a dismissable suggestion, never applied automatically.
 Every AI feature in this app runs against a free, self-hosted [Ollama](https://ollama.com)
 instance via `Microsoft.Extensions.AI`'s `IChatClient` (backed by `OllamaSharp`) — there's no
 paid or hosted AI API anywhere in the stack. Configure it with:
@@ -213,10 +217,10 @@ aren't available yet" error instead of failing — same degrade-gracefully patte
 Stripe key or SMTP host; the rest of the app works normally either way.
 `docker-compose.test.yml` instead bundles an `ollama` container built from `Dockerfile.ollama`,
 which bakes `qwen2.5:7b` into the image at build time — `docker compose up --build` gives a
-fully working "Write it for me" button, AI search bar, near-expiry nudge sweep, and budget
-planner with no separate manual pull step. `qwen2.5:7b` was picked specifically because it's a
-model Ollama has verified function-calling support for, which the budget planner's tool-calling
-agent needs.
+fully working "Write it for me" button, AI search bar, near-expiry nudge sweep, budget planner,
+and markdown-pricing suggestion with no separate manual pull step. `qwen2.5:7b` was picked
+specifically because it's a model Ollama has verified function-calling support for, which the
+budget planner's and markdown-pricing agent's tool-calling needs.
 That first build downloads the model (a few GB), so it's slower than the app's own image the
 first time; the result persists in the `ecomeal-test-ollama` volume across restarts either way.
 
@@ -311,7 +315,8 @@ instead of an empty app:
   export to be worth looking at. Also has a handful of already-closed packages with
   partial completed sales spread across several days/hours, purely so `/dashboard`'s
   Business Analytics card (sell-through rate, busiest pickup hours) has real history to
-  show instead of an empty state.
+  show instead of an empty state — that same history is what the `/packages` markdown-price
+  suggestion reasons over for the seeded "Away Day Meal Box", which is priced above it.
 - **BusinessManager** — demo.manager2@ecomeal.local / Demo123! — staffs Stadionul de
   Gusturi alongside the first demo manager, demonstrating the other direction of the
   many-to-many (several staff, one business).

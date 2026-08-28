@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Database;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Models;
@@ -91,6 +92,32 @@ public class PackageRepository(EcoMealDbContext context) : IPackageRepository
             query = query.Where(p => p.DietaryTags.Contains(dietaryTag));
 
         return await query.OrderBy(p => p.Price).ToListAsync();
+    }
+
+    public async Task<List<Package>> GetMarkdownCandidatesAsync(Guid? businessId, DateTime now, DateTime closingBefore)
+    {
+        var query = context.Packages.AsNoTracking().Include(p => p.PackageType).Include(p => p.Business)
+            .Where(p => !p.IsHidden && p.Quantity > 0 && p.MarkdownDismissedAt == null
+                && p.PickupEnd > now && p.PickupEnd <= closingBefore);
+
+        if (businessId.HasValue)
+            query = query.Where(p => p.BusinessId == businessId);
+
+        return await query.OrderBy(p => p.PickupEnd).ToListAsync();
+    }
+
+    public async Task<List<Package>> GetSellThroughHistoryAsync(Guid businessId, Guid excludePackageId, DateTime since)
+    {
+        var now = DateTime.UtcNow;
+        return await context.Packages.AsNoTracking()
+            .Include(p => p.PackageType)
+            .Include(p => p.OrderPackages)
+                .ThenInclude(op => op.Order)
+                    .ThenInclude(o => o.Status)
+            .Where(p => p.BusinessId == businessId && p.Id != excludePackageId && p.PickupEnd < now && p.PickupEnd >= since)
+            .OrderByDescending(p => p.PickupEnd)
+            .Take(MarkdownSettings.MaxHistoryRecords)
+            .ToListAsync();
     }
 
     public async Task AddAsync(Package package)

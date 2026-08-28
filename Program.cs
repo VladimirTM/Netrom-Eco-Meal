@@ -115,6 +115,7 @@ builder.Services.AddScoped<ISearchIntentParser, SearchIntentParser>();
 builder.Services.AddScoped<INearExpiryNudgeComposer, NearExpiryNudgeComposer>();
 builder.Services.AddScoped<INearExpiryNudgeService, NearExpiryNudgeService>();
 builder.Services.AddScoped<IBasketPlannerAgent, BasketPlannerAgent>();
+builder.Services.AddScoped<IMarkdownPricingAgent, MarkdownPricingAgent>();
 builder.Services.AddScoped<IAppEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<IStripeGateway, StripeGateway>();
 builder.Services.AddScoped<ICheckoutService, CheckoutService>();

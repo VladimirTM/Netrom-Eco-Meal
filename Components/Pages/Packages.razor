@@ -2,9 +2,11 @@
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Mvc
 @using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Models
 @using Netrom_Eco_Meal.Services
 @using Netrom_Eco_Meal.Services.Interfaces
 @* prerender: false — a hard navigation would otherwise paint a static copy first, and a click
@@ -188,7 +190,15 @@
                                 @package.PackageType.Name
                             </span>
                         </td>
-                        <td class="fw-semibold">@package.Price.ToString("C")</td>
+                        <td class="fw-semibold">
+                            @package.Price.ToString("C")
+                            @if (canManage && _markdownCandidateIds.Contains(package.Id))
+                            {
+                                <button type="button" class="btn btn-sm btn-link p-0 ms-1" title="AI price suggestion available — this package is closing soon with stock left" @onclick="() => OpenMarkdownSuggestionAsync(package)">
+                                    <i class="bi bi-tag-fill text-warning"></i>
+                                </button>
+                            }
+                        </td>
                         <td>@package.Quantity</td>
                         <td class="text-muted small">
                             @PickupLabel(package)
@@ -302,6 +312,55 @@
     </div>
 }
 
+@if (_markdownSuggestionPackage is not null)
+{
+    <div class="confirm-backdrop" @onclick="CloseMarkdownSuggestion"></div>
+    <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="markdown-modal-title">
+        <h2 class="confirm-dialog-title" id="markdown-modal-title">
+            <i class="bi bi-tag-fill text-warning me-1"></i> AI price suggestion — @_markdownSuggestionPackage.Name
+        </h2>
+        @if (_markdownSuggestionLoading)
+        {
+            <div class="d-flex justify-content-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        }
+        else if (_markdownSuggestionError is not null)
+        {
+            <p class="text-danger small mb-0">@_markdownSuggestionError</p>
+        }
+        else if (_markdownSuggestion is null)
+        {
+            <p class="confirm-dialog-message mb-0">No markdown suggested right now — the real sell-through history didn't give the AI a good reason to cut this package's price.</p>
+        }
+        else
+        {
+            <div class="d-flex align-items-baseline gap-2 mb-2">
+                <span class="text-muted text-decoration-line-through">@_markdownSuggestion.CurrentPrice.ToString("C")</span>
+                <span class="fw-bold fs-4 text-success">@_markdownSuggestion.SuggestedPrice.ToString("C")</span>
+            </div>
+            <p class="confirm-dialog-message">@_markdownSuggestion.Explanation</p>
+            <p class="text-muted small mb-0">Just a suggestion — nothing changes until you edit the package yourself.</p>
+        }
+        <div class="confirm-dialog-actions">
+            <button type="button" class="btn btn-outline-secondary" disabled="@_markdownDismissBusy" @onclick="CloseMarkdownSuggestion">Close</button>
+            @if (_markdownSuggestion is not null)
+            {
+                <a href="/packages/edit/@_markdownSuggestionPackage.Id" class="btn btn-outline-primary">Edit package</a>
+            }
+            <button type="button" class="btn btn-primary" disabled="@(_markdownDismissBusy || _markdownSuggestionLoading)" @onclick="DismissMarkdownSuggestionAsync">
+                @if (_markdownDismissBusy)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                }
+                Dismiss
+            </button>
+        </div>
+    </div>
+}
+
 @code {
     private enum BulkMode { None, AdjustQuantity, ExtendPickup }
     private PaginatedList<Package>? _paged;
@@ -333,6 +392,15 @@
     private bool _bulkBusy;
     private string? _bulkError;
 
+    // Candidate ids are fetched business-wide (not paginated) so the 🏷️ badge shows regardless of
+    // which page a candidate lands on; the actual AI call only happens once a manager clicks it.
+    private HashSet<Guid> _markdownCandidateIds = [];
+    private Package? _markdownSuggestionPackage;
+    private bool _markdownSuggestionLoading;
+    private MarkdownSuggestion? _markdownSuggestion;
+    private string? _markdownSuggestionError;
+    private bool _markdownDismissBusy;
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -349,6 +417,7 @@
         _packageTypes = (await PackageTypeService.GetAllAsync()).OrderBy(t => t.Name).ToList();
 
         await LoadPageAsync();
+        await LoadMarkdownCandidatesAsync();
 
         ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
         ManagedBusinessContext.OnChange += HandleManagedBusinessChanged;
@@ -363,8 +432,74 @@
         await InvokeAsync(async () =>
         {
             await LoadPageAsync();
+            await LoadMarkdownCandidatesAsync();
             StateHasChanged();
         });
+    }
+
+    // Admin sees candidates across every business (mirrors GetForAnalyticsAsync's null-businessId
+    // convention); an unassigned manager gets the same Guid.Empty-never-matches sentinel LoadPageAsync uses.
+    private async Task LoadMarkdownCandidatesAsync()
+    {
+        if (!_isAdmin && !_isBusinessManager)
+            return;
+
+        Guid? businessId = _isBusinessManager ? _myBusinessId ?? Guid.Empty : null;
+        var result = await PackageController.GetMarkdownCandidatesAsync(businessId);
+        _markdownCandidateIds = result.Result is UnauthorizedResult ? [] : (result.Value ?? []).Select(p => p.Id).ToHashSet();
+    }
+
+    private async Task OpenMarkdownSuggestionAsync(Package package)
+    {
+        _markdownSuggestionPackage = package;
+        _markdownSuggestion = null;
+        _markdownSuggestionError = null;
+        _markdownSuggestionLoading = true;
+
+        var result = await PackageController.GetMarkdownSuggestionAsync(package.Id);
+        if (result.Result is UnauthorizedResult)
+        {
+            _markdownSuggestionError = "You don't have access to a price suggestion for this package.";
+        }
+        else if (result.Result is ConflictObjectResult conflict)
+        {
+            _markdownSuggestionError = conflict.Value as string ?? "AI features aren't available right now.";
+        }
+        else
+        {
+            _markdownSuggestion = result.Value;
+        }
+
+        _markdownSuggestionLoading = false;
+    }
+
+    private void CloseMarkdownSuggestion()
+    {
+        _markdownSuggestionPackage = null;
+        _markdownSuggestion = null;
+        _markdownSuggestionError = null;
+    }
+
+    private async Task DismissMarkdownSuggestionAsync()
+    {
+        if (_markdownSuggestionPackage is null)
+            return;
+
+        _markdownDismissBusy = true;
+        try
+        {
+            await PackageController.DismissMarkdownSuggestionAsync(_markdownSuggestionPackage.Id);
+            _markdownCandidateIds.Remove(_markdownSuggestionPackage.Id);
+            CloseMarkdownSuggestion();
+        }
+        catch (Exception)
+        {
+            _markdownSuggestionError = "Couldn't dismiss this suggestion. Please refresh and try again.";
+        }
+        finally
+        {
+            _markdownDismissBusy = false;
+        }
     }
 
     private IEnumerable<Package> SelectablePackagesOnPage =>

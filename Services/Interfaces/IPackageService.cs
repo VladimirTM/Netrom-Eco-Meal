@@ -33,4 +33,12 @@ public interface IPackageService
     public Task<Package?> HideAsync(Guid packageId, string reason, bool notify = true);
     public Task NotifyHiddenAsync(Package package, string reason);
     public Task UnhideAsync(Guid packageId);
+
+    // Backs the /packages markdown-suggestion badge — same admin-or-own-business-staff
+    // authorization shape as GetForAnalyticsAsync.
+    public Task<List<Package>> GetMarkdownCandidatesAsync(Guid? businessId);
+    // null when the package doesn't exist, no cut is warranted, or the suggestion didn't
+    // validate — the caller shows "no suggestion right now".
+    public Task<MarkdownSuggestion?> GetMarkdownSuggestionAsync(Guid packageId, CancellationToken cancellationToken = default);
+    public Task DismissMarkdownSuggestionAsync(Guid packageId);
 }

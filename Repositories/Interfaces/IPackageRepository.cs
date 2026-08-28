@@ -21,6 +21,13 @@ public interface IPackageRepository
     // BasketPlannerAgent's search tool. No price ceiling: a basket combines several packages
     // under one total budget, not a per-item cap.
     public Task<List<Package>> GetLiveCandidatesAsync(string? dietaryTag);
+    // Same shape as GetNearExpiryUnclaimedAsync with a wider window, plus MarkdownDismissedAt ==
+    // null — feeds the /packages markdown-suggestion badge.
+    public Task<List<Package>> GetMarkdownCandidatesAsync(Guid? businessId, DateTime now, DateTime closingBefore);
+    // This business's own closed packages (pickup window already ended) since the given date,
+    // most recent first, capped at MarkdownSettings.MaxHistoryRecords — feeds
+    // MarkdownPricingAgent's get_sell_through_history tool.
+    public Task<List<Package>> GetSellThroughHistoryAsync(Guid businessId, Guid excludePackageId, DateTime since);
     public Task AddAsync(Package package);
     public Task DeleteAsync(Guid id);
     public Task SaveChangesAsync();

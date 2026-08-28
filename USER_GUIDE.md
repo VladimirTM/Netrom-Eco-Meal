@@ -334,6 +334,13 @@ multiple pages before acting — "Clear selection" or completing an action empti
 Any of these — a quantity change, hiding a package, extending its window — shows up live on
 that business's page for anyone already browsing it, no refresh needed on their end.
 
+A 🏷️ badge next to the price marks any package closing soon that still has stock left. Clicking
+it asks an AI agent for a price-cut suggestion, grounded in how similar past packages at your
+business actually sold — you'll see the current price, the suggested price, and a one-sentence
+reason. It's only ever a suggestion: nothing changes until you edit the package yourself, and
+**Dismiss** hides it for that package going forward. If no cut looks warranted, or the AI feature
+isn't configured on the server, you'll see a message saying so instead of a number.
+
 ### Manage recurring templates
 
 `/packages/templates` lists every template for the current business: name and description,

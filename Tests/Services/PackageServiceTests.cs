@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Moq;
 using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Entities;
+using Netrom_Eco_Meal.Models;
 using Netrom_Eco_Meal.Repositories.Interfaces;
 using Netrom_Eco_Meal.Services;
 using Netrom_Eco_Meal.Services.Interfaces;
@@ -19,7 +20,7 @@ public class PackageServiceTests
     private const string ManagerId = "manager-1";
     private const string OtherManagerId = "manager-2";
 
-    private sealed record Fixture(PackageService Service, Mock<IPackageRepository> Repo, Mock<IBusinessService> BusinessService, Mock<INotificationService> NotificationService, PackageStockBroadcaster StockBroadcaster);
+    private sealed record Fixture(PackageService Service, Mock<IPackageRepository> Repo, Mock<IBusinessService> BusinessService, Mock<INotificationService> NotificationService, PackageStockBroadcaster StockBroadcaster, Mock<IMarkdownPricingAgent> MarkdownPricingAgent);
 
     private static Fixture Build(string? userId, params string[] roles)
     {
@@ -32,6 +33,7 @@ public class PackageServiceTests
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
         var configuration = new ConfigurationBuilder().Build();
         var stockBroadcaster = new PackageStockBroadcaster();
+        var markdownPricingAgent = new Mock<IMarkdownPricingAgent>();
 
         // Default so HideAsync's staff-notification fan-out (NotifyHiddenAsync) has something to
         // enumerate; tests that care about notification content override this per-case.
@@ -39,9 +41,10 @@ public class PackageServiceTests
 
         var service = new PackageService(
             repo.Object, businessService.Object, favoriteRepo.Object, notificationService.Object,
-            emailSender.Object, currentUser, configuration, auditLogService.Object, stockBroadcaster);
+            emailSender.Object, currentUser, configuration, auditLogService.Object, stockBroadcaster,
+            markdownPricingAgent.Object);
 
-        return new Fixture(service, repo, businessService, notificationService, stockBroadcaster);
+        return new Fixture(service, repo, businessService, notificationService, stockBroadcaster, markdownPricingAgent);
     }
 
     // ---- DuplicateManyAsync -------------------------------------------------
@@ -212,6 +215,128 @@ public class PackageServiceTests
 
         Assert.Empty(result);
         f.Repo.Verify(r => r.GetForAnalyticsAsync(null, since), Times.Once);
+    }
+
+    // ---- GetMarkdownCandidatesAsync / GetMarkdownSuggestionAsync / DismissMarkdownSuggestionAsync ----
+
+    [Fact]
+    public async Task GetMarkdownCandidatesAsync_ManagerWithoutBusinessId_Throws()
+    {
+        var f = Build(ManagerId, AppRoles.BusinessManager);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.GetMarkdownCandidatesAsync(null));
+    }
+
+    [Fact]
+    public async Task GetMarkdownCandidatesAsync_ManagerNotStaffOfRequestedBusiness_Throws()
+    {
+        var f = Build(ManagerId, AppRoles.BusinessManager);
+        var businessId = Guid.NewGuid();
+        f.BusinessService.Setup(b => b.IsStaffAsync(businessId, ManagerId)).ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.GetMarkdownCandidatesAsync(businessId));
+    }
+
+    [Fact]
+    public async Task GetMarkdownCandidatesAsync_ManagerStaffOfBusiness_DelegatesToRepository()
+    {
+        var f = Build(ManagerId, AppRoles.BusinessManager);
+        var businessId = Guid.NewGuid();
+        f.BusinessService.Setup(b => b.IsStaffAsync(businessId, ManagerId)).ReturnsAsync(true);
+        f.Repo.Setup(r => r.GetMarkdownCandidatesAsync(businessId, It.IsAny<DateTime>(), It.IsAny<DateTime>()))
+            .ReturnsAsync([TestData.Package(businessId)]);
+
+        var result = await f.Service.GetMarkdownCandidatesAsync(businessId);
+
+        Assert.Single(result);
+    }
+
+    [Fact]
+    public async Task GetMarkdownCandidatesAsync_Admin_AllowsNullBusinessId()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        f.Repo.Setup(r => r.GetMarkdownCandidatesAsync(null, It.IsAny<DateTime>(), It.IsAny<DateTime>())).ReturnsAsync([]);
+
+        var result = await f.Service.GetMarkdownCandidatesAsync(null);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetMarkdownSuggestionAsync_PackageDoesNotExist_ReturnsNull()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        f.Repo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((Package?)null);
+
+        var result = await f.Service.GetMarkdownSuggestionAsync(Guid.NewGuid());
+
+        Assert.Null(result);
+        f.MarkdownPricingAgent.Verify(a => a.SuggestMarkdownAsync(It.IsAny<Package>(), It.IsAny<List<PackageSellThroughRecord>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetMarkdownSuggestionAsync_ManagerNotStaffOfBusiness_Throws()
+    {
+        var f = Build(ManagerId, AppRoles.BusinessManager);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        f.Repo.Setup(r => r.GetByIdAsync(package.Id)).ReturnsAsync(package);
+        f.BusinessService.Setup(b => b.IsStaffAsync(businessId, ManagerId)).ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.GetMarkdownSuggestionAsync(package.Id));
+    }
+
+    [Fact]
+    public async Task GetMarkdownSuggestionAsync_Authorized_BuildsHistoryFromClosedPackagesAndDelegatesToAgent()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        package.PackageTypeId = Guid.NewGuid();
+        f.Repo.Setup(r => r.GetByIdAsync(package.Id)).ReturnsAsync(package);
+
+        var pastPackage = TestData.Package(businessId, quantity: 2);
+        pastPackage.PackageType = new PackageType { Id = pastPackage.PackageTypeId, Name = "Meal Box" };
+        pastPackage.PickupEnd = DateTime.UtcNow.AddDays(-3);
+        var status = new Status { Id = Guid.NewGuid(), Name = OrderStatuses.Completed };
+        var order = new Order { Id = Guid.NewGuid(), UserId = "u1", User = TestData.User("u1"), BusinessId = businessId, StatusId = status.Id, Status = status, CreatedAt = DateTime.UtcNow.AddDays(-3) };
+        pastPackage.OrderPackages.Add(new OrderPackage { Id = Guid.NewGuid(), OrderId = order.Id, Order = order, PackageId = pastPackage.Id, Quantity = 3 });
+        f.Repo.Setup(r => r.GetSellThroughHistoryAsync(businessId, package.Id, It.IsAny<DateTime>())).ReturnsAsync([pastPackage]);
+
+        var expected = new MarkdownSuggestion { CurrentPrice = package.Price, SuggestedPrice = package.Price - 1, Explanation = "Cut it." };
+        f.MarkdownPricingAgent
+            .Setup(a => a.SuggestMarkdownAsync(package, It.Is<List<PackageSellThroughRecord>>(h => h.Count == 1 && h[0].QuantitySold == 3 && h[0].QuantityOffered == 5), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expected);
+
+        var result = await f.Service.GetMarkdownSuggestionAsync(package.Id);
+
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public async Task DismissMarkdownSuggestionAsync_ManagerNotStaffOfBusiness_Throws()
+    {
+        var f = Build(ManagerId, AppRoles.BusinessManager);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        f.Repo.Setup(r => r.GetByIdAsync(package.Id)).ReturnsAsync(package);
+        f.BusinessService.Setup(b => b.IsStaffAsync(businessId, ManagerId)).ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.DismissMarkdownSuggestionAsync(package.Id));
+    }
+
+    [Fact]
+    public async Task DismissMarkdownSuggestionAsync_Admin_SetsDismissedAt()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        f.Repo.Setup(r => r.GetByIdAsync(package.Id)).ReturnsAsync(package);
+
+        await f.Service.DismissMarkdownSuggestionAsync(package.Id);
+
+        Assert.NotNull(package.MarkdownDismissedAt);
+        f.Repo.Verify(r => r.SaveChangesAsync(), Times.Once);
     }
 
     // ---- HideAsync / UnhideAsync -------------------------------------------

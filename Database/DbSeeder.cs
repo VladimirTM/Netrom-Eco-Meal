@@ -260,6 +260,12 @@ public static class DbSeeder
         var nearExpiryNudgeDemoStart = DateTime.UtcNow.AddMinutes(-15);
         var nearExpiryNudgeDemoEnd = DateTime.UtcNow.AddMinutes(20);
 
+        // Same "anchored to now" trick, closing within MarkdownSettings.ClosingWindow (3h) with
+        // stock still unsold — demos the /packages markdown-pricing suggestion. Same business/type
+        // (mealBox, b1) as hist1/hist3 below, priced above their real 9.50/9.99 sell-through comps.
+        var markdownDemoStart = DateTime.UtcNow.AddHours(-2);
+        var markdownDemoEnd = DateTime.UtcNow.AddMinutes(90);
+
         var seedPackages = new List<Package>
         {
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000001"), BusinessId = b1,  PackageTypeId = surpriseBag, Name = "Golden Boot Surprise Bag",     Description = "A top-scoring surprise selection of today's leftover dishes.",              Price = 12.99m, Quantity = 5,  WeightKg = 1.5m, PickupStart = At(17,  0), PickupEnd = At(20,  0), ImageUrl = "https://loremflickr.com/640/360/football,goldenboot/all?lock=301" },
@@ -292,7 +298,10 @@ public static class DbSeeder
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000025"), BusinessId = b1,  PackageTypeId = mealBox,     Name = "Last One Standing Box",        Description = "Down to the final portion of the day — first to confirm gets it.",         Price =  9.25m, Quantity = 1,  WeightKg = 1.2m, PickupStart = At(17,  0), PickupEnd = At(21,  0), ImageUrl = "https://loremflickr.com/640/360/football,lastminute/all?lock=325" },
             // Phase 3 demo: closing soon, stock unclaimed, at a business the demo customer both
             // favorites and has a Completed order from — see nearExpiryNudgeDemoStart/End above.
-            new Package { Id = new Guid("55555555-0000-0000-0000-000000000026"), BusinessId = b1,  PackageTypeId = mealBox,     Name = "Late Save Meal Box",           Description = "One more meal box rescued in the closing minutes before the counter shuts.",Price =  9.75m, Quantity = 2,  WeightKg = 1.2m, PickupStart = nearExpiryNudgeDemoStart, PickupEnd = nearExpiryNudgeDemoEnd, ImageUrl = "https://loremflickr.com/640/360/football,latesave/all?lock=326" }
+            new Package { Id = new Guid("55555555-0000-0000-0000-000000000026"), BusinessId = b1,  PackageTypeId = mealBox,     Name = "Late Save Meal Box",           Description = "One more meal box rescued in the closing minutes before the counter shuts.",Price =  9.75m, Quantity = 2,  WeightKg = 1.2m, PickupStart = nearExpiryNudgeDemoStart, PickupEnd = nearExpiryNudgeDemoEnd, ImageUrl = "https://loremflickr.com/640/360/football,latesave/all?lock=326" },
+            // Phase 5 demo: see markdownDemoStart/End above — priced above this business's own
+            // recent mealBox comps, still fully unsold with its window closing soon.
+            new Package { Id = new Guid("55555555-0000-0000-0000-000000000027"), BusinessId = b1,  PackageTypeId = mealBox,     Name = "Away Day Meal Box",            Description = "A road-trip-sized meal box, priced for away-day appetites.",               Price = 12.99m, Quantity = 4,  WeightKg = 1.2m, PickupStart = markdownDemoStart, PickupEnd = markdownDemoEnd, ImageUrl = "https://loremflickr.com/640/360/football,awayday/all?lock=327" }
         };
 
         // Plausible default tags per package type, so the feature has real demo data out of the box.
@@ -338,10 +347,11 @@ public static class DbSeeder
             {
                 existing.PickupStart = seed.PickupStart;
                 existing.PickupEnd = seed.PickupEnd;
-                // A refreshed window re-enters "closing soon" territory (see
-                // closingSoonDemoStart/nearExpiryNudgeDemoStart above) — let NearExpiryNudgeService
-                // reconsider it instead of treating a previous run's nudge as still current.
+                // A refreshed window re-enters "closing soon"/markdown territory (see the
+                // *DemoStart vars above) — let NearExpiryNudgeService and the /packages badge
+                // reconsider it instead of treating a previous run's nudge/dismissal as current.
                 existing.NearExpiryNudgeSentAt = null;
+                existing.MarkdownDismissedAt = null;
             }
 
             if (IsStalePlaceholderImage(existing.ImageUrl))
