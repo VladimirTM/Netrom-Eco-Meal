@@ -81,6 +81,18 @@ public class PackageRepository(EcoMealDbContext context) : IPackageRepository
             .ToListAsync();
     }
 
+    public async Task<List<Package>> GetLiveCandidatesAsync(string? dietaryTag)
+    {
+        var now = DateTime.UtcNow;
+        var query = context.Packages.AsNoTracking().Include(p => p.PackageType).Include(p => p.Business)
+            .Where(p => !p.IsHidden && p.Quantity > 0 && p.PickupEnd > now);
+
+        if (!string.IsNullOrWhiteSpace(dietaryTag))
+            query = query.Where(p => p.DietaryTags.Contains(dietaryTag));
+
+        return await query.OrderBy(p => p.Price).ToListAsync();
+    }
+
     public async Task AddAsync(Package package)
     {
         await context.Packages.AddAsync(package);

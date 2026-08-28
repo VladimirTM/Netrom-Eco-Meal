@@ -3867,3 +3867,228 @@ h1:focus {
     border: 1px solid #e5e7eb;
     flex-shrink: 0;
 }
+
+/* ── AI budget/basket planner (BasketPlanner.razor, Phase 4) ── */
+.planner-hero {
+    background-color: var(--em-surface);
+    background-image:
+        radial-gradient(ellipse 50% 60% at 10% 0%, rgba(31, 138, 76, 0.09) 0%, transparent 100%),
+        radial-gradient(ellipse 40% 50% at 92% 15%, rgba(217, 112, 47, 0.07) 0%, transparent 100%);
+    padding: 3rem 1.5rem 2.5rem;
+}
+
+.planner-hero-inner {
+    max-width: 720px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.planner-hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(31, 138, 76, 0.1);
+    color: var(--em-leaf-dark);
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    margin-bottom: 1.25rem;
+}
+
+.planner-hero-title {
+    font-size: clamp(1.9rem, 4vw, 2.6rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--em-text);
+    margin-bottom: 0.6rem;
+}
+
+.planner-hero-sub {
+    font-size: 0.98rem;
+    line-height: 1.6;
+    color: var(--em-muted);
+    max-width: 560px;
+    margin: 0 auto;
+}
+
+.planner-form-section,
+.planner-result-section {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 1.5rem 1.5rem 0;
+}
+
+.planner-result-section {
+    padding-bottom: 2.5rem;
+}
+
+.planner-form-card,
+.planner-result-card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: var(--em-shadow-md);
+    padding: 1.5rem;
+}
+
+.planner-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.planner-form-label {
+    flex: 1;
+    min-width: 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--em-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.planner-form-hint {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--em-muted);
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.planner-plan-btn {
+    margin-top: 1.25rem;
+    width: 100%;
+    padding: 0.7rem;
+}
+
+.planner-explanation {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    background: rgba(31, 138, 76, 0.08);
+    color: var(--em-text);
+    border-radius: 12px;
+    padding: 0.9rem 1.1rem;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    margin-bottom: 1.25rem;
+}
+
+.planner-explanation i {
+    color: var(--em-leaf-dark);
+    margin-top: 0.15rem;
+    flex-shrink: 0;
+}
+
+.planner-empty {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    color: var(--em-muted);
+}
+
+.planner-empty i {
+    font-size: 2rem;
+    color: #d1d5db;
+    display: block;
+    margin-bottom: 0.75rem;
+}
+
+.planner-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.planner-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.planner-item-approved {
+    border-color: var(--em-leaf);
+    background: rgba(31, 138, 76, 0.05);
+}
+
+.planner-item input[type="checkbox"] {
+    margin-top: 0.3rem;
+    flex-shrink: 0;
+}
+
+.planner-item-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.planner-item-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.planner-item-name {
+    font-weight: 700;
+    color: var(--em-text);
+}
+
+.planner-item-price {
+    font-weight: 700;
+    color: var(--em-text);
+    white-space: nowrap;
+}
+
+.planner-item-business {
+    font-size: 0.8rem;
+    color: var(--em-muted);
+    margin-top: 0.15rem;
+}
+
+.planner-item-business i {
+    margin-right: 0.3rem;
+}
+
+.planner-item-reason {
+    font-size: 0.84rem;
+    color: var(--em-muted);
+    font-style: italic;
+    margin-top: 0.35rem;
+}
+
+.planner-result-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid #f0f1f2;
+}
+
+.planner-approved-total {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--em-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.planner-approved-total-value {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: var(--em-text);
+    text-transform: none;
+    letter-spacing: normal;
+}

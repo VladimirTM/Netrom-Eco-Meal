@@ -192,14 +192,16 @@ service workers (and so push) only work on `https://` or `localhost`.
 
 ## AI Features
 
-Three AI features have shipped so far: a "Write it for me" button that drafts a package
+Four AI features have shipped so far: a "Write it for me" button that drafts a package
 description on `PackageForm.razor`, an AI search bar on the home page — try "vegan dinner
-under 30 lei, closing soon" — and a periodic background sweep that nudges a business's
-favoriters/past customers when one of its packages is closing soon with stock still unclaimed,
-personalizing the copy when it matches something they've ordered before. Every AI feature in
-this app runs against a free, self-hosted [Ollama](https://ollama.com) instance via
-`Microsoft.Extensions.AI`'s `IChatClient` (backed by `OllamaSharp`) — there's no paid or hosted
-AI API anywhere in the stack. Configure it with:
+under 30 lei, closing soon" — a periodic background sweep that nudges a business's
+favoriters/past customers when one of its packages is closing soon with stock still unclaimed
+(personalizing the copy when it matches something they've ordered before), and a `/plan-basket`
+page where a customer gives a headcount/budget/dietary tag and a tool-calling agent proposes a
+basket of real, in-stock packages from a single kitchen for approval before it touches the cart.
+Every AI feature in this app runs against a free, self-hosted [Ollama](https://ollama.com)
+instance via `Microsoft.Extensions.AI`'s `IChatClient` (backed by `OllamaSharp`) — there's no
+paid or hosted AI API anywhere in the stack. Configure it with:
 
 ```bash
 dotnet user-secrets set "Ollama:BaseUrl" "http://localhost:11434"
@@ -211,8 +213,10 @@ aren't available yet" error instead of failing — same degrade-gracefully patte
 Stripe key or SMTP host; the rest of the app works normally either way.
 `docker-compose.test.yml` instead bundles an `ollama` container built from `Dockerfile.ollama`,
 which bakes `qwen2.5:7b` into the image at build time — `docker compose up --build` gives a
-fully working "Write it for me" button, AI search bar, and near-expiry nudge sweep with no
-separate manual pull step.
+fully working "Write it for me" button, AI search bar, near-expiry nudge sweep, and budget
+planner with no separate manual pull step. `qwen2.5:7b` was picked specifically because it's a
+model Ollama has verified function-calling support for, which the budget planner's tool-calling
+agent needs.
 That first build downloads the model (a few GB), so it's slower than the app's own image the
 first time; the result persists in the `ecomeal-test-ollama` volume across restarts either way.
 

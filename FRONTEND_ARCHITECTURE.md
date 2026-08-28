@@ -45,6 +45,7 @@ Components/
 │
 ├── Pages/
 │   ├── Home.razor                # / — storefront browse/search/filter
+│   ├── BasketPlanner.razor       # /plan-basket — Phase 4 AI budget/rescue-basket planner
 │   ├── BusinessDetail.razor      # /businesses/{Id} — packages + reviews + favorite + add to cart
 │   ├── Impact.razor              # /impact — Phase 11 monthly kg-saved leaderboard, opt-in toggle
 │   ├── PaymentReturn.razor       # /checkout/return — Stripe success redirect landing page, confirms payment
@@ -80,7 +81,7 @@ Components/
 
 Constants/  Models/               # Debouncer, PaginatedList<T>, GeoDistance — see below and BACKEND_ARCHITECTURE.md
 wwwroot/
-├── app.css                       # ~3100 lines, one file, no preprocessor — see §13
+├── app.css                       # ~4100 lines, one file, no preprocessor — see §13
 ├── js/site.js                    # window.EcoMeal namespace — see §14
 ├── service-worker.js             # Web push: push + notificationclick handlers, registered by
 │                                  # EcoMeal.push.registerAsync on every page load (§14)
@@ -350,6 +351,44 @@ private async Task ApplyIntentAsync(SearchIntent intent)
 }
 ```
 A second input above the literal search box (`.home-ai-search`), placeholder `"vegan dinner under 30 lei, closing soon"`, submitted on Enter (`OnAiSearchKeyDownAsync`) or the "Ask AI" button. `RunAiSearchAsync` calls `BusinessController.ParseSearchIntentAsync` in-process — same `ConflictObjectResult`-means-"AI not configured" convention `PackageForm.razor`'s `DraftDescriptionAsync` established (§ Packages) — then `ApplyIntentAsync` just **writes into the same filter fields the manual controls already bind to** (`_search`, `_dietaryTagFilter`, `_sortBy`), so the existing dropdowns visibly reflect what the AI understood and the "Clear" button already covers undoing it. `_maxPriceFilter` is new (no manual control sets it — only the AI search and its own dismissible chip, `.home-chip`, do) and threads through to `BusinessController.GetPagedAsync`'s new `maxPrice` parameter, filtering to businesses with a live package at or under that price (`BusinessRepository.GetPagedAsync`, `BACKEND_ARCHITECTURE.md` §4). `_lastSearchIntent` is fed back into the next `ParseSearchIntentAsync` call as refinement context, so "cheaper" or "gluten-free only" adjusts the prior turn instead of starting over (`BACKEND_ARCHITECTURE.md` §5). Only one sort slot exists in the UI, so when both `closingSoon` and `nearMe` are requested `closingSoon` wins it (no permission prompt needed, and it's the app's core food-waste signal) — `nearMe` still triggers a geolocation fetch either way, so the per-card distance badges (below) show up even when it loses that tie.
+
+### AI budget/basket planner — `BasketPlanner.razor` (Phase 4)
+
+A standalone page at `/plan-basket` rather than a widget bolted onto Home, since it's a
+multi-step flow (form → AI proposal → per-item approve/decline → add to cart) rather than a
+one-shot filter tweak like the AI search bar above. `@attribute [Authorize(Roles =
+AppRoles.Customer)]`, `@layout PublicLayout`; linked from `PublicLayout.razor`'s header via a ✨
+(`bi-stars`) icon shown only to a signed-in `Customer`, right next to the orders/basket icons.
+
+```csharp
+private async Task PlanAsync()
+{
+    var result = await BasketPlannerController.ProposeBasketAsync(_peopleCount, _budget.Value,
+        string.IsNullOrWhiteSpace(_dietaryTag) ? null : _dietaryTag);
+    if (result.Result is ConflictObjectResult conflict)
+        _error = conflict.Value?.ToString() ?? "The AI basket planner isn't available right now.";
+    else if (result.Value is not null)
+    {
+        _plan = result.Value;
+        _approved = _plan.Items.Select(i => i.Package.Id).ToHashSet();
+    }
+}
+```
+
+Same `ConflictObjectResult`-means-"AI not configured" convention as the AI search bar and
+`PackageForm.razor`'s "Write it for me" button. The form is just three inputs — headcount,
+budget (RON), and an optional dietary/allergen `<select>` reusing the same two-`<optgroup>`
+markup as Home's dietary filter — and `ProposeBasketAsync` (`BACKEND_ARCHITECTURE.md` §5/§6)
+returns a fully-server-validated `BasketPlan`: every `Package` in it is real, so the page never
+needs to re-fetch or re-check anything before rendering. Every item starts pre-checked in
+`_approved` (a `HashSet<Guid>` of package IDs) — unchecking one is purely a client-side toggle,
+recomputing `ApprovedTotal` — and "Add approved to basket" only then calls
+`CartService.AddAsync(item.Package, item.Quantity)` per approved item, the same call
+`BusinessDetail.razor`'s "Add" button makes. Since `BuildValidatedPlan` already guarantees every
+surviving item shares one `BusinessId` (§5), the existing `CartService.WouldReplaceCart`/
+`ConfirmDialog` "Start a new basket?" flow (§7) only ever needs to check the *first* approved
+item, not one per item, before reusing the exact same dialog `BusinessDetail.razor` shows for a
+manual add that would clear a basket from a different kitchen.
 
 ### "Near me" distance sort
 

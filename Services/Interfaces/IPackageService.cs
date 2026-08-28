@@ -10,6 +10,9 @@ public interface IPackageService
     public Task<PaginatedList<Package>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessId, Guid? packageTypeId);
     public Task<Package?> GetByIdAsync(Guid id);
     public Task<Dictionary<Guid, string>> GetNamesByIdsAsync(IEnumerable<Guid> ids);
+    // Public browsing data (same audience as package listing, no auth check) — feeds the AI
+    // budget planner's search tool (BasketPlannerAgent).
+    public Task<List<Package>> GetLiveCandidatesAsync(string? dietaryTag);
     public Task AddAsync(Package package);
     public Task UpdateAsync(Package package);
     public Task DeleteAsync(Package package);

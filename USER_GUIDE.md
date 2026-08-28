@@ -118,6 +118,22 @@ If checkout can't start — you're not signed in as a Customer, something in you
 out in the meantime, or Stripe isn't configured on this deployment — you'll see an inline error
 instead of being redirected.
 
+### Plan a basket with AI
+
+The ✨ icon in the header (next to your orders) opens `/plan-basket` — tell it how many people
+you're feeding, a budget in RON, and optionally a dietary/allergen need, and it proposes a
+basket of real, currently-live packages with a one-line reason for each pick. Every item starts
+pre-approved with a checkbox; uncheck any you don't want before clicking **Add approved to
+basket** — nothing touches your actual basket until then, and the running "Approved total" above
+that button only counts what's still checked.
+
+Since a basket can only hold packages from one kitchen at a time (see [View a kitchen and
+order](#view-a-kitchen-and-order) above), the proposal is always from a single kitchen too — if
+your best options would otherwise span more than one, the explanation says so. If nothing live
+fits your budget and dietary need, you'll see "Nothing fit that request right now" instead of an
+empty-looking error. Like the Ask AI search bar, this needs an AI feature configured on the
+server — if it isn't, you'll see a message saying so instead of a proposal.
+
 ### Checkout with Stripe
 
 **Pay & place order** sends you to a real Stripe Checkout page (test-mode, unless the

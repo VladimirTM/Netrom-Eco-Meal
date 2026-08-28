@@ -17,6 +17,10 @@ public interface IPackageRepository
     // Live, unhidden, stock-remaining packages whose pickup window closes within closingBefore and
     // haven't been nudged yet — feeds NearExpiryNudgeService's sweep.
     public Task<List<Package>> GetNearExpiryUnclaimedAsync(DateTime now, DateTime closingBefore);
+    // Live, unhidden, stock-remaining packages, optionally narrowed by dietary tag — feeds
+    // BasketPlannerAgent's search tool. No price ceiling: a basket combines several packages
+    // under one total budget, not a per-item cap.
+    public Task<List<Package>> GetLiveCandidatesAsync(string? dietaryTag);
     public Task AddAsync(Package package);
     public Task DeleteAsync(Guid id);
     public Task SaveChangesAsync();

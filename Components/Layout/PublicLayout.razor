@@ -23,6 +23,9 @@
                         <NotificationBell TriggerClass="public-cart-btn"/>
                         @if (context.User.IsInRole(AppRoles.Customer))
                         {
+                            <a href="/plan-basket" class="public-cart-btn" title="Plan a basket with AI" aria-label="Plan a basket with AI">
+                                <i class="bi bi-stars"></i>
+                            </a>
                             <a href="/orders" class="public-cart-btn" aria-label="Your orders">
                                 <i class="bi bi-receipt"></i>
                             </a>

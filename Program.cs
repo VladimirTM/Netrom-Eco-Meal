@@ -114,6 +114,7 @@ builder.Services.AddScoped<IPackageAiAssistant, PackageAiAssistant>();
 builder.Services.AddScoped<ISearchIntentParser, SearchIntentParser>();
 builder.Services.AddScoped<INearExpiryNudgeComposer, NearExpiryNudgeComposer>();
 builder.Services.AddScoped<INearExpiryNudgeService, NearExpiryNudgeService>();
+builder.Services.AddScoped<IBasketPlannerAgent, BasketPlannerAgent>();
 builder.Services.AddScoped<IAppEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<IStripeGateway, StripeGateway>();
 builder.Services.AddScoped<ICheckoutService, CheckoutService>();
@@ -141,6 +142,7 @@ builder.Services.AddScoped<AuditLogController>();
 builder.Services.AddScoped<ReportController>();
 builder.Services.AddScoped<PushSubscriptionController>();
 builder.Services.AddScoped<ImpactController>();
+builder.Services.AddScoped<BasketPlannerController>();
 // Real HTTP endpoint for Login/Register/Logout (see AuthController), but also registered here so
 // ConfirmEmail/ForgotPassword/ResetPassword can inject it in-process like every other controller.
 builder.Services.AddScoped<AuthController>();

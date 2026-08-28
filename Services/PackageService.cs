@@ -43,6 +43,11 @@ public class PackageService(
         return await packageRepository.GetNamesByIdsAsync(ids);
     }
 
+    public async Task<List<Package>> GetLiveCandidatesAsync(string? dietaryTag)
+    {
+        return await packageRepository.GetLiveCandidatesAsync(dietaryTag);
+    }
+
     public async Task AddAsync(Package package)
     {
         await EnsureCanManageBusinessAsync(package.BusinessId);

@@ -1,0 +1,243 @@
+@page "/plan-basket"
+@layout PublicLayout
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Mvc
+@using Netrom_Eco_Meal.Constants
+@using Netrom_Eco_Meal.Controllers
+@using Netrom_Eco_Meal.Entities
+@using Netrom_Eco_Meal.Models
+@using Netrom_Eco_Meal.Services
+@rendermode InteractiveServer
+@inject BasketPlannerController BasketPlannerController
+@inject CartService CartService
+@attribute [Authorize(Roles = AppRoles.Customer)]
+
+<PageTitle>Plan a basket — Eco Meal</PageTitle>
+
+<section class="planner-hero">
+    <div class="planner-hero-inner">
+        <span class="planner-hero-eyebrow"><i class="bi bi-stars"></i> AI rescue-basket planner</span>
+        <h1 class="planner-hero-title">Tell us the budget. We'll find the basket.</h1>
+        <p class="planner-hero-sub">
+            Set a headcount, a budget, and an optional dietary need — the AI searches real, live packages
+            and proposes a basket from a single kitchen, with a reason for every pick. Nothing is added to
+            your basket until you approve it.
+        </p>
+    </div>
+</section>
+
+<section class="planner-form-section">
+    <div class="planner-form-card">
+        <div class="planner-form-row">
+            <label class="planner-form-label">
+                Feeding
+                <input type="number" min="1" max="50" class="form-control" @bind="_peopleCount" />
+                <span class="planner-form-hint">people</span>
+            </label>
+
+            <label class="planner-form-label">
+                Budget
+                <input type="number" min="1" step="0.5" class="form-control" @bind="_budget" />
+                <span class="planner-form-hint">RON total</span>
+            </label>
+
+            <label class="planner-form-label">
+                Dietary need
+                <select class="form-select" @bind="_dietaryTag">
+                    <option value="">Any diet/allergen</option>
+                    <optgroup label="Dietary preference">
+                        @foreach (var tag in DietaryTags.All.Where(t => !DietaryTags.IsAllergen(t)))
+                        {
+                            <option value="@tag">@tag</option>
+                        }
+                    </optgroup>
+                    <optgroup label="Avoid (allergen)">
+                        @foreach (var tag in DietaryTags.Allergens)
+                        {
+                            <option value="@tag">@tag</option>
+                        }
+                    </optgroup>
+                </select>
+            </label>
+        </div>
+
+        @if (_error is not null)
+        {
+            <div class="alert alert-danger mt-3 mb-0">@_error</div>
+        }
+
+        <button type="button" class="btn btn-primary planner-plan-btn" disabled="@(_planning || _peopleCount < 1 || _budget is null or <= 0)" @onclick="PlanAsync">
+            @if (_planning)
+            {
+                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                <text>Planning your basket…</text>
+            }
+            else
+            {
+                <i class="bi bi-magic me-2"></i>
+                <text>Plan my basket</text>
+            }
+        </button>
+    </div>
+</section>
+
+@if (_plan is not null)
+{
+    <section class="planner-result-section">
+        <div class="planner-result-card">
+            <p class="planner-explanation"><i class="bi bi-lightbulb"></i> @_plan.Explanation</p>
+
+            @if (_plan.Items.Count == 0)
+            {
+                <div class="planner-empty">
+                    <i class="bi bi-basket2"></i>
+                    <p class="mb-0">Nothing fit that request right now.</p>
+                </div>
+            }
+            else
+            {
+                <div class="planner-items">
+                    @foreach (var item in _plan.Items)
+                    {
+                        <label class="planner-item @(_approved.Contains(item.Package.Id) ? "planner-item-approved" : "")">
+                            <input type="checkbox" checked="@_approved.Contains(item.Package.Id)" @onchange="e => ToggleApproved(item.Package.Id, e.Value is true)" />
+                            <div class="planner-item-body">
+                                <div class="planner-item-top">
+                                    <span class="planner-item-name">@item.Quantity&times; @item.Package.Name</span>
+                                    <span class="planner-item-price">@item.LineTotal.ToString("C")</span>
+                                </div>
+                                <div class="planner-item-business"><i class="bi bi-shop"></i>@item.Package.Business.Name</div>
+                                <div class="planner-item-reason">@item.Reason</div>
+                            </div>
+                        </label>
+                    }
+                </div>
+
+                <div class="planner-result-footer">
+                    <div class="planner-approved-total">
+                        <span>Approved total</span>
+                        <span class="planner-approved-total-value">@ApprovedTotal.ToString("C")</span>
+                    </div>
+                    <button type="button" class="btn btn-primary" disabled="@(_addingToCart || _approved.Count == 0)" @onclick="AddApprovedToCartAsync">
+                        @if (_addingToCart)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-bag-plus me-2"></i>
+                        }
+                        Add approved to basket
+                    </button>
+                </div>
+
+                @if (_addMessage is not null)
+                {
+                    <div class="alert alert-success mt-3 mb-0">@_addMessage</div>
+                }
+            }
+        </div>
+    </section>
+}
+
+<ConfirmDialog IsOpen="_pendingReplace"
+               Title="Start a new basket?"
+               Message="@($"Your basket has items from {CartService.BusinessName}. Adding these picks from {_plan?.Items.FirstOrDefault()?.Package.Business.Name} will clear it and start a new one.")"
+               ConfirmLabel="Start new basket"
+               CancelLabel="Keep current basket"
+               ConfirmClass="btn-primary"
+               OnConfirm="ConfirmReplaceCartAsync"
+               OnCancel="() => _pendingReplace = false"/>
+
+@code {
+    private int _peopleCount = 4;
+    private decimal? _budget = 30;
+    private string _dietaryTag = "";
+
+    private bool _planning;
+    private string? _error;
+    private BasketPlan? _plan;
+    private HashSet<Guid> _approved = [];
+
+    private bool _addingToCart;
+    private string? _addMessage;
+    private bool _pendingReplace;
+
+    private decimal ApprovedTotal => _plan is null
+        ? 0
+        : _plan.Items.Where(i => _approved.Contains(i.Package.Id)).Sum(i => i.LineTotal);
+
+    private async Task PlanAsync()
+    {
+        if (_planning || _budget is not > 0 || _peopleCount < 1)
+            return;
+
+        _planning = true;
+        _error = null;
+        _plan = null;
+        _addMessage = null;
+
+        var result = await BasketPlannerController.ProposeBasketAsync(_peopleCount, _budget.Value, string.IsNullOrWhiteSpace(_dietaryTag) ? null : _dietaryTag);
+
+        // ActionResult<T> doesn't throw across this in-process call the way it would over real
+        // HTTP — same ConflictObjectResult convention every other AI feature here uses to signal
+        // "AI not configured/available" or a validation failure.
+        if (result.Result is ConflictObjectResult conflict)
+        {
+            _error = conflict.Value?.ToString() ?? "The AI basket planner isn't available right now.";
+        }
+        else if (result.Value is not null)
+        {
+            _plan = result.Value;
+            _approved = _plan.Items.Select(i => i.Package.Id).ToHashSet();
+        }
+
+        _planning = false;
+    }
+
+    private void ToggleApproved(Guid packageId, bool isApproved)
+    {
+        if (isApproved)
+            _approved.Add(packageId);
+        else
+            _approved.Remove(packageId);
+    }
+
+    private async Task AddApprovedToCartAsync()
+    {
+        if (_plan is null || _approved.Count == 0 || _addingToCart)
+            return;
+
+        var firstApproved = _plan.Items.First(i => _approved.Contains(i.Package.Id)).Package;
+        if (CartService.WouldReplaceCart(firstApproved))
+        {
+            _pendingReplace = true;
+            return;
+        }
+
+        await AddApprovedItemsAsync();
+    }
+
+    private async Task ConfirmReplaceCartAsync()
+    {
+        _pendingReplace = false;
+        await AddApprovedItemsAsync();
+    }
+
+    private async Task AddApprovedItemsAsync()
+    {
+        if (_plan is null)
+            return;
+
+        _addingToCart = true;
+        var added = 0;
+        foreach (var item in _plan.Items.Where(i => _approved.Contains(i.Package.Id)))
+        {
+            await CartService.AddAsync(item.Package, item.Quantity);
+            added++;
+        }
+
+        _addMessage = added == 1 ? "Added 1 package to your basket." : $"Added {added} packages to your basket.";
+        _addingToCart = false;
+    }
+}
