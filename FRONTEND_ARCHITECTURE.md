@@ -47,12 +47,14 @@ Components/
 │   ├── Home.razor                # / — storefront browse/search/filter
 │   ├── BasketPlanner.razor       # /plan-basket — Phase 4 AI budget/rescue-basket planner
 │   ├── BusinessDetail.razor      # /businesses/{Id} — packages + reviews + favorite + add to cart
+│   ├── BusinessApply.razor       # /businesses/apply — Phase 9 self-service business signup
 │   ├── Impact.razor              # /impact — Phase 11 monthly kg-saved leaderboard, opt-in toggle
 │   ├── PaymentReturn.razor       # /checkout/return — Stripe success redirect landing page, confirms payment
 │   ├── PaymentCancel.razor       # /checkout/cancel — Stripe cancel redirect landing page
+│   ├── AccountSettings.razor     # /account/settings — display name + change password, any signed-in role
 │   ├── Orders.razor              # /orders — customer order history + cancel + reorder
 │   ├── OrderPickupPass.razor     # /orders/pickup/{Id} — QR code(s) for a Confirmed order, splittable into several
-│   ├── OrderScan.razor(.js)      # /orders/scan — manager camera scanner
+│   ├── OrderScan.razor(.js)      # /orders/scan — manager camera scanner + manual order-number lookup fallback
 │   ├── OrderValidate.razor       # /orders/validate/{Id}/{PassId} — confirm-pickup landing page (scanned or typed)
 │   ├── OrderValidateLegacy.razor # /orders/validate/{Id} — pre-multi-pass QR redirects here, then on to OrderValidate
 │   ├── Login.razor / Register.razor
@@ -63,8 +65,10 @@ Components/
 │   ├── Packages.razor / PackageForm.razor
 │   ├── PackageTemplates.razor    # /packages/templates — recurring "repeat daily" template management
 │   ├── OrderManagement.razor     # /orders/manage — confirm/complete/cancel + CSV export
-│   ├── Payments.razor            # /payments — manager/admin payout ledger
+│   ├── Payments.razor            # /payments — manager/admin payout ledger + its own CSV export
 │   ├── Users.razor               # /users — role + business-manager assignment
+│   ├── Reports.razor             # /reports — Phase 9 admin moderation queue (open reports)
+│   ├── AuditLog.razor            # /audit-log — Phase 9 admin read-only action history
 │   └── Types.razor               # /types — Phase 11 admin CRUD for BusinessType/PackageType
 │
 └── Shared/
@@ -101,6 +105,9 @@ wwwroot/
 ```razor
 <head>
     ...
+    <link rel="preconnect" href="https://fonts.googleapis.com"/>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:...&family=Hanken+Grotesk:...&family=JetBrains+Mono:...&display=swap" rel="stylesheet"/>
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]"/>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"/>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-..." crossorigin=""/>
@@ -117,6 +124,8 @@ wwwroot/
 <script src="js/site.js"></script>
 </body>
 ```
+
+Google Fonts is the one other CDN dependency besides `bootstrap-icons`/Leaflet — three families (`Fraunces` for display headings, `Hanken Grotesk` for body text, `JetBrains Mono` for the order-ticket number/QR labels), wired up as CSS custom properties in `app.css`'s design tokens (§13) rather than applied ad hoc per element.
 
 `@rendermode="InteractiveServer"` on `<Routes>` is what turns the *entire* app interactive over one persistent SignalR circuit — every `@page` in this project also carries its own explicit `@rendermode InteractiveServer`, which is redundant given the ancestor already set it, but keeps each page's rendering mode visible and self-documenting at the point of use rather than requiring a reader to know it's inherited from `App.razor`. `Netrom-Eco-Meal.styles.css` is the auto-generated bundle of every `*.razor.css` CSS-isolation file in the project (currently just `MainLayout.razor.css`, `NavMenu.razor.css`, `ReconnectModal.razor.css`) — everything else styles through the single global `app.css`, deliberately, so the visual language stays in one place instead of fragmenting across dozens of scoped stylesheets (see §13).
 
@@ -162,7 +171,7 @@ The `NotAuthorized` branch deliberately splits into two different experiences ba
   ```
   This fires from inside `Routes.razor`'s `NotAuthorized` branch — at that point, for an unauthenticated visitor, no meaningful circuit/interactivity has been established yet for the target page, so a soft navigation isn't available; the comment in the source is explicit about this being a hard requirement, not a stylistic choice.
 
-`DefaultLayout="typeof(Layout.MainLayout)"` only applies when a page doesn't specify its own `@layout` — every customer-facing page overrides it with `@layout PublicLayout`, and the two auth pages with `@layout EmptyLayout` (see §4).
+`DefaultLayout="typeof(Layout.MainLayout)"` only applies when a page doesn't specify its own `@layout` — every customer-facing page overrides it with `@layout PublicLayout`, and the chrome-free auth/Stripe-redirect pages with `@layout EmptyLayout` (see §4).
 
 `NotFoundPage="typeof(Pages.NotFound)"` handles client-side "no route matched." Separately, `Program.cs` wires `app.UseStatusCodePagesWithReExecute("/not-found", ...)` so a raw HTTP 404 (a bad static-asset path, etc.) re-executes the same page rather than showing a different one — the two 404 paths (router-level vs status-code-level) converge on identical UI.
 
@@ -174,11 +183,11 @@ One consequence worth knowing: when `NotFoundPage` renders via the Router's in-c
 
 | Layout | Used by | Shell |
 |---|---|---|
-| `PublicLayout` | Home, BusinessDetail, BusinessApply, Orders, OrderPickupPass, AccessDenied, NotFound | Sticky header (logo, notification bell, orders link, basket button + badge, dashboard link if staff, "list your business" link for Customer/BusinessManager, logout), `@Body`, footer. Owns the `CartPanel` and `NotificationPanel`, and the cart's open/closed state |
-| `MainLayout` | Dashboard, Businesses(+Form), Packages(+Form), OrderManagement, Payments, Users, Reports, AuditLog, OrderScan, OrderValidate, OrderValidateLegacy | Fixed left sidebar (`NavMenu`) + `<main>` content area — the classic admin-panel shell. Also owns `NotificationPanel` |
-| `EmptyLayout` | Login, Register | Just `@Body` — no header, no sidebar, no footer; the login/register cards center themselves entirely via `app.css`'s `.login-page`/`.login-card` |
+| `PublicLayout` | Home, BusinessDetail, BusinessApply, Orders, OrderPickupPass, BasketPlanner, Impact, AccountSettings, AccessDenied, NotFound | Sticky header (logo, impact-leaderboard trophy link, notification bell, AI plan-basket sparkle for Customer, orders link + basket button/badge for Customer, dashboard link for staff, "list your business" link for Customer/BusinessManager, account-settings gear icon, logout), `@Body`, footer. Owns the `CartPanel` and (`AuthorizeView`-gated) `NotificationPanel`, and the cart's open/closed state |
+| `MainLayout` | Dashboard, Businesses(+Form), Packages(+Form), PackageTemplates, OrderManagement, Payments, Users, Reports, AuditLog, Types, OrderScan, OrderValidate, OrderValidateLegacy | Fixed left sidebar (`NavMenu`) + `<main>` content area — the classic admin-panel shell. Also owns `NotificationPanel` |
+| `EmptyLayout` | Login, Register, ForgotPassword, ResetPassword, ConfirmEmail, PaymentReturn, PaymentCancel | Just `@Body` — no header, no sidebar, no footer; the login/register cards and the Stripe redirect landing pages all center themselves entirely via `app.css`'s `.login-page`/`.login-card`/`.cart-confirmation` (see §8) |
 
-`MainLayout`'s `.page`/`.sidebar` (`MainLayout.razor.css`) are sized `height: 100dvh`, not `100vh` — `vh` is the *largest possible* viewport and ignores transient browser chrome (an address bar, a devtools/automation banner), so a `100vh`-tall sidebar can render a few px taller than what's actually visible, pushing its footer past the real bottom edge. `dvh` tracks the actual visible viewport instead.
+`MainLayout`'s `.page`/`.sidebar` (`MainLayout.razor.css`) are sized `height: 100dvh`, not `100vh` — `vh` is the *largest possible* viewport and ignores transient browser chrome (an address bar, a devtools/automation banner), so a `100vh`-tall sidebar can render a few px taller than what's actually visible, pushing its footer past the real bottom edge. `dvh` tracks the actual visible viewport instead. `.page` also carries `overflow-x: hidden` — a safety net, not the thing that actually scrolls a wide table: a mobile-width admin table was dragging the whole page (header/sidebar included) into horizontal scroll before this was added, even though the table already sits inside Bootstrap's own `.table-responsive` (`overflow-x: auto`). That one line stops the overflow from escaping upward past `.page`; `.table-responsive` still owns the actual scrolling.
 
 **Both layouts render `<NotificationPanel/>` as a sibling of `.sidebar`/`.public-header`, never nested inside either.** `.sidebar` and `.public-header` are both `position: sticky`, and `position: sticky` *always* establishes a new CSS stacking context (unlike `position: relative`, which only does with a non-auto `z-index`) — regardless of `z-index`. A `position: fixed` popup nested inside one of those elements still computes its on-screen coordinates against the viewport correctly, but its paint order gets trapped *inside* that stacking context, so the whole sidebar/header subtree (popup included) paints as one atomic unit at its slot in the DOM — which is before `<main>`. `<main>`'s content then paints on top and visually covers the popup, even though every computed style (`z-index`, `opacity`, `display`) looks completely correct in devtools. This is why `NotificationBell` (the trigger, kept in the sidebar/header) and `NotificationPanel` (the actual popup) are two separate components sharing state through `NotificationPanelState` — see §5 — rather than one component like `ConfirmDialog`/`ReportDialog`, which get away with rendering inline because they're only ever used from page components inside `<main>`, which has no stacking-context-creating ancestor.
 
@@ -188,15 +197,25 @@ One consequence worth knowing: when `NotFoundPage` renders via the Router's in-c
 @inject CartService CartService
 @inject ClientTimeZoneService ClientTimeZoneService
 ...
+<a href="/impact" class="public-cart-btn">...</a>          <!-- both AuthorizeView branches, see below -->
 <NotificationBell TriggerClass="public-cart-btn"/>
-<a href="/orders" class="public-cart-btn">...</a>
-<button @onclick="ToggleCart">
-    <i class="bi bi-basket2"></i>
-    @if (CartService.TotalCount > 0) { <span class="public-cart-badge">@CartService.TotalCount</span> }
-</button>
+@if (context.User.IsInRole(AppRoles.Customer))
+{
+    <a href="/plan-basket" class="public-cart-btn">...</a>  <!-- ✨ bi-stars, AI basket planner, §6 -->
+    <a href="/orders" class="public-cart-btn">...</a>
+    <button @onclick="ToggleCart">
+        <i class="bi bi-basket2"></i>
+        @if (CartService.TotalCount > 0) { <span class="public-cart-badge">@CartService.TotalCount</span> }
+    </button>
+}
+<a href="/account/settings" class="public-cart-btn">...</a>
 ...
 <CartPanel @bind-IsOpen="_cartOpen"/>
-<NotificationPanel/>
+@* Gated the same as MainLayout's — an anonymous visitor has no bell to open it with, so
+   there's no reason to start its 30s polling timer for them (§5, §12). *@
+<AuthorizeView>
+    <Authorized><NotificationPanel/></Authorized>
+</AuthorizeView>
 
 @code {
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -216,9 +235,21 @@ Both `RestoreAsync` and `InitializeAsync` are deferred to `OnAfterRenderAsync(fi
 
 **Impact leaderboard trophy icon (Phase 11)**: unlike every other header control, this one is duplicated into *both* the `Authorized` and `NotAuthorized` branches of `PublicLayout`'s `<AuthorizeView>` rather than gated to one — `/impact` itself has no `[Authorize]` (§6 Impact leaderboard), so the link needs to be reachable by an anonymous visitor too, and `<AuthorizeView>`'s two branches are mutually exclusive, so there's no single place outside both that would render for everyone.
 
+**AI basket planner sparkle icon**: `bi-stars`, gated to `context.User.IsInRole(AppRoles.Customer)` only (unlike the basket/orders icons, which share that same `if`) — points at `/plan-basket` (§6 AI budget/basket planner).
+
+**Account settings icon**: `bi-person-gear`, links to `/account/settings` — the one header icon with no role gate beyond plain `<AuthorizeView>`, since every signed-in role (Customer, BusinessManager, Admin) has a name/password to manage. `NavMenu` carries the identical link (below) so staff reach the same page from the sidebar instead of the header.
+
+### AccountSettings — profile & password
+
+**File:** `Components/Pages/AccountSettings.razor` — `@page "/account/settings"`, `@layout PublicLayout`, `[Authorize]` (any signed-in role).
+
+Two independent cards, not one form: a plain `EditForm`/`InputText` for the display name (`AuthController.UpdateNameAsync`, in-process like everywhere else), and — reusing the exact pattern `Login.razor` already established — a raw HTML `<form method="post" action="api/auth/change-password" data-enhance="false">` for the password, not an `EditForm`. `ChangePasswordFormAsync` needs a real HTTP response to refresh the auth cookie's security stamp, which an in-process Blazor circuit call can't provide; `data-enhance="false"` stops `blazor.web.js`'s enhanced navigation from swallowing the `?pwError=`/`?pwChanged=` redirect the endpoint responds with. Reachable from both chromes: the header's gear icon (`PublicLayout`, above) for a customer, and a plain "Account Settings" row in `NavMenu` (below) for staff — same page either way, since a password belongs to the account, not the role.
+
 ### NavMenu — role-aware sidebar
 
-Plain `<AuthorizeView Roles="@AppRoles.Admin">` gates the "User Roles", "Reports", "Audit Log", and (Phase 11) "Types" nav links; every other link (Dashboard, Businesses, Packages, Orders) is visible to both `Admin` and `BusinessManager` — the actual data scoping (a manager only sees the business or businesses they're staff of) happens page-side, not by hiding nav links per role. The sidebar footer shows the signed-in user's initial-avatar, email, and a role label resolved by a local `DisplayRole` switch expression, plus the same `NotificationBell` trigger the public header uses, with `TriggerClass="sidebar-notif-btn"` for the icon — the popup itself renders from `MainLayout`, not from here (§4, §12).
+Plain `<AuthorizeView Roles="@AppRoles.Admin">` gates the "User Roles", "Reports", "Audit Log", and (Phase 11) "Types" nav links; every other link (Dashboard, Businesses, Packages, Orders, Payments, Account Settings) is visible to both `Admin` and `BusinessManager` — the actual data scoping (a manager only sees the business or businesses they're staff of) happens page-side, not by hiding nav links per role. The sidebar footer shows the signed-in user's initial-avatar, email, and a role label resolved by a local `DisplayRole` switch expression, plus the same `NotificationBell` trigger the public header uses, with `TriggerClass="sidebar-notif-btn"` for the icon — the popup itself renders from `MainLayout`, not from here (§4, §12).
+
+**"Admin Panel" / "Manager Panel" subtitle**: this sidebar is the one `DefaultLayout` shared by both `Admin` and `BusinessManager` (§3), and the brand subtitle under the logo used to hardcode "Admin Panel" regardless of who was actually signed in — a plain manager saw a title implying admin privileges they don't have. Now a small `<AuthorizeView Roles="@AppRoles.Admin">` picks "Admin Panel" for the `Authorized` branch and "Manager Panel" for `NotAuthorized`, so the label always matches the viewer's real role.
 
 **Business switcher**: for a `BusinessManager`, `AuthorizeView Roles="@AppRoles.BusinessManager"` wraps a block driven by `ManagedBusinessContext.MyBusinesses.Count` — zero businesses renders nothing, one renders a plain "current business" label, and more than one renders an `AnchoredDropdown` (`role-badge`-styled, matching the sidebar's other pill controls) listing every business the manager staffs, with a check mark on `ManagedBusinessContext.SelectedBusinessId`. `NavMenu.OnInitializedAsync` calls `ManagedBusinessContext.EnsureLoadedAsync()` and subscribes to its `OnChange` the same way every other consumer of a cross-cutting client service does (§5) — picking a different business calls `ManagedBusinessContext.SelectAsync`, which persists the choice and fires `OnChange`, and every business-scoped page (Dashboard, Businesses, Packages, PackageForm, PackageTemplates, OrderManagement) re-renders scoped to the new selection without a page navigation.
 
@@ -226,7 +257,7 @@ Plain `<AuthorizeView Roles="@AppRoles.Admin">` gates the "User Roles", "Reports
 
 ## 5. Cross-Cutting Client Services
 
-Blazor Server has no React-style Context API, but three `Scoped` services fill the identical role — injected wherever needed, holding state for the circuit's lifetime, and exposing a plain C# `event Action? OnChange` that consuming components subscribe to in `OnInitialized`/unsubscribe in `Dispose` (`IDisposable`) so a mutation anywhere re-renders every interested component without prop-drilling.
+Blazor Server has no React-style Context API, but four `Scoped` services fill the identical role — injected wherever needed, holding state for the circuit's lifetime, and exposing a plain C# `event Action? OnChange` that consuming components subscribe to in `OnInitialized`/unsubscribe in `Dispose` (`IDisposable`) so a mutation anywhere re-renders every interested component without prop-drilling.
 
 ### CartService
 
@@ -363,20 +394,45 @@ AppRoles.Customer)]`, `@layout PublicLayout`; linked from `PublicLayout.razor`'s
 ```csharp
 private async Task PlanAsync()
 {
-    var result = await BasketPlannerController.ProposeBasketAsync(_peopleCount, _budget.Value,
-        string.IsNullOrWhiteSpace(_dietaryTag) ? null : _dietaryTag);
-    if (result.Result is ConflictObjectResult conflict)
-        _error = conflict.Value?.ToString() ?? "The AI basket planner isn't available right now.";
-    else if (result.Value is not null)
+    if (_planning || _budget is not > 0 || _peopleCount < 1) return;
+
+    _planning = true;
+    _error = null;
+    _plan = null;
+
+    try
     {
-        _plan = result.Value;
-        _approved = _plan.Items.Select(i => i.Package.Id).ToHashSet();
+        var result = await BasketPlannerController.ProposeBasketAsync(_peopleCount, _budget.Value,
+            string.IsNullOrWhiteSpace(_dietaryTag) ? null : _dietaryTag);
+        if (result.Result is ConflictObjectResult conflict)
+            _error = conflict.Value?.ToString() ?? "The AI basket planner isn't available right now.";
+        else if (result.Value is not null)
+        {
+            _plan = result.Value;
+            _approved = _plan.Items.Select(i => i.Package.Id).ToHashSet();
+        }
+    }
+    catch (Exception)
+    {
+        // Belt-and-braces alongside BasketPlannerController's own try/catch: a slow local model
+        // can time out with a raw OperationCanceledException that isn't wrapped into a
+        // ConflictObjectResult, which would otherwise leave _planning stuck true forever — spinner
+        // spinning, button disabled, no feedback for the customer.
+        _error = "The AI basket planner is taking too long to respond — please try again in a moment.";
+    }
+    finally
+    {
+        _planning = false;
     }
 }
 ```
 
 Same `ConflictObjectResult`-means-"AI not configured" convention as the AI search bar and
-`PackageForm.razor`'s "Write it for me" button. The form is just three inputs — headcount,
+`PackageForm.razor`'s "Write it for me" button. The `try`/`catch`/`finally` is the belt-and-braces
+half of that convention — `ConflictObjectResult` covers every failure `BasketPlannerAgent` itself
+catches and reports, but a slow local Ollama model can time out with a raw, unwrapped exception
+instead; without the wrapper here, that path left `_planning` stuck `true` with no error shown,
+the spinner spinning forever. The form is just three inputs — headcount,
 budget (RON), and an optional dietary/allergen `<select>` reusing the same two-`<optgroup>`
 markup as Home's dietary filter — and `ProposeBasketAsync` (`BACKEND_ARCHITECTURE.md` §5/§6)
 returns a fully-server-validated `BasketPlan`: every `Package` in it is real, so the page never
@@ -649,6 +705,8 @@ function tryNavigate(decoded) {
 ```
 This is a deliberate security boundary, not just parsing convenience: a maliciously crafted QR code (or a genuine QR from some other app pointed at this camera by mistake) **cannot** redirect an authenticated manager's session off-app, because `tryNavigate` only ever calls `location.assign` for same-origin URLs matching the exact `/orders/validate/{guid}/{guid}` shape (order ID, then pass ID) — anything else is silently ignored and the scan loop just keeps running. A successful match does a **real browser navigation** (`location.assign`), not a callback into the Blazor circuit — the scan result reaches `OrderValidate.razor` the same way a manually-typed URL would. Getting this pattern out of sync with the actual route shape is a real, silent failure mode worth watching for: it fails closed (the scan loop just keeps running instead of navigating) rather than throwing anywhere visible, which is exactly what happened here when the route grew a second `{PassId:guid}` segment and this pattern wasn't updated in the same change.
 
+**Manual lookup fallback**: below the viewfinder, "No camera, or the code won't scan? Look the order up instead" — a plain text input (order number, e.g. "021") plus a "Find order" button, submittable on Enter. `ManualLookupAsync` calls the same `OrderController.GetOrdersForManagementPagedAsync` search every other manager list page uses, scoped the identical way (`null` for an admin — searches every business; `ManagedBusinessContext.SelectedBusinessId` for a manager — passing `null` there isn't "search all mine," it's rejected outright by `OrderService.ResolveManagerBusinessIdAsync`), hard-filtered to `OrderStatuses.Confirmed` since only a Confirmed order has a live, unredeemed pass to confirm. Each match renders as a row: a single-pass order gets one "Confirm pickup" button straight to `/orders/validate/{orderId}/{passId}`, a multi-pass order gets one button per pass (`pass.Label`) — same "don't guess which pass" principle `OrderValidateLegacy` applies below. This exists for the same reason a QR scanner needs a fallback at all: a torn/dirty screen, no camera hardware, or a customer who just reads their order number aloud at the counter.
+
 ### OrderValidate — the landing page
 
 ```razor
@@ -812,6 +870,8 @@ A manager's `businessId` (both for the paged list and for `ExportHref` above) co
 
 Deliberately **not** a new backend surface — it calls the exact same `OrderController.GetOrdersForManagementPagedAsync` `OrderManagement.razor` does (same `ManagedBusinessContext`/`_businessFilter` scoping split, same `Debouncer`-gated reload, same `ForbiddenPanel` fallback for a staffless manager), just reading `order.Payment` off each row instead of rendering the status-change action buttons. Stat cards up top — "Collected (this page)" / "Refunded (this page)", plus a third "Refund failed (this page)" count that only renders when non-zero — are computed client-side from the currently-loaded page (`_paged.Items.Where(...).Sum(...)`/`.Count(...)`), not a separate aggregate query; "this page" in the label is accurate, not a rounding shortcut — switching pages recomputes all three from whatever page just loaded. No write actions live here at all — refunds (and the occasional `RefundFailed`) only ever happen as a side effect of `OrderService.ApplyStatusChangeAsync`'s Cancelled transition (`BACKEND_ARCHITECTURE.md` §5), never a button on this page.
 
+**Its own CSV export**: a date-range picker (`_exportFrom`/`_exportTo`) plus a plain `<a href>` "Export CSV" button, the identical `<a href target="_blank">`-not-a-controller-call shape `OrderManagement.razor` uses (above) and for the same reason — a file download is an HTTP-level concept, not something an in-process controller call can hand back. It hits a *different* route on the same controller, though: `OrderExportController`'s `/api/payments/export` rather than `/api/orders/export`. Business scoping mirrors the page itself rather than duplicating `_businessFilter`/`ManagedBusinessContext` logic inline: an admin's export takes `businessId` from the same `_businessFilter` dropdown the table already uses, a manager's takes it from `ManagedBusinessContext.SelectedBusinessId` directly (not a page-local filter — managers don't get one here, same as the table above it).
+
 ### Users
 
 Admin-only role management. Two independent `AnchoredDropdown`s per row (role, and — only for `BusinessManager` rows — business assignment), deliberately mutually exclusive (closing one when the other opens, so only one is ever open at a time). The business column is the same removable-chips-plus-add-dropdown shape `Businesses.razor`'s Staff column uses (§11 above), just inverted — one row per user, chips for every business they're staff of (`AssignedBusinesses(user.Id)`), and an "add business" `AnchoredDropdown` listing every business not already assigned that **stays open across multiple picks**, same as the Staff column. Both call the same `BusinessController.AddStaffAsync`/`RemoveStaffAsync` `Businesses.razor` does — there's exactly one staff-assignment backend surface, just two admin entry points into it (by business, or by user). Role changes and business (re)assignments both re-fetch the user list afterward, since `UserService.UpdateRoleAsync` can auto-release every business a user staffed server-side as a side effect of a role change away from `BusinessManager` (see `BACKEND_ARCHITECTURE.md` §7) — the UI has no way to know that happened without asking again.
@@ -847,7 +907,7 @@ Delete still goes through `ConfirmDialog` (§12) — a single shared dialog inst
 | `ReportDialog` (Phase 9) | Same `.confirm-backdrop`/`.confirm-dialog` shell as `ConfirmDialog` (both capped at `max-height: calc(100vh - 3rem)` with `overflow-y: auto`, so a tall message/reason can't push the buttons off a short viewport), plus a required reason `<textarea>` — the Submit button stays disabled until non-whitespace text is entered. Optional `Title`/`Message`/`Placeholder`/`ConfirmLabel` parameters default to the customer-facing report copy ("Report {TargetLabel}" / "Submit report"), used as-is by the report action on `BusinessDetail.razor`/`PackageDetailModal.razor` (submits via `ReportController.SubmitAsync`). The admin-facing Reject/Hide actions on `Businesses.razor`/`Packages.razor` (§11) pass their own copy instead ("Hide '{name}'?" / "Hide package", etc.) — those two call sites never touch `ReportController` at all, they just borrow the modal shape for its `EventCallback<string>` |
 | `ForbiddenPanel` / `NotFoundPanel` | Inline empty-state panels — the former for "wrong role," the latter for "this specific entity no longer exists" (distinct from the global 404 route, used by edit pages when a fetched-by-ID entity comes back null) |
 | `NotificationBell` / `NotificationPanel` | Split into a trigger (`NotificationBell`, rendered inside the sidebar footer / public header) and the popup itself (`NotificationPanel`, rendered once from each layout's top level, outside the sidebar/header entirely) sharing state through `NotificationPanelState` (§5) — not one component, because one component can't render in two DOM locations at once, and the popup *has* to live outside the sidebar/header's subtree (§4). Styled as a centered modal (`.notif-panel`, `position: fixed; top/left: 50%; transform: translate(-50%,-50%)`, `max-height: calc(100vh - 3rem)` with internal scroll) — the same family as `ConfirmDialog`/`ReportDialog`, chosen after a corner-pinned/`AnchoredDropdown`-based panel kept re-clipping against the sidebar's edge across several earlier fixes; centering plus a viewport-fraction max-height can't clip against any edge, on any screen size. A `System.Threading.Timer` on `NotificationPanelState` polls `GetMyUnreadCountAsync` every 30 seconds regardless of whether the panel is open, so the badge count stays fresh for e.g. a manager waiting on new orders; opening the panel separately fetches the actual list (`GetMyNotificationsAsync(20)`) on demand rather than keeping 20 rows in memory at all times. Unread items get a `--em-rescue` left accent bar rather than the generic dot the shared dropdowns use. `NotificationPanel`'s header also carries a bell-icon toggle for **web push** — `OnAfterRenderAsync(firstRender)` calls `PushSubscriptionController.GetPublicKey()` (hides the toggle entirely when `null`, i.e. `WebPush:*` isn't configured server-side — `BACKEND_ARCHITECTURE.md` §10) and `EcoMeal.push.getSubscriptionEndpoint()` (§14) to seed its on/off state without prompting for permission; clicking it calls `EcoMeal.push.subscribe`/`unsubscribe` then mirrors the result to `PushSubscriptionController.SubscribeAsync`/`UnsubscribeAsync`. Gated behind a bare `<AuthorizeView>` (any signed-in role, not just `Customer` — managers/admins get order-lifecycle pushes too) since subscribing needs a real `userId` to attach the row to |
-| `OrderDetailModal` / `PackageDetailModal` | Drill-down modals from a ticket/row click — same visual shell (`biz-modal-*`/`pkg-modal-*` CSS classes), one shows order line items + status, the other a package's full description/tags/price with an "Add to basket" action. `PackageDetailModal`'s `RatingAverage`/`ReviewCount` parameters are plain caller-computed numbers, not a fetch of its own — `BusinessDetail.razor` passes them in from `_reviews` (above); the `StarRating` only renders when `ReviewCount > 0`, so a never-reviewed package shows no rating rather than a misleading 0-star one |
+| `OrderDetailModal` / `PackageDetailModal` | Drill-down modals from a ticket/row click — same visual shell (`biz-modal-*`/`pkg-modal-*` CSS classes), one shows order line items + status, the other a package's full description/tags/price with an "Add to basket" action. `PackageDetailModal`'s `RatingAverage`/`ReviewCount` parameters are plain caller-computed numbers, not a fetch of its own — `BusinessDetail.razor` passes them in from `_reviews` (above); the `StarRating` only renders when `ReviewCount > 0`, so a never-reviewed package shows no rating rather than a misleading 0-star one. Its `.pkg-modal-hero` image banner only renders `@if (!string.IsNullOrWhiteSpace(Package.ImageUrl))` — a package with no photo used to still get the hero block, just empty; now it gets no hero section at all, same "nothing configured → no section" rule the business hours panel (§7) follows |
 | `Pagination` | Renders nothing at all when `TotalPages <= 1` — every paged list page is written to just drop the component in unconditionally rather than wrapping it in its own visibility check |
 | `StarRating` | One component, two modes: `Editable=false` renders a fractional-fill overlay (two stacked 5-star rows, the top one clipped to `Value/5 * 100%` width) for display; `Editable=true` renders a real 1-5 click/hover picker. Both business cards and the review form use the same component, just with different parameters |
 
@@ -855,39 +915,60 @@ Delete still goes through `ConfirmDialog` (§12) — a single shared dialog inst
 
 ## 13. CSS Design System
 
-**File:** `wwwroot/app.css` — a single ~3400-line stylesheet, no Sass/Less, no CSS-in-JS, no Tailwind. Organized into clearly delimited sections (`/* ── Section name ── */`), roughly in the order features were added:
+**File:** `wwwroot/app.css` — a single ~4100-line stylesheet, no Sass/Less, no CSS-in-JS, no Tailwind. Organized into clearly delimited sections (`/* ── Section name ── */`), roughly in the order features were added:
 
 ```
 Design tokens · Buttons · Sidebar nav · Content · Stat card accents · Table · Badges
 Role badges · Form focus · Login page · Sidebar user footer · Blazor error banner
-Misc · Public shell · Home hero · Home browse · Package grid · Add to basket
-Cart button + badge · Cart panel · Toast · Orders hero · Orders list
-Order ticket (signature element) · Packages bulk-action toolbar · Confirm dialog
-Manager order actions · Dashboard trend chart · Star rating · Business grid (home)
-Business detail page · Packages inside the business modal
+Misc · Public shell · Home hero · Home browse · Impact leaderboard · Package grid
+Add to basket · Cart button + badge · Cart panel · Toast · Orders hero · Orders list
+Order ticket (signature element) · Pickup pass (single-order QR page) · Account settings
+Multiple pickup passes · Packages bulk-action toolbar · Confirm dialog
+Manager order actions · Dashboard trend chart (+ axis row) · Star rating
+Business grid (home) · Business detail page · Packages inside the business modal
 Reviews inside the business modal · Package detail modal · Order detail modal
 Manager pickup scanner · Pickup validation page · Notification bell · Favorites
-Dietary tag badges
+Dietary tag badges · AI budget/basket planner
 ```
 
 ### Design tokens
 
 ```css
 :root {
-    --em-forest:     #0b1f13;   /* darkest brand green — hero backgrounds, QR foreground */
-    --em-forest-mid: #1a3a22;
-    --em-leaf:       #22c55e;   /* primary accent */
-    --em-leaf-mid:   #16a34a;   /* == --bs-primary, so Bootstrap's own utility classes match */
-    --em-leaf-dark:  #15803d;
-    --em-surface:    #f4f9f5;   /* page background */
-    --em-text:       #111827;
-    --em-muted:      #6b7280;
+    /* Two brand hues doing real work — herb-green for "fresh/rescued," rescue-orange for
+       "reduced, closing soon" — on a warm paper ground instead of a cool mint one. --em-ink
+       is tinted toward forest rather than neutral gray, so body copy reads as part of the
+       same family as the headlines instead of generic UI gray. */
+    --em-forest:     #0e2117;
+    --em-forest-mid: #1c3f28;
+    --em-leaf:       #2f9e5c;
+    --em-leaf-mid:   #1f8a4c;   /* == --bs-primary, so Bootstrap's own utility classes match */
+    --em-leaf-dark:  #1b7a44;
+    --em-paper:      #f5efe2;   /* warm page background, not the old cool mint */
+    --em-surface:    var(--em-paper);
+    --em-ink:        #1b2a1f;
+    --em-text:       var(--em-ink);
+    --em-muted:      #6f6656;
 
-    --em-rescue:      #c9971f;  /* amber accent lifted from the logo mark — used sparingly */
-    --em-rescue-soft: rgba(201, 151, 31, 0.22);
+    --bs-primary: #1f8a4c;      /* + -rgb, --bs-link-color(-hover), all retuned to match */
+    ...
+
+    /* Rescue-orange — a "reduced for quick sale" sticker color, not a decorative accent:
+       urgency badges, the hero stamp, and anything meaning "closing soon." */
+    --em-rescue:      #d9702f;
+    --em-rescue-dark: #b85a22;
+    --em-rescue-soft: rgba(217, 112, 47, 0.16);
+
+    --em-font-display: 'Fraunces', Georgia, 'Iowan Old Style', serif;
+    --em-font-body:    'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+    --em-font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+    --em-shadow-sm: ...; --em-shadow-md: ...; --em-shadow-lg: ...;
 }
 ```
-`--bs-primary`/`--bs-link-color` are overridden to the same `#16a34a` as `--em-leaf-mid`, so Bootstrap's own `.btn-primary`/link-color utilities blend in with the custom design language instead of clashing with it — the app doesn't fight Bootstrap, it retunes it.
+`--bs-primary`/`--bs-link-color` are overridden to the same `#1f8a4c` as `--em-leaf-mid`, so Bootstrap's own `.btn-primary`/link-color utilities blend in with the custom design language instead of clashing with it — the app doesn't fight Bootstrap, it retunes it.
+
+**Three typefaces, one job each** (§2 for how they're loaded): `--em-font-display` (Fraunces, a serif with real optical-size variation) on every heading and `.font-display` element — the one place the design language departs from Bootstrap's default sans, giving the brand a distinct voice on page titles, the hero, and the order-ticket stub. `--em-font-body` (Hanken Grotesk) is the default for `html, body` — everything not explicitly opted into the display or mono face falls back to it. `--em-font-mono` (JetBrains Mono) is reserved for `.font-mono` call sites — order numbers, QR-adjacent labels — where a fixed-width face reads as "a code/reference," not body copy.
 
 ### The "order ticket" — the signature visual element
 
@@ -978,6 +1059,10 @@ Every paginated list page in the app (`Home`, `Orders`, `Businesses`, `Packages`
 ### QR validate route hardening
 
 Covered in depth in §10 — worth restating here as a general principle: any code path that turns *untrusted decoded input* (a QR code's payload) into a navigation target must validate both origin and exact path shape before navigating, never just "looks like a URL." `OrderScan.razor.js`'s `tryNavigate` is the concrete instance of this in the codebase.
+
+### Date formatting must opt out of the server's own culture
+
+`Program.cs` sets the process-wide culture to `ro-RO`, needed so `.ToString("C")` renders prices as `lei` currency (`BACKEND_ARCHITECTURE.md` §10) — but that same culture setting silently leaks into every *other* `.ToString()` call on the same thread, including dates. A bare `pickupStart.ToString("MMM d, HH:mm")` renders through `ro-RO` as a lowercase, Romanian-abbreviated month ("sept." instead of "Sep") — technically correct for the culture, wrong for an app whose UI copy is otherwise all English. Every `MMM`/`HH:mm`-style date format across the page set (`Orders.razor`, `OrderManagement.razor`, `OrderPickupPass.razor`, `OrderValidate.razor`, `Dashboard.razor`, `Payments.razor`, `Reports.razor`, `AuditLog.razor`, `PackageTemplates.razor`, `BusinessDetail.razor`, `BusinessForm.razor`, `StarRating.razor`) now passes `CultureInfo.InvariantCulture` explicitly, or — for interpolated strings, where there's no single `.ToString(culture)` call to pass it to — wraps the whole expression in `FormattableString.Invariant($"...")`. `Components/_Imports.razor` carries a global `@using System.Globalization` so every `.razor` file can reach `CultureInfo` without its own `@using`. The Dashboard's `70,0%` progress-bar-width bug (§11 Business Analytics card) is the sibling failure mode of this same root cause — a decimal, not a date, hitting the same culture leak.
 
 ### Reorder needed (almost) no new backend surface
 

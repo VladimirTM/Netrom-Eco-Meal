@@ -79,7 +79,7 @@
                 @foreach (var entry in _paged.Items)
                 {
                     <tr>
-                        <td class="px-4 text-muted small">@entry.CreatedAt.ToString("MMM d, yyyy HH:mm")</td>
+                        <td class="px-4 text-muted small">@entry.CreatedAt.ToString("MMM d, yyyy HH:mm", CultureInfo.InvariantCulture)</td>
                         <td>@entry.ActorName</td>
                         <td>
                             <span class="badge rounded-pill px-2 py-1 bg-light text-muted border">@DisplayAction(entry.Action)</span>

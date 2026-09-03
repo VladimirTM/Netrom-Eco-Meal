@@ -209,7 +209,7 @@
                             {
                                 <li class="list-group-item d-flex justify-content-between align-items-center px-0" @key="closure.Id">
                                     <div>
-                                        <div class="small fw-semibold">@closure.StartDate.ToString("MMM d, yyyy") – @closure.EndDate.ToString("MMM d, yyyy")</div>
+                                        <div class="small fw-semibold">@closure.StartDate.ToString("MMM d, yyyy", CultureInfo.InvariantCulture) – @closure.EndDate.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)</div>
                                         @if (!string.IsNullOrWhiteSpace(closure.Reason))
                                         {
                                             <div class="text-muted small">@closure.Reason</div>
@@ -255,7 +255,7 @@
 
     <ConfirmDialog IsOpen="@(_pendingRemoveClosure is not null)"
                    Title="Remove closure?"
-                   Message="@(_pendingRemoveClosure is null ? "" : $"The closure from {_pendingRemoveClosure.StartDate:MMM d, yyyy} to {_pendingRemoveClosure.EndDate:MMM d, yyyy} will be removed. This can't be undone.")"
+                   Message="@(_pendingRemoveClosure is null ? "" : FormattableString.Invariant($"The closure from {_pendingRemoveClosure.StartDate:MMM d, yyyy} to {_pendingRemoveClosure.EndDate:MMM d, yyyy} will be removed. This can't be undone."))"
                    ConfirmLabel="Remove closure"
                    Busy="@_removingClosure"
                    OnConfirm="ConfirmRemoveClosureAsync"

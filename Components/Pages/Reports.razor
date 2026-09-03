@@ -63,7 +63,7 @@
                         </td>
                         <td class="text-muted">@view.Report.Reason</td>
                         <td>@view.ReporterName</td>
-                        <td class="text-muted small">@view.Report.CreatedAt.ToString("MMM d, yyyy")</td>
+                        <td class="text-muted small">@view.Report.CreatedAt.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)</td>
                         <td>
                             <div class="d-flex gap-2">
                                 <button class="btn btn-sm btn-outline-secondary" @onclick="() => _pendingDismiss = view">

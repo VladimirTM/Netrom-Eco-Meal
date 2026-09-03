@@ -12,7 +12,10 @@
             <i class="bi bi-x-lg"></i>
         </button>
 
-        <div class="pkg-modal-hero" style="@HeroStyle"></div>
+        @if (!string.IsNullOrWhiteSpace(Package.ImageUrl))
+        {
+            <div class="pkg-modal-hero" style="@HeroStyle"></div>
+        }
 
         <div class="pkg-modal-body">
             <span class="biz-modal-eyebrow">@Package.PackageType.Name</span>
@@ -109,9 +112,8 @@
     private bool _reportBusy;
     private bool _reportSent;
 
-    private string HeroStyle => string.IsNullOrWhiteSpace(Package?.ImageUrl)
-        ? "background-color: var(--em-forest);"
-        : $"background-image: url('{Package.ImageUrl}');";
+    // Only ever rendered when Package.ImageUrl is set — see the @if around .pkg-modal-hero.
+    private string HeroStyle => $"background-image: url('{Package?.ImageUrl}');";
 
     protected override void OnParametersSet()
     {

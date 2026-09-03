@@ -438,6 +438,12 @@ public class OrderService(
         if (!allowedTransition)
             throw new InvalidOperationException($"An order can't move from {currentStatusName} to {statusName}.");
 
+        // Mirrors ExpireNoShowOrdersAsync/GetOverduePickupOrdersAsync's own "all packages' pickup
+        // windows have closed" rule — a manager marking this by hand at the counter is bound by
+        // the same window as the automatic sweep, so no-show can't be used to skip a pickup early.
+        if (statusName == OrderStatuses.NoShow && order.OrderPackages.Any(op => op.Package.PickupEnd >= DateTime.UtcNow))
+            throw new InvalidOperationException("This order's pickup window hasn't closed yet — you can't mark it a no-show early.");
+
         if (statusName == OrderStatuses.Confirmed)
         {
             foreach (var line in order.OrderPackages)
@@ -462,11 +468,14 @@ public class OrderService(
                 CreatedAt = DateTime.UtcNow,
             });
         }
-        else if (currentStatusName == OrderStatuses.Confirmed && statusName is OrderStatuses.Cancelled or OrderStatuses.NoShow)
+        else if (currentStatusName == OrderStatuses.Confirmed && statusName == OrderStatuses.Cancelled)
         {
             foreach (var line in order.OrderPackages)
                 line.Package.Quantity += line.Quantity;
         }
+        // Deliberately NOT done for NoShow: the business already prepared and held this stock for
+        // the customer, so unlike a cancellation it was never returned to the shelf — releasing it
+        // back into Package.Quantity here would let the same physical unit be sold to someone else.
 
         // Refund on Cancelled, whichever state it came from — but deliberately not on NoShow: the
         // customer already reserved/held the food and didn't collect it, so the kept charge is
@@ -485,9 +494,10 @@ public class OrderService(
             throw new InvalidOperationException("Stock for this order just changed — please refresh and try again.");
         }
 
-        // Only reached once the transition actually saved — Confirm/Cancel/NoShow are exactly the
-        // transitions that move Package.Quantity (see above), and even Pending->Cancelled changes
-        // effective availability for other viewers by releasing this order's reservation.
+        // Only reached once the transition actually saved — Confirm/Cancel are exactly the
+        // transitions that move Package.Quantity (see above); NoShow deliberately doesn't. The
+        // broadcast still fires for every transition here since a status change is worth
+        // refreshing a viewer's page for even when Package.Quantity itself didn't move.
         stockBroadcaster.NotifyBusinessChanged(order.BusinessId);
 
         var auditAction = statusName switch

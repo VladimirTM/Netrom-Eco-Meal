@@ -162,8 +162,8 @@
                                 </span>
                             }
                         </td>
-                        <td class="text-muted small">@(order.Payment is null ? "—" : order.Payment.CreatedAt.ToLocalTime().ToString("MMM d, HH:mm"))</td>
-                        <td class="text-muted small">@(order.Payment?.RefundedAt is null ? "—" : order.Payment.RefundedAt.Value.ToLocalTime().ToString("MMM d, HH:mm"))</td>
+                        <td class="text-muted small">@(order.Payment is null ? "—" : order.Payment.CreatedAt.ToLocalTime().ToString("MMM d, HH:mm", CultureInfo.InvariantCulture))</td>
+                        <td class="text-muted small">@(order.Payment?.RefundedAt is null ? "—" : order.Payment.RefundedAt.Value.ToLocalTime().ToString("MMM d, HH:mm", CultureInfo.InvariantCulture))</td>
                     </tr>
                 }
                 </tbody>

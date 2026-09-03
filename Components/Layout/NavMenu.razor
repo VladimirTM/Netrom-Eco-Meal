@@ -10,7 +10,15 @@
         <img src="logo.png" alt="Eco Meal" class="brand-logo" />
         <div>
             <span class="fw-bold text-white d-block lh-1" style="font-size:0.95rem">Eco Meal</span>
-            <span class="text-white-50" style="font-size:0.72rem">Admin Panel</span>
+            @* This sidebar is the DefaultLayout for every authorized page (Components/Routes.razor),
+               shared by both Admin and BusinessManager — the subtitle used to hardcode "Admin Panel"
+               even for a plain manager, so it's labelled per the signed-in user's actual role instead. *@
+            <span class="text-white-50" style="font-size:0.72rem">
+                <AuthorizeView Roles="@AppRoles.Admin">
+                    <Authorized>Admin Panel</Authorized>
+                    <NotAuthorized>Manager Panel</NotAuthorized>
+                </AuthorizeView>
+            </span>
         </div>
     </a>
 </div>

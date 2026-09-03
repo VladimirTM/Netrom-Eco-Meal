@@ -94,7 +94,7 @@ else
                         {
                             <div class="biz-modal-closure-notice">
                                 <i class="bi bi-calendar-x"></i>
-                                Closed for the holidays until @closure.EndDate.ToString("MMM d, yyyy")@(string.IsNullOrWhiteSpace(closure.Reason) ? "." : $" — {closure.Reason}")
+                                Closed for the holidays until @closure.EndDate.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)@(string.IsNullOrWhiteSpace(closure.Reason) ? "." : $" — {closure.Reason}")
                             </div>
                         }
 
@@ -244,7 +244,7 @@ else
                                     <div class="biz-review-content">
                                         <div class="biz-review-top">
                                             <span class="biz-review-name">@review.User.Name</span>
-                                            <span class="biz-review-date">@ClientTimeZoneService.ToLocal(review.CreatedAt).ToString("MMM d, yyyy")</span>
+                                            <span class="biz-review-date">@ClientTimeZoneService.ToLocal(review.CreatedAt).ToString("MMM d, yyyy", CultureInfo.InvariantCulture)</span>
                                         </div>
                                         <div class="d-flex align-items-center gap-2 flex-wrap">
                                             <StarRating Value="@review.Rating" Size="0.75rem"/>
@@ -431,7 +431,7 @@ else
     {
         var start = ClientTimeZoneService.ToLocal(package.PickupStart);
         var end = ClientTimeZoneService.ToLocal(package.PickupEnd);
-        return $"{start:MMM d} · {start:HH:mm}–{end:HH:mm}";
+        return FormattableString.Invariant($"{start:MMM d} · {start:HH:mm}–{end:HH:mm}");
     }
 
     // Same "closing soon" window the home page's business sort cares about, just surfaced per

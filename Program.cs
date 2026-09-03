@@ -54,7 +54,14 @@ var ollamaBaseUrl = builder.Configuration["Ollama:BaseUrl"];
 if (!string.IsNullOrWhiteSpace(ollamaBaseUrl))
 {
     var ollamaModelId = builder.Configuration["Ollama:ModelId"] ?? "qwen2.5:7b";
-    builder.Services.AddSingleton<IChatClient>(new OllamaApiClient(new Uri(ollamaBaseUrl), ollamaModelId));
+    // OllamaApiClient(Uri, string) builds its own HttpClient internally with HttpClient's default
+    // 100s Timeout — nowhere near enough for a tool-calling round-trip (search, then a JSON-schema
+    // basket proposal) against this model under CPU-only inference, which alone can take 100s+ just
+    // to process one large prompt. Constructing the HttpClient ourselves with a generous timeout is
+    // the only way to give slow local inference room to finish instead of the request being
+    // cancelled mid-generation (surfaced as a raw OperationCanceledException with nothing logged).
+    var ollamaHttpClient = new HttpClient { BaseAddress = new Uri(ollamaBaseUrl), Timeout = TimeSpan.FromMinutes(5) };
+    builder.Services.AddSingleton<IChatClient>(new OllamaApiClient(ollamaHttpClient, ollamaModelId));
 }
 
 builder.Services.AddRazorComponents()

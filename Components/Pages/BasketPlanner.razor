@@ -177,22 +177,35 @@
         _plan = null;
         _addMessage = null;
 
-        var result = await BasketPlannerController.ProposeBasketAsync(_peopleCount, _budget.Value, string.IsNullOrWhiteSpace(_dietaryTag) ? null : _dietaryTag);
-
-        // ActionResult<T> doesn't throw across this in-process call the way it would over real
-        // HTTP — same ConflictObjectResult convention every other AI feature here uses to signal
-        // "AI not configured/available" or a validation failure.
-        if (result.Result is ConflictObjectResult conflict)
+        try
         {
-            _error = conflict.Value?.ToString() ?? "The AI basket planner isn't available right now.";
-        }
-        else if (result.Value is not null)
-        {
-            _plan = result.Value;
-            _approved = _plan.Items.Select(i => i.Package.Id).ToHashSet();
-        }
+            var result = await BasketPlannerController.ProposeBasketAsync(_peopleCount, _budget.Value, string.IsNullOrWhiteSpace(_dietaryTag) ? null : _dietaryTag);
 
-        _planning = false;
+            // ActionResult<T> doesn't throw across this in-process call the way it would over real
+            // HTTP — same ConflictObjectResult convention every other AI feature here uses to signal
+            // "AI not configured/available" or a validation failure.
+            if (result.Result is ConflictObjectResult conflict)
+            {
+                _error = conflict.Value?.ToString() ?? "The AI basket planner isn't available right now.";
+            }
+            else if (result.Value is not null)
+            {
+                _plan = result.Value;
+                _approved = _plan.Items.Select(i => i.Package.Id).ToHashSet();
+            }
+        }
+        catch (Exception)
+        {
+            // Belt-and-braces alongside BasketPlannerController's own try/catch: a slow local
+            // model can time out with a raw OperationCanceledException that isn't wrapped into a
+            // ConflictObjectResult (see BasketPlannerAgent), which would otherwise leave _planning
+            // stuck true forever with the button disabled and no feedback for the customer.
+            _error = "The AI basket planner is taking too long to respond — please try again in a moment.";
+        }
+        finally
+        {
+            _planning = false;
+        }
     }
 
     private void ToggleApproved(Guid packageId, bool isApproved)

@@ -43,7 +43,8 @@ whichever one they pick in the sidebar switcher:
   business photo, from the business edit page
 - Confirm, complete or cancel orders placed at the currently selected business on
   `/orders/manage` — cancelling automatically refunds the customer's Stripe payment
-- Scan a customer's pickup QR code on `/orders/scan` to confirm pickup
+- Scan a customer's pickup QR code on `/orders/scan` to confirm pickup, or look the order up by
+  number instead when scanning isn't practical
 - See stats scoped to the currently selected business on `/dashboard` (including a
   sell-through rate and busiest pickup hours), a payout ledger of every payment collected
   (and refunded) on `/payments`, and export order history as CSV
@@ -64,6 +65,9 @@ whichever one they pick in the sidebar switcher:
   migration needed for a new category, and a type still in use can't be deleted
 - See who did what — role changes, business create/edit/delete/staffing, approvals,
   moderation — on `/audit-log`
+
+Every role also gets `/account/settings` (a gear icon in the header) to update their display
+name or change their password.
 
 ## Stack
 
@@ -246,7 +250,7 @@ A seeded admin account is created automatically:
 - **Password:** Admin123!
 
 Change `SeedAdmin__Email` / `SeedAdmin__Password` in `docker-compose.test.yml` before
-running if you don't want the default admin credentials. Three demo accounts (see
+running if you don't want the default admin credentials. Five demo accounts (see
 [Seed data](#seed-data) below) are also created regardless of that setting, so you can log
 in as a customer or business manager and see the app already in use.
 

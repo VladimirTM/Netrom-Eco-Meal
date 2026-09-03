@@ -29,6 +29,10 @@ one branded template with a single call-to-action button ("Confirm my account" /
 "Reset my password"); the reset link doesn't reveal whether the email address exists, so it's
 safe against account enumeration.
 
+Once signed in, the gear icon in the header (every role has one) opens `/account/settings` —
+update your display name, or change your password by entering the current one plus a new one
+twice. Both are separate forms, saved independently.
+
 ### Browse and find something to rescue
 
 The home page (`/`) is a live browse of every kitchen with something available right now. The
@@ -391,6 +395,11 @@ screen. A Confirmed order split across a group shows a small "👥 N" hint next 
 scanning a second one afterward just shows "This order was already picked up using a different
 pass."
 
+No camera, or the code just won't scan? A **manual lookup** below the viewfinder takes an order
+number instead — type or paste it and **Find order** lists any Confirmed match (scoped to your
+current business, same as everywhere else) with a **Confirm pickup** button, or one button per
+pass if that order was split across a group.
+
 ### Keep an eye on things
 
 `/dashboard` shows package and order counts for your currently selected business, plus a
@@ -415,7 +424,10 @@ days:
 payment status (Unpaid/Paid/Refunded/Refund failed), amount, and paid/refunded timestamps, plus
 two totals — "Collected" and "Refunded" — for whatever page of results you're currently looking
 at (not a platform-wide total). A third "Refund failed" tile appears next to them whenever the
-current page has at least one, so a failed automatic refund can't go unnoticed.
+current page has at least one, so a failed automatic refund can't go unnoticed. Its own
+**Export CSV** button (pick "Export from"/"Export to" dates first) exports the payment ledger —
+amount, currency, status, paid/refunded timestamps — separately from the order-focused export on
+`/orders/manage` above.
 
 ---
 

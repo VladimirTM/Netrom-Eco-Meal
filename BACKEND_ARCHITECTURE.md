@@ -64,9 +64,9 @@ Plain EF Core entity classes, no DTOs anywhere in the app — Razor components b
 
 | File | Role |
 |------|------|
-| `EcoMealDbContext.cs` | `IdentityDbContext<ApplicationUser>` — `DbSet<T>` for `Business`, `BusinessType`, `Order`, `OrderPackage`, `Package`, `PackageType`, `Status`, `Review`, `Notification`, `Favorite`, `PackageTemplate`, `Payment`, `PendingCheckout`, `AuditLog`, `Report`, `PushSubscription`; all Fluent API config lives inline in `OnModelCreating` (no separate `Configurations/` folder — the model is small enough that splitting it out would be pure ceremony) |
+| `EcoMealDbContext.cs` | `IdentityDbContext<ApplicationUser>` — `DbSet<T>` for `Business`, `BusinessStaff`, `BusinessType`, `Order`, `OrderPackage`, `OrderPickupPass`, `Package`, `PackageType`, `Status`, `Review`, `Notification`, `Favorite`, `PackageTemplate`, `Payment`, `PendingCheckout`, `AuditLog`, `Report`, `BusinessHours`, `BusinessClosure`, `PushSubscription`; all Fluent API config lives inline in `OnModelCreating` (no separate `Configurations/` folder — the model is small enough that splitting it out would be pure ceremony) |
 | `DbSeeder.cs` | Static `SeedAsync(services, configuration)` called once from `Program.cs` after `MigrateAsync()` — see [§9](#9-database-seeding) |
-| `Migrations/` | Notable ones: `AddOrderNumberSequenceAndPackageConcurrency` (the `order_numbers` DB sequence + `xmin` row-version column), `RemoveStalePackageSeedData` / `RemoveStaleBusinessSeedData` (cleaned up seed rows from an earlier, cruder seeding approach before `DbSeeder` existed), `AddPackageWeightKg`, `AddNotificationsFavoritesOrderCreatedAtPackageDietaryTags` (one migration bundling four Phase 2 features together), `AddGeolocationAndPackageTemplates` (`Business.Latitude`/`Longitude`, the `PackageTemplates` table, `Package.TemplateId`) |
+| `Migrations/` | Notable ones: `AddOrderNumberSequenceAndPackageConcurrency` (the `order_numbers` DB sequence + `xmin` row-version column), `RemoveStalePackageSeedData` / `RemoveStaleBusinessSeedData` (cleaned up seed rows from an earlier, cruder seeding approach before `DbSeeder` existed), `AddPackageWeightKg`, `AddNotificationsFavoritesOrderCreatedAtPackageDietaryTags` (one migration bundling four Phase 2 features together), `AddGeolocationAndPackageTemplates` (`Business.Latitude`/`Longitude`, the `PackageTemplates` table, `Package.TemplateId`), `AddBusinessStaff` (the `BusinessStaff` many-to-many, replacing `Business.ManagerId`), `AddPayments` (`Payments`/`PendingCheckouts`, backing real Stripe Checkout), `AddApprovalModerationAuditReports` (Phase 9's approval workflow, `AuditLog`, `Report`), `AddOrderPickupPasses` (the `OrderPickupPass` child entity, replacing the old implicit one-QR-per-order model) |
 
 ### 2.3 Repositories
 
@@ -233,6 +233,8 @@ public class Package
     public Guid? TemplateId { get; set; }           // set when a recurring template generated this instance
     public bool IsHidden { get; set; }              // moderation flag — hides from the storefront without deleting
     public string? HiddenReason { get; set; }
+    public DateTime? NearExpiryNudgeSentAt { get; set; }  // set once NearExpiryNudgeService has notified interested customers
+    public DateTime? MarkdownDismissedAt { get; set; }    // set when a manager dismisses the /packages markdown suggestion
     public Business Business { get; set; } = null!;
     public PackageType PackageType { get; set; } = null!;
     public PackageTemplate? Template { get; set; }
@@ -290,6 +292,7 @@ public class Order
     public Status Status { get; set; } = null!;
     public ICollection<OrderPackage> OrderPackages { get; set; } = [];
     public Payment? Payment { get; set; }           // null until CheckoutService confirms the Stripe payment
+    public ICollection<OrderPickupPass> PickupPasses { get; set; } = [];  // created on Confirm — see §3 OrderPickupPass
 }
 
 public class OrderPackage
@@ -477,7 +480,7 @@ public class AuditLog
     public DateTime CreatedAt { get; set; }
 }
 ```
-Phase 9's trust-and-safety record — who promoted/demoted a user, who created/edited/deleted/staffed a business, who approved/rejected/hid/unhid a business or package, who dismissed/actioned a report. Deliberately has **no** FK/navigation to its target: `TargetType`/`TargetId` are polymorphic (a `User`, `Business`, or `Package`), so `TargetName` is captured as plain text at write time instead of joined at read time — a renamed or deleted target doesn't retroactively make an old log entry unreadable. Written exclusively by `IAuditLogService.LogAsync`, called from *inside* `BusinessService`/`PackageService`/`UserService`/`ReportService` after a mutation has already succeeded (never exposed on a controller as a standalone write) — this is what guarantees an entry always reflects something that actually happened, rather than being a value a client could fabricate. `LogAsync` resolves `ActorUserId`/`ActorName` itself via `CurrentUserAccessor` + `UserManager<ApplicationUser>`, so callers only ever pass the action/target. The read side (`GetPagedAsync`, admin-only) backs `/audit-log` (`AuditLog.razor`). Indexed on `CreatedAt` — newest-first is the only sort.
+Phase 9's trust-and-safety record — who promoted/demoted a user, who created/edited/deleted/staffed a business (including its hours/closures), who approved/rejected/hid/unhid a business or package, who dismissed/actioned a report, and — added after Phase 9 — who confirmed/completed/cancelled/no-showed an order. Deliberately has **no** FK/navigation to its target: `TargetType`/`TargetId` are polymorphic (`User`, `Business`, `Package`, `Order`, `BusinessType`, or `PackageType` — `Constants.AuditTargetTypes`), so `TargetName` is captured as plain text at write time instead of joined at read time — a renamed or deleted target doesn't retroactively make an old log entry unreadable. Written exclusively by `IAuditLogService.LogAsync`, called from *inside* `BusinessService`/`PackageService`/`UserService`/`ReportService`/`OrderService` after a mutation has already succeeded (never exposed on a controller as a standalone write) — this is what guarantees an entry always reflects something that actually happened, rather than being a value a client could fabricate. `LogAsync` resolves `ActorUserId`/`ActorName` itself via `CurrentUserAccessor` + `UserManager<ApplicationUser>`, so callers only ever pass the action/target — `OrderService.ApplyStatusChangeAsync` (§5) leans on this: it always attempts the log call regardless of who's calling, and `LogAsync`'s own "no signed-in actor" guard is what would keep a hypothetical system-triggered caller from producing an entry, with no separate branch needed in `OrderService` itself. In practice `ApplyStatusChangeAsync` is only ever reached from an actual manager/admin/customer action (`UpdateStatusAsync`, `CancelMyOrderAsync`, `RedeemPickupPassAsync`) — the background sweeps (§8) mutate `Order.StatusId` directly instead and don't call it, so they never log to `AuditLog` at all. The read side (`GetPagedAsync`, admin-only) backs `/audit-log` (`AuditLog.razor`). Indexed on `CreatedAt` — newest-first is the only sort.
 
 #### Report
 ```csharp
@@ -576,11 +579,11 @@ The third, synchronous `Create` overload backs `BusinessRepository.GetPagedAsync
 
 ## 5. Service Layer
 
-Every service is `Scoped`. A few break that pattern deliberately: `OrderLifecycleSweepService`, `PackageTemplateGenerationService`, and `NearExpiryNudgeSweepService` are `BackgroundService`s (effectively singletons — see §8); `CartService`/`ClientTimeZoneService`/`ManagedBusinessContext` are `Scoped` but have no backing interface or repository — they're pure in-memory, per-circuit state with a JS-interop side door (documented in `FRONTEND_ARCHITECTURE.md` since they're really frontend concerns that happen to live in `Services/` alongside everything else); `SmtpEmailSender` (`IAppEmailSender`) is stateless and could be `Singleton` but is registered `Scoped` for consistency with everything else. `PackageStockBroadcaster` (Phase 12) is the one genuine `Singleton` — a plain pub/sub class with one C# event, `BusinessStockChanged`, deliberately shared across every circuit rather than living per-circuit like the group above. `OrderService`/`PackageService` call its `NotifyBusinessChanged(businessId)` right after any `SaveChangesAsync` that changes a package's effective stock (confirm/cancel/no-show, both background-sweep expiry paths, and every `PackageService` write except `GetForAnalyticsAsync`); `BusinessDetail.razor` (`FRONTEND_ARCHITECTURE.md` §7) subscribes to it to push live "sold out" updates to anyone with that business page open, without a separate SignalR hub.
+Every service is `Scoped`. A few break that pattern deliberately: `OrderLifecycleSweepService`, `PackageTemplateGenerationService`, and `NearExpiryNudgeSweepService` are `BackgroundService`s (effectively singletons — see §8); `CartService`/`ClientTimeZoneService`/`ManagedBusinessContext` are `Scoped` but have no backing interface or repository — they're pure in-memory, per-circuit state with a JS-interop side door (documented in `FRONTEND_ARCHITECTURE.md` since they're really frontend concerns that happen to live in `Services/` alongside everything else); `SmtpEmailSender` (`IAppEmailSender`) is stateless and could be `Singleton` but is registered `Scoped` for consistency with everything else. `PackageStockBroadcaster` (Phase 12) is the one genuine `Singleton` — a plain pub/sub class with one C# event, `BusinessStockChanged`, deliberately shared across every circuit rather than living per-circuit like the group above. `OrderService`/`PackageService` call its `NotifyBusinessChanged(businessId)` right after any `SaveChangesAsync` around a status/stock change worth refreshing a viewer's page for (confirm/cancel/no-show — including the manual no-show transition, which broadcasts even though it no longer moves `Package.Quantity` itself, see §5 OrderService — both background-sweep expiry paths, and every `PackageService` write except `GetForAnalyticsAsync`); `BusinessDetail.razor` (`FRONTEND_ARCHITECTURE.md` §7) subscribes to it to push live "sold out" updates to anyone with that business page open, without a separate SignalR hub.
 
 | Service Interface | Implementation | Responsibilities |
 |---|---|---|
-| `IAuthService` | `AuthService` | Thin wrapper over ASP.NET Identity's `SignInManager`/`UserManager` — `LoginAsync`, `RegisterAsync` (self-registration always lands in the `Customer` role; only an admin can promote from there), `LogoutAsync`, plus `ConfirmEmailAsync`/`RequestPasswordResetAsync`/`ResetPasswordAsync` for the email-confirmation and password-reset flows `Identity:RequireConfirmedAccount` unlocks (see §7/§10). Builds absolute links for those emails off `App:BaseUrl`, since neither a background sweep nor (reliably) a Blazor circuit has an `HttpContext` to derive one from |
+| `IAuthService` | `AuthService` | Thin wrapper over ASP.NET Identity's `SignInManager`/`UserManager` — `LoginAsync`, `RegisterAsync` (self-registration always lands in the `Customer` role; only an admin can promote from there), `LogoutAsync`, plus `ConfirmEmailAsync`/`RequestPasswordResetAsync`/`ResetPasswordAsync` for the email-confirmation and password-reset flows `Identity:RequireConfirmedAccount` unlocks (see §7/§10). Builds absolute links for those emails off `App:BaseUrl`, since neither a background sweep nor (reliably) a Blazor circuit has an `HttpContext` to derive one from. `AccountSettings.razor` (`/account/settings`) adds two more: `UpdateNameAsync(newName)` — plain in-process, updates `ApplicationUser.Name` via `UserManager`, no cookie refresh needed since nothing reads the display name off a cookie claim — and `ChangePasswordAsync(userId, currentPassword, newPassword)`, which takes `userId` explicitly (rather than resolving it via `CurrentUserAccessor`) because its only caller is `AuthController.ChangePasswordFormAsync`, a real HTTP action, not an in-process Blazor call |
 | `IAppEmailSender` | `SmtpEmailSender` | One method, `SendEmailAsync(toEmail, subject, htmlBody)`, over `System.Net.Mail.SmtpClient`. Deliberately **not** ASP.NET Identity's `IEmailSender<TUser>` — this app has no Identity Razor Pages UI to trigger that interface, and order-lifecycle/back-in-stock emails aren't Identity's concern anyway. Reads `Email:Smtp:*`/`Email:From*` straight off `IConfiguration` (same style as `SeedAdmin:*`); when `Email:Smtp:Host` isn't set, it logs the email instead of sending — the same "optional infra, degrade gracefully" pattern `DbSeeder` uses for `SeedAdmin` |
 | `IBusinessService` | `BusinessService` | CRUD (create/delete admin-only, update admin-or-own-staff, via `IsStaffAsync`) + `AddStaffAsync`/`RemoveStaffAsync` (admin-only; a `DbUpdateException` from the unique `(BusinessId, UserId)` index racing a concurrent add is caught and turned into a `false` return rather than propagating) + `GetByStaffUserIdAsync`/`GetStaffAsync`/`IsStaffAsync` (the read side other services and `ManagedBusinessContext` build on). **Phase 9**: `ApplyAsync` (any signed-in user — self-service business signup, born `PendingApproval`), `ApproveAsync`/`RejectAsync` (admin-only; `ApproveAsync` also allows re-approving a `Rejected` business, not just a `PendingApproval` one) and `HideAsync`/`UnhideAsync` (admin-only moderation, orthogonal to approval status) — all four log to `IAuditLogService` and notify (`INotificationService`) the affected submitter/staff. Every write method logs its own `AuditLog` entry (create/update/delete/staff-add/staff-remove/apply/approve/reject/hide/unhide) |
 | `IBusinessTypeService` / `IPackageTypeService` | `BusinessTypeService` / `PackageTypeService` | Reads are pass-throughs; writes (Phase 11) are admin-only (`CurrentUserAccessor.EnsureAdminAsync`, same in-process-check shape as `IUserService`) and back the `/types` page. `AddAsync` trims and assigns a new `Id`; `UpdateAsync` renames in place, no-op if the id doesn't exist; `DeleteAsync` first checks `IsInUseAsync` and throws `InvalidOperationException` (turned into a `Conflict` by `BusinessTypeController`/`PackageTypeController`, same pattern `UserController.UpdateRoleAsync` uses for "can't remove the last admin") if any `Business`/`Package` still references the type — both FKs are required relationships with no explicit `OnDelete` configured in `EcoMealDbContext`, so EF Core's convention default is `Cascade`, and an unguarded delete would silently take every business/package of that type down with it. Every write logs a `BusinessTypeCreated`/`Updated`/`Deleted` (or `PackageType*`) `AuditLog` entry |
@@ -622,7 +625,7 @@ Not behind an interface — it's a small, concrete helper every other service ta
 
 ### OrderService — deep dive
 
-`OrderService` owns every rule around placing, confirming, completing, cancelling, marking-no-show, and reporting on orders. Its constructor pulls in `IOrderRepository`, `IPackageRepository`, `IBusinessService`, `INotificationService`, `IAppEmailSender`, `IStripeGateway` (refunds only — issuing a charge is `CheckoutService`'s job, not this one's), the raw `EcoMealDbContext` (for ad-hoc queries that don't warrant a repository method), and `CurrentUserAccessor`.
+`OrderService` owns every rule around placing, confirming, completing, cancelling, marking-no-show, and reporting on orders. Its constructor pulls in `IOrderRepository`, `IPackageRepository`, `IBusinessService`, `INotificationService`, `IAppEmailSender`, `IStripeGateway` (refunds only — issuing a charge is `CheckoutService`'s job, not this one's), `IAuditLogService`, the raw `EcoMealDbContext` (for ad-hoc queries that don't warrant a repository method), `CurrentUserAccessor`, `IConfiguration` (for `App:BaseUrl`, same convention as `AuthService`), `PackageStockBroadcaster` (§5 intro), and `ILogger<OrderService>`.
 
 **`PlaceOrderAsync(businessId, lines)`** — customer-only:
 1. Resolves the caller via `CurrentUserAccessor`; throws `UnauthorizedAccessException` if not signed in or not a `Customer`.
@@ -653,8 +656,10 @@ var allowedTransition = (currentStatusName, statusName) switch
 };
 ```
 - **Pending → Confirmed**: re-checks every line's requested quantity against the package's *current* `Quantity` (not the pending-reservation snapshot from placement — stock may have moved since), then decrements it. A concurrent confirm of the same package by another manager races on the `xmin` row-version and surfaces as "Stock for this order just changed — please refresh and try again" (`DbUpdateConcurrencyException` → `InvalidOperationException`).
-- **Confirmed → Cancelled / Confirmed → NoShow**: both restore each line's quantity back onto the package (the reverse of the confirm-time decrement) — the reservation is being released either way, whether the manager cancelled it or the pickup window just closed unclaimed. Pending → Cancelled needs **no** stock restoration, since a Pending order never touched `Package.Quantity` in the first place — it only ever affected the `pendingElsewhere` reservation math above.
+- **Confirmed → NoShow is guarded by the same "pickup window fully closed" rule the automatic sweep uses**: a manager marking this by hand at the counter can't do it early — `ApplyStatusChangeAsync` throws `InvalidOperationException` if any of the order's packages still have `PickupEnd >= UtcNow`, mirroring `ExpireNoShowOrdersAsync`/`GetOverduePickupOrdersAsync`'s own window check, so no-show can't be used to skip a pickup before it was ever missed.
+- **Confirmed → Cancelled restores stock; Confirmed → NoShow (this manual path) does not.** Cancelling puts each line's quantity back onto the package (the reverse of the confirm-time decrement) — the reservation is released back to the shelf. A manual no-show deliberately skips that: the business already prepared and held this stock for the customer, so unlike a cancellation it was never returned to the shelf, and releasing it back into `Package.Quantity` here would let the same physical unit be sold to someone else. Pending → Cancelled needs **no** stock restoration either, since a Pending order never touched `Package.Quantity` in the first place — it only ever affected the `pendingElsewhere` reservation math above. Note this is narrower than the automatic sweep: `ExpireNoShowOrdersAsync` (below) still restores stock on its own no-show transitions — the two paths aren't currently symmetric.
 - **Refund on Cancelled, never on NoShow**: any transition to `Cancelled` (manual or the stale-Pending sweep) calls `RefundIfPaidAsync`, which looks up the order's `Succeeded` `Payment` and issues a real Stripe refund (`IStripeGateway.RefundAsync`) before flipping it to `Refunded`. `NoShow` deliberately skips this — the customer reserved/held the food and never collected it, so the un-reversed charge **is** the no-show fee, with no separate fee-specific code (Phase 7). A failed/unconfigured Stripe call here doesn't block the cancellation itself (same reasoning as `SendCustomerEmailAsync` below — the order still needs to come off the books either way), but unlike an email failure it isn't silently swallowed: `RefundIfPaidAsync` flips `Payment.Status` to `RefundFailed` and returns `true`, which `ApplyStatusChangeAsync` folds into the cancellation notification/email text ("We couldn't process your refund automatically — we'll follow up.") so it's never indistinguishable from a normal `Paid` order.
+- Every successful transition also logs an `AuditLog` entry (`Constants.AuditActions.OrderConfirmed`/`OrderCompleted`/`OrderCancelled`/`OrderNoShow`, `TargetType = Order`, details `"{oldStatus} → {newStatus}"`, noting a failed refund inline) — see §3 AuditLog for why this never fires for the background sweeps' own transitions.
 - Every successful transition fires a customer-facing notification (`Confirmed` → "show your QR code at pickup" linking to the pickup pass; `Completed` → thank-you; `Cancelled` → plain cancellation notice, extended as above on a failed refund; `NoShow` → missed-pickup notice), each also best-effort emailed via `IAppEmailSender` (`SendCustomerEmailAsync`, wrapped so a failed/unconfigured send never breaks the transition itself).
 - `NoShow` is reachable two ways: a manager marking it by hand from `/orders/manage` (this transition), or automatically once the pickup window fully closes — see `ExpireNoShowOrdersAsync` below.
 
@@ -701,16 +706,25 @@ This is the single most distinctive architectural choice in the backend. Every c
 ```csharp
 builder.Services.AddControllers();
 builder.Services.AddScoped<BusinessController>();
+builder.Services.AddScoped<BusinessTypeController>();
 builder.Services.AddScoped<PackageController>();
+builder.Services.AddScoped<PackageTypeController>();
 builder.Services.AddScoped<PackageTemplateController>();
 builder.Services.AddScoped<UserController>();
 builder.Services.AddScoped<OrderController>();
+builder.Services.AddScoped<PaymentController>();
 builder.Services.AddScoped<ReviewController>();
 builder.Services.AddScoped<NotificationController>();
 builder.Services.AddScoped<FavoriteController>();
-builder.Services.AddScoped<PaymentController>();
 builder.Services.AddScoped<AuditLogController>();
 builder.Services.AddScoped<ReportController>();
+builder.Services.AddScoped<PushSubscriptionController>();
+builder.Services.AddScoped<ImpactController>();
+builder.Services.AddScoped<BasketPlannerController>();
+// Real HTTP endpoint for Login/Register/Logout/ChangePassword (see AuthController), but also
+// registered here so ConfirmEmail/ForgotPassword/ResetPassword/UpdateName can inject it in-process
+// like every other controller.
+builder.Services.AddScoped<AuthController>();
 ```
 
 Razor components `@inject` these the same way they'd inject any other service, and call their methods as plain in-process C# calls — no HTTP round-trip, no JSON (de)serialization, no separate DTO layer:
@@ -730,10 +744,10 @@ Two controllers genuinely are HTTP endpoints, and both are structured differentl
 
 | Controller | Route | Why it's real HTTP |
 |---|---|---|
-| `AuthController` | `[Route("api/[controller]")]` — `[ManualValidateAntiforgeryToken]` on `LoginAsync`/`RegisterAsync` only, **not** `LogoutAsync` (see §7) | Login/Register/Logout are plain `<form method="post">` submissions from `Login.razor`/`Register.razor`/the logout button — a real page navigation is required so the ASP.NET Identity auth cookie actually gets set on the response. `[ManualValidateAntiforgeryTokenAttribute]` (see §7) validates the antiforgery token these forms carry, since this API-only project doesn't register the MVC view-engine services `[AutoValidateAntiforgeryToken]` needs. `AuthController` also carries three plain in-process methods with no HTTP attribute at all — `ConfirmEmailAsync`, `RequestPasswordResetAsync`, `ResetPasswordAsync` — injected directly into `ConfirmEmail.razor`/`ForgotPassword.razor`/`ResetPassword.razor` the same way `OrderController` etc. are injected everywhere else, since none of those three touch the auth cookie and so don't need the real-HTTP round trip |
-| `OrderExportController` | `[Route("api/orders")]`, `[HttpGet("export")]` | The CSV download link (`OrderManagement.razor`) is a plain `<a href="/api/orders/export">` — the browser needs to treat the response as a file, which only works over a genuine HTTP GET |
+| `AuthController` | `[Route("api/[controller]")]` — `[ManualValidateAntiforgeryToken]` on `LoginAsync`/`RegisterAsync`/`ChangePasswordFormAsync`, **not** `LogoutAsync` (see §7) | Login/Register/Logout/ChangePassword are plain `<form method="post">` submissions from `Login.razor`/`Register.razor`/the logout button/`AccountSettings.razor`'s password panel — a real page navigation is required so the ASP.NET Identity auth cookie actually gets set (or, for a password change, its security stamp refreshed via `SignInManager.RefreshSignInAsync`) on the response. `[ManualValidateAntiforgeryTokenAttribute]` (see §7) validates the antiforgery token these forms carry, since this API-only project doesn't register the MVC view-engine services `[AutoValidateAntiforgeryToken]` needs. `AuthController` also carries four plain in-process methods with no HTTP attribute at all — `ConfirmEmailAsync`, `RequestPasswordResetAsync`, `ResetPasswordAsync`, `UpdateNameAsync` — injected directly into `ConfirmEmail.razor`/`ForgotPassword.razor`/`ResetPassword.razor`/`AccountSettings.razor`'s name panel the same way `OrderController` etc. are injected everywhere else, since none of those four touch the auth cookie and so don't need the real-HTTP round trip |
+| `OrderExportController` | `[Route("api/orders")]`, `[HttpGet("export")]` + a second action mapped straight to `[HttpGet("/api/payments/export")]` | Two CSV download links — `OrderManagement.razor`'s plain `<a href="/api/orders/export">` (order fulfillment) and `Payments.razor`'s `<a href="/api/payments/export">` (the payout ledger: amount/currency/payment status/paid-at/refunded-at) — the browser needs to treat each response as a file, which only works over a genuine HTTP GET |
 
-`OrderExportController` can't use `IOrderService` the way every in-process controller does, because there's no Blazor circuit backing a standalone HTTP GET request — and `IOrderService`'s authorization checks all go through `CurrentUserAccessor`, which needs one (see the `CurrentUserAccessor` note in §5). Instead, it resolves identity straight from `HttpContext.User` (available on any real HTTP request via `[Authorize]`) and talks to `IOrderRepository`/`IBusinessService` directly:
+`OrderExportController` can't use `IOrderService` the way every in-process controller does, because there's no Blazor circuit backing a standalone HTTP GET request — and `IOrderService`'s authorization checks all go through `CurrentUserAccessor`, which needs one (see the `CurrentUserAccessor` note in §5). Instead, it resolves identity straight from `HttpContext.User` (available on any real HTTP request via `[Authorize]`) and talks to `IOrderRepository`/`IBusinessService` directly. Both export actions share the same scoping rule via one private helper:
 
 ```csharp
 [ApiController]
@@ -744,49 +758,56 @@ public class OrderExportController(IOrderRepository orderRepository, IBusinessSe
     [HttpGet("export")]
     public async Task<IActionResult> ExportCsvAsync(DateTime? from, DateTime? to, Guid? businessId = null)
     {
-        Guid? effectiveBusinessId;
-        if (User.IsInRole(AppRoles.Admin))
-        {
-            effectiveBusinessId = businessId;
-        }
-        else
-        {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var staffBusinesses = userId is null ? [] : await businessService.GetByStaffUserIdAsync(userId);
-            if (staffBusinesses.Count == 0) return Unauthorized();
-
-            if (businessId is not null)
-            {
-                if (staffBusinesses.All(b => b.Id != businessId)) return Forbid();
-                effectiveBusinessId = businessId;
-            }
-            else if (staffBusinesses.Count == 1)
-            {
-                effectiveBusinessId = staffBusinesses[0].Id;
-            }
-            else
-            {
-                return BadRequest("You manage more than one business — specify businessId.");
-            }
-        }
+        var (effectiveBusinessId, error) = await ResolveEffectiveBusinessIdAsync(businessId);
+        if (error is not null) return error;
 
         var orders = await orderRepository.GetInRangeAsync(effectiveBusinessId, from, to);
         return File(Encoding.UTF8.GetBytes(BuildCsv(orders)), "text/csv", $"orders-{DateTime.UtcNow:yyyyMMdd}.csv");
     }
+
+    // Route override: an absolute "/api/payments/export" rather than this controller's own
+    // "api/orders" prefix, since it's the payments ledger's export, not an orders one — just
+    // reusing this controller because it already has everything (identity resolution, GetInRangeAsync)
+    // the payments CSV needs too.
+    [HttpGet("/api/payments/export")]
+    public async Task<IActionResult> ExportPaymentsCsvAsync(DateTime? from, DateTime? to, Guid? businessId = null)
+    {
+        var (effectiveBusinessId, error) = await ResolveEffectiveBusinessIdAsync(businessId);
+        if (error is not null) return error;
+
+        var orders = await orderRepository.GetInRangeAsync(effectiveBusinessId, from, to);
+        return File(Encoding.UTF8.GetBytes(BuildPaymentsCsv(orders)), "text/csv", $"payments-{DateTime.UtcNow:yyyyMMdd}.csv");
+    }
+
+    private async Task<(Guid? businessId, IActionResult? error)> ResolveEffectiveBusinessIdAsync(Guid? businessId)
+    {
+        if (User.IsInRole(AppRoles.Admin)) return (businessId, null);
+
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var staffBusinesses = userId is null ? [] : await businessService.GetByStaffUserIdAsync(userId);
+        if (staffBusinesses.Count == 0) return (null, Unauthorized());
+
+        if (businessId is not null)
+            return staffBusinesses.All(b => b.Id != businessId) ? (null, Forbid()) : (businessId, null);
+
+        return staffBusinesses.Count == 1
+            ? (staffBusinesses[0].Id, null)
+            : (null, BadRequest("You manage more than one business — specify businessId."));
+    }
 }
 ```
-Note `IBusinessService.GetByStaffUserIdAsync` is safe to call here — it's a pure read with no `CurrentUserAccessor` dependency of its own, unlike most of `BusinessService`'s write methods. A manager staffing exactly one business gets it automatically; one staffing several must pass `businessId` explicitly (and can only pick one they're actually staff of) — the same shape `OrderService.ResolveManagerBusinessIdAsync` uses on the in-process side, reimplemented here rather than shared because this controller can't call into `IOrderService`/`CurrentUserAccessor` at all (see above).
+`BuildPaymentsCsv` skips any order with no `Payment` row (a `Pending` order that never got that far) rather than emitting a blank line for it. Note `IBusinessService.GetByStaffUserIdAsync` is safe to call here — it's a pure read with no `CurrentUserAccessor` dependency of its own, unlike most of `BusinessService`'s write methods. A manager staffing exactly one business gets it automatically; one staffing several must pass `businessId` explicitly (and can only pick one they're actually staff of) — the same shape `OrderService.ResolveManagerBusinessIdAsync` uses on the in-process side, reimplemented here rather than shared because this controller can't call into `IOrderService`/`CurrentUserAccessor` at all (see above).
 
 ### Controller surface reference
 
 | Controller | Methods |
 |---|---|
-| `BusinessController` | `GetAllAsync(publicOnly?)`, `GetPagedAsync(..., statusFilter?, publicOnly?, maxPrice?)`, `GetByIdAsync`, `GetStaffAsync`, `AddAsync` → `Created()`, `UpdateAsync` → `NoContent()`, `DeleteAsync` → `NoContent()`, `AddStaffAsync(businessId, userId, userName?)` → `NoContent()`/`Conflict()`, `RemoveStaffAsync(businessId, userId, userName?)` → `NoContent()`/`NotFound()`, `ApplyAsync` → the created `Business` or `Unauthorized()`, `ApproveAsync`/`RejectAsync`/`HideAsync`/`UnhideAsync` → `NoContent()`, `ParseSearchIntentAsync(utterance, previousIntent?)` → the parsed `SearchIntent` or `Conflict()` when `ISearchIntentParser` isn't configured/available |
+| `BusinessController` | `GetAllAsync(publicOnly?)`, `GetPagedAsync(..., statusFilter?, publicOnly?, maxPrice?)`, `GetByIdAsync`, `GetStaffAsync`, `AddAsync` → `Created()`, `UpdateAsync` → `NoContent()`, `DeleteAsync` → `NoContent()`, `AddStaffAsync(businessId, userId, userName?)` → `NoContent()`/`Conflict()`, `RemoveStaffAsync(businessId, userId, userName?)` → `NoContent()`/`NotFound()`, `ApplyAsync` → the created `Business` or `Unauthorized()`, `ApproveAsync`/`RejectAsync`/`HideAsync`/`UnhideAsync` → `NoContent()`, `ParseSearchIntentAsync(utterance, previousIntent?)` → the parsed `SearchIntent` or `Conflict()` when `ISearchIntentParser` isn't configured/available, `SetHoursAsync(businessId, hours)`/`AddClosureAsync(businessId, startDate, endDate, reason?)`/`RemoveClosureAsync(businessId, closureId)` → the `BusinessHours`/`BusinessClosure` write side (§3), same admin-or-own-staff authorization as `UpdateAsync` |
 | `PackageController` | `GetAllAsync`, `GetPagedAsync`, `GetByIdAsync`, `AddAsync`, `UpdateAsync`, `DeleteAsync`, `DuplicateManyAsync`, `AdjustQuantityManyAsync`, `ExtendPickupWindowManyAsync`, `GetForAnalyticsAsync` → `Unauthorized()` on a non-admin's missing/foreign `businessId`, `HideAsync`/`UnhideAsync` → `NoContent()`, `DraftDescriptionAsync(name, packageTypeName, dietaryTags)` → the AI-drafted description text or `Conflict()` when `IPackageAiAssistant` isn't configured/available. **AI Phase 5**: `GetMarkdownCandidatesAsync(businessId?)` → `Unauthorized()`, same shape as `GetForAnalyticsAsync`; `GetMarkdownSuggestionAsync(packageId)` → the validated `MarkdownSuggestion?` (implicit `T` conversion, `null` reads as "no suggestion right now" the same way `GetByIdAsync` reads a missing package) or `Unauthorized()`/`Conflict()` when unauthorized/`IMarkdownPricingAgent` isn't configured; `DismissMarkdownSuggestionAsync(packageId)` → `NoContent()`/`Unauthorized()` |
 | `BasketPlannerController` | `ProposeBasketAsync(peopleCount, budget, dietaryTag?)` → the validated `BasketPlan` (§5) or `Conflict()` when `IBasketPlannerAgent` isn't configured/available or the input is invalid — same convention as `ParseSearchIntentAsync`/`DraftDescriptionAsync` above. Injected into `BasketPlanner.razor` (`/plan-basket`, FRONTEND_ARCHITECTURE.md §11); needs its own `builder.Services.AddScoped<BasketPlannerController>()` line like every other in-process controller (§6) — missing it throws `InvalidOperationException` from the *page*, not the controller, the moment Blazor tries to `@inject` it, since `AddControllers()` alone never makes a controller resolvable as its own concrete type |
 | `PackageTemplateController` | `GetAllAsync`, `GetByBusinessIdAsync`, `CreateFromPackageAsync`, `SetActiveAsync`, `DeleteAsync` |
 | `BusinessTypeController` / `PackageTypeController` (Phase 11) | `GetAllAsync`, `AddAsync` → `Created()`/`Unauthorized()`, `UpdateAsync` → `NoContent()`/`Unauthorized()`, `DeleteAsync` → `NoContent()`/`Unauthorized()`/`Conflict()` — same try/catch-to-`ActionResult` shape as every other in-process controller, `Conflict()` carrying the "still in use" message from `InvalidOperationException` |
-| `OrderController` | `PlaceOrderAsync`, `GetMyOrdersAsync`, `GetOrdersForManagementAsync`, `GetMyOrdersPagedAsync`, `GetOrdersForManagementPagedAsync`, `GetOrdersInRangeAsync`, `UpdateOrderStatusAsync`, `CancelMyOrderAsync`, `GetTotalKgSavedAsync`, `GetMyOrderAsync`, `GetOrderForManagementAsync`, `GetPendingReservedQuantitiesAsync` — every mutating/ownership-sensitive method wraps the service call in `try/catch (UnauthorizedAccessException or InvalidOperationException) → Conflict(ex.Message)`, or `Unauthorized()`/`NotFound()` for the read-only ownership checks. `GetPendingReservedQuantitiesAsync` is the one method with no auth check at all — same public audience as package browsing (see §5) |
+| `OrderController` | `PlaceOrderAsync`, `GetMyOrdersAsync`, `GetOrdersForManagementAsync`, `GetMyOrdersPagedAsync`, `GetOrdersForManagementPagedAsync`, `GetOrdersInRangeAsync`, `UpdateOrderStatusAsync`, `CancelMyOrderAsync`, `SplitPickupPassesAsync(orderId, passCount)`, `RedeemPickupPassAsync(orderId, passId)`, `GetTotalKgSavedAsync`, `GetMyOrderAsync`, `GetOrderForManagementAsync`, `GetPendingReservedQuantitiesAsync` — every mutating/ownership-sensitive method wraps the service call in `try/catch (UnauthorizedAccessException or InvalidOperationException) → Conflict(ex.Message)`, or `Unauthorized()`/`NotFound()` for the read-only ownership checks. `GetPendingReservedQuantitiesAsync` is the one method with no auth check at all — same public audience as package browsing (see §5) |
 | `ReviewController` | `GetAllAsync`, `GetByBusinessAsync`, `GetByBusinessesAsync`, `GetContextAsync`, `SubmitAsync` |
 | `FavoriteController` | `GetMyFavoriteBusinessIdsAsync`, `ToggleFavoriteAsync` |
 | `NotificationController` | `GetMyNotificationsAsync`, `GetMyUnreadCountAsync`, `MarkAsReadAsync`, `MarkAllAsReadAsync` |
@@ -796,8 +817,8 @@ Note `IBusinessService.GetByStaffUserIdAsync` is safe to call here — it's a pu
 | `AuditLogController` | `GetPagedAsync(action?, targetType?, search?)` → `Unauthorized()` for a non-admin |
 | `ReportController` | `SubmitAsync(targetType, targetId, reason)` → `Created()`, `GetOpenAsync` → `Unauthorized()` for a non-admin, `DismissAsync`, `TakeActionAsync(reportId, actionReason)` → `NoContent()` |
 | `ImpactController` (Phase 11) | `GetMonthlyLeaderboardAsync(take = 20)` — no auth check, same public audience as `OrderController.GetTotalKgSavedAsync`. `GetMyOptInStatusAsync` — the current user's own flag, `false` for an anonymous caller rather than an error. `SetMyOptInStatusAsync(showOnLeaderboard)` → `NoContent()`/`Unauthorized()` |
-| `AuthController` *(real HTTP)* | `POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/logout` — all `LocalRedirect` responses, never JSON. Plus the three in-process-only methods noted above |
-| `OrderExportController` *(real HTTP)* | `GET /api/orders/export?from=&to=&businessId=` → CSV file download |
+| `AuthController` *(real HTTP)* | `POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/logout`, `POST /api/auth/change-password` — all `LocalRedirect` responses, never JSON. Plus the four in-process-only methods noted above |
+| `OrderExportController` *(real HTTP)* | `GET /api/orders/export?from=&to=&businessId=` → orders CSV file download, `GET /api/payments/export?from=&to=&businessId=` → payments/payout-ledger CSV file download |
 
 ---
 
@@ -888,7 +909,7 @@ Registered via `builder.Services.AddHostedService<OrderLifecycleSweepService>()`
 1. **Stale-checkout cleanup** — hard-deletes any `PendingCheckout` (§3) still unconsumed past `OrderExpiry.PendingCheckoutTimeout` (30 minutes): a customer who clicked Pay, then closed the tab on Stripe's page, was never charged, so this is pure tidying, not a refund path.
 2. **Stale-Pending expiry** — cancels any `Pending` order idle longer than `OrderExpiry.PendingTimeout` (30 minutes) or whose pickup window has already closed, refunding it (`OrderService.RefundIfPaidAsync`, §5) since it *was* paid for at checkout time. Exists to fix a real phantom-stock-lock: a `Pending` order that's never confirmed still counts against a package's availability via the `pendingElsewhere` check in `OrderService.PlaceOrderAsync` (§5) — without this sweep, an abandoned checkout could tie up stock indefinitely.
 3. **Pickup reminders** — emails/notifies `Confirmed` orders closing within `OrderExpiry.PickupReminderLeadTime` (30 minutes) that haven't been reminded yet.
-4. **No-show detection** — moves `Confirmed` orders whose pickup window has fully closed to `NoShow`, restoring stock but deliberately *not* refunding (§3 Payment, §5).
+4. **No-show detection** — moves `Confirmed` orders whose pickup window has fully closed to `NoShow`, restoring stock but deliberately *not* refunding (§3 Payment, §5). Unlike this automatic path, a manager marking the same transition by hand (`ApplyStatusChangeAsync`, §5) does **not** restore stock — the two no-show paths aren't currently symmetric.
 
 `BackgroundService` instances are effectively singletons, so it can't hold a `Scoped` `IOrderService` directly — it creates a fresh DI scope on every tick via `IServiceScopeFactory` instead, exactly the pattern any singleton needing scoped dependencies must use. The whole tick body is one `try/catch`, logged and swallowed on failure so a bad tick doesn't take the loop down — the next `PeriodicTimer` tick just tries again.
 
@@ -950,7 +971,7 @@ This reconciliation approach — add-if-missing, refresh-if-stale, backfill-if-e
 | `Stripe:SecretKey` | user-secrets / docker-compose env (`Stripe__SecretKey`) | A Stripe **test-mode** secret key (`sk_test_...`). Empty by default — `StripeGateway.EnsureConfigured` then turns any checkout attempt into "payments aren't configured yet" instead of an SDK exception, so the app still runs (browsing, orders history, everything but actually checking out) with zero Stripe setup |
 | `Stripe:Currency` | user-secrets / docker-compose env (`Stripe__Currency`) | Lowercase ISO currency code passed to Stripe Checkout; defaults to `ron` |
 | `WebPush:PublicKey` / `WebPush:PrivateKey` / `WebPush:Subject` | `appsettings.Development.json` / docker-compose env (`WebPush__*`) | A VAPID EC key pair for Web Push, generated once via `WebPush.VapidHelper.GenerateVapidKeys()` — `Subject` is a `mailto:` contact URI, per the VAPID spec. Unlike Stripe/SMTP this needs no external account, so (unlike those two) it ships pre-configured with a real (if only locally-meaningful) key pair rather than blank; leaving it unset makes `IWebPushGateway.IsConfigured` `false` and the frontend's "enable browser alerts" toggle hides itself entirely |
-| `Ollama:BaseUrl` / `Ollama:ModelId` | user-secrets / docker-compose env (`Ollama__BaseUrl`/`Ollama__ModelId`) | Points at a free, self-hosted Ollama instance (`docker-compose.test.yml`'s `ollama` service, built from `Dockerfile.ollama` — a plain `ollama/ollama` base image with `qwen2.5:7b` baked in at build time via a backgrounded `ollama serve` + retried `ollama pull` in one `RUN` layer, so `docker compose up --build` needs no separate manual pull step) — no paid/hosted AI API anywhere in this app. Empty `BaseUrl` by default; `Program.cs` only registers `IChatClient` when it's set, so `IPackageAiAssistant` (§5), `ISearchIntentParser` (§5), `INearExpiryNudgeComposer` (§5), `IBasketPlannerAgent` (§5), and `IMarkdownPricingAgent` (§5) all degrade to a friendly "AI features aren't available yet" error instead of failing to construct an `OllamaApiClient` against an empty URL — for `INearExpiryNudgeComposer` that means `NearExpiryNudgeSweepService` (§8) simply logs and retries the next tick rather than crashing. `ModelId` defaults to `qwen2.5:7b` (a model Ollama has verified function-calling support for) if unset — the same instance and model back every AI feature, Phase 1's plain-text prompt, Phase 2's `ForJsonSchema` structured output, Phase 3's plain-text nudge copy, and Phase 4/5's genuine tool-calling (`BasketPlannerAgent`'s `search_live_packages` and `MarkdownPricingAgent`'s `get_sell_through_history` `AIFunction`s) alike |
+| `Ollama:BaseUrl` / `Ollama:ModelId` | user-secrets / docker-compose env (`Ollama__BaseUrl`/`Ollama__ModelId`) | Points at a free, self-hosted Ollama instance (`docker-compose.test.yml`'s `ollama` service, built from `Dockerfile.ollama` — a plain `ollama/ollama` base image with `qwen2.5:7b` baked in at build time via a backgrounded `ollama serve` + retried `ollama pull` in one `RUN` layer, so `docker compose up --build` needs no separate manual pull step) — no paid/hosted AI API anywhere in this app. `Program.cs` builds the `OllamaApiClient`'s `HttpClient` itself with a 5-minute `Timeout` rather than accepting the SDK's default 100s — CPU-only local inference can take well over 100s just to process one large prompt, let alone a tool-calling round-trip, so the default timeout would cancel a slow-but-working request mid-generation. Empty `BaseUrl` by default; `Program.cs` only registers `IChatClient` when it's set, so `IPackageAiAssistant` (§5), `ISearchIntentParser` (§5), `INearExpiryNudgeComposer` (§5), `IBasketPlannerAgent` (§5), and `IMarkdownPricingAgent` (§5) all degrade to a friendly "AI features aren't available yet" error instead of failing to construct an `OllamaApiClient` against an empty URL — for `INearExpiryNudgeComposer` that means `NearExpiryNudgeSweepService` (§8) simply logs and retries the next tick rather than crashing. `ModelId` defaults to `qwen2.5:7b` (a model Ollama has verified function-calling support for) if unset — the same instance and model back every AI feature, Phase 1's plain-text prompt, Phase 2's `ForJsonSchema` structured output, Phase 3's plain-text nudge copy, and Phase 4/5's genuine tool-calling (`BasketPlannerAgent`'s `search_live_packages` and `MarkdownPricingAgent`'s `get_sell_through_history` `AIFunction`s) alike |
 | `Serilog:MinimumLevel:Default` / `:Override:*` | `appsettings.json` / `appsettings.{Environment}.json` | Read by `builder.Host.UseSerilog(...)`'s `ReadFrom.Configuration` in `Program.cs`. Base config sets `Default: Information`; `appsettings.Development.json` overrides it to `Debug`. Both override `Microsoft.AspNetCore`/`Microsoft.EntityFrameworkCore` down to `Warning` so framework noise doesn't drown out app-level logs |
 | `Serilog:WriteTo` | `appsettings.json` | Sink list — a `Console` sink with a compact `[HH:mm:ss LVL] Message` template by default. Adding a file/aggregator sink is a config-only change (plus the matching `Serilog.Sinks.*` NuGet package), no code change needed |
 | `Logging:LogLevel` | `appsettings.json` | Standard ASP.NET Core logging config; `Microsoft.AspNetCore` pinned to `Warning` to keep request-pipeline noise out of the console in Development |

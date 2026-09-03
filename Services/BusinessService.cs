@@ -295,7 +295,7 @@ public class BusinessService(
         });
 
         await auditLogService.LogAsync(AuditActions.BusinessClosureAdded, AuditTargetTypes.Business, businessId.ToString(), business.Name,
-            $"{startDate:MMM d, yyyy}–{endDate:MMM d, yyyy}" + (string.IsNullOrWhiteSpace(reason) ? "" : $": {reason}"));
+            FormattableString.Invariant($"{startDate:MMM d, yyyy}–{endDate:MMM d, yyyy}") + (string.IsNullOrWhiteSpace(reason) ? "" : $": {reason}"));
 
         return closure;
     }

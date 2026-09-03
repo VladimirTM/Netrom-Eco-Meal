@@ -83,7 +83,7 @@
                         }
                         <td class="text-muted small">@WindowLabel(template)</td>
                         <td>@template.Quantity</td>
-                        <td class="text-muted small">@(template.LastGeneratedDate?.ToString("MMM d") ?? "—")</td>
+                        <td class="text-muted small">@(template.LastGeneratedDate?.ToString("MMM d", CultureInfo.InvariantCulture) ?? "—")</td>
                         <td>
                             @if (template.IsActive)
                             {

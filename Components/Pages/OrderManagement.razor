@@ -185,7 +185,7 @@
                                     <button type="button" class="order-action-btn order-action-complete" @onclick="() => ChangeStatusAsync(order, OrderStatuses.Completed)">
                                         <i class="bi bi-check2-all"></i> Complete
                                     </button>
-                                    <button type="button" class="order-action-btn order-action-noshow" @onclick="() => ChangeStatusAsync(order, OrderStatuses.NoShow)">
+                                    <button type="button" class="order-action-btn order-action-noshow" disabled="@(!PickupWindowPassed(order))" title="@(PickupWindowPassed(order) ? null : "You can't mark a no-show before the pickup window closes.")" @onclick="() => ChangeStatusAsync(order, OrderStatuses.NoShow)">
                                         No-show
                                     </button>
                                     <button type="button" class="order-action-btn order-action-cancel" @onclick="() => _pendingCancel = order">
@@ -384,7 +384,12 @@
         var end = ClientTimeZoneService.ToLocal(order.OrderPackages.Max(op => op.Package.PickupEnd));
 
         return start.Date == end.Date
-            ? $"{start:MMM d} · {start:HH:mm}–{end:HH:mm}"
-            : $"{start:MMM d, HH:mm} – {end:MMM d, HH:mm}";
+            ? FormattableString.Invariant($"{start:MMM d} · {start:HH:mm}–{end:HH:mm}")
+            : FormattableString.Invariant($"{start:MMM d, HH:mm} – {end:MMM d, HH:mm}");
     }
+
+    // Mirrors OrderService.ApplyStatusChangeAsync's own no-show guard — keeps the button's
+    // disabled state in sync with what the server will actually accept.
+    private static bool PickupWindowPassed(Order order) =>
+        order.OrderPackages.Count > 0 && order.OrderPackages.All(op => op.Package.PickupEnd < DateTime.UtcNow);
 }

@@ -2,6 +2,13 @@
     position: relative;
     display: flex;
     flex-direction: column;
+    /* Belt-and-braces alongside main's min-width:0 below: guarantees .page itself (and so the
+       whole viewport) never scrolls horizontally, even if some wrapper between main and a wide
+       table doesn't shrink cleanly. A page-scoped table's own .table-responsive (Bootstrap,
+       overflow-x:auto) is still the thing that actually scrolls — this only stops that overflow
+       from escaping upward and dragging the header/sidebar off-screen with it, which is what a
+       mobile-width table was otherwise doing without this. */
+    overflow-x: hidden;
 }
 
 main {

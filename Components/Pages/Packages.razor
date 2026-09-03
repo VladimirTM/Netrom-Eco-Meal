@@ -647,8 +647,8 @@
         var start = ClientTimeZoneService.ToLocal(package.PickupStart);
         var end = ClientTimeZoneService.ToLocal(package.PickupEnd);
         return start.Date == end.Date
-            ? $"{start:MMM d} · {start:HH:mm}–{end:HH:mm}"
-            : $"{start:MMM d, HH:mm} – {end:MMM d, HH:mm}";
+            ? FormattableString.Invariant($"{start:MMM d} · {start:HH:mm}–{end:HH:mm}")
+            : FormattableString.Invariant($"{start:MMM d, HH:mm} – {end:MMM d, HH:mm}");
     }
 
     private void HandleTimeZoneChanged() => InvokeAsync(StateHasChanged);

@@ -74,9 +74,14 @@ public class BasketPlannerAgent(IPackageService packageService, IChatClient? cha
                 Tools = [searchTool],
             }, cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // No caller ever passes a real cancellationToken today (it defaults to CancellationToken.None),
+        // so an OperationCanceledException here can only be the HttpClient's own request timeout
+        // firing on a slow local model — not a genuine caller-initiated cancellation. Wrapping it
+        // the same as any other failure keeps a timeout from surfacing as a raw unhandled exception
+        // that leaves the caller's loading state stuck forever.
+        catch (Exception ex)
         {
-            throw new InvalidOperationException("The AI basket planner couldn't search for packages right now — try again in a moment.", ex);
+            throw new InvalidOperationException("The AI basket planner is taking too long to respond — try again in a moment.", ex);
         }
 
         messages.AddRange(toolRoundResponse.Messages);
@@ -95,9 +100,10 @@ public class BasketPlannerAgent(IPackageService packageService, IChatClient? cha
             // against these PascalCase C# names.
             raw = JsonSerializer.Deserialize<RawBasketPlan>(response.Text, AIJsonUtilities.DefaultOptions);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // See the comment on the tool-round catch above — same reasoning applies here.
+        catch (Exception ex)
         {
-            throw new InvalidOperationException("The AI basket planner couldn't propose a basket right now — try again in a moment.", ex);
+            throw new InvalidOperationException("The AI basket planner is taking too long to respond — try again in a moment.", ex);
         }
 
         if (raw is null)

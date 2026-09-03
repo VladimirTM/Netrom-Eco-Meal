@@ -202,7 +202,7 @@
         var end = ClientTimeZoneService.ToLocal(order.OrderPackages.Max(op => op.Package.PickupEnd));
 
         return start.Date == end.Date
-            ? $"{start:MMM d} · {start:HH:mm}–{end:HH:mm}"
-            : $"{start:MMM d, HH:mm} – {end:MMM d, HH:mm}";
+            ? FormattableString.Invariant($"{start:MMM d} · {start:HH:mm}–{end:HH:mm}")
+            : FormattableString.Invariant($"{start:MMM d, HH:mm} – {end:MMM d, HH:mm}");
     }
 }

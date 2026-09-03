@@ -160,9 +160,9 @@
                         var day = _dailyStats[i];
                         var isToday = i == _dailyStats.Count - 1;
                         <div class="dash-trend-bar-wrap @(isToday ? "dash-trend-bar-wrap-today" : "")" tabindex="0"
-                             aria-label="@day.Date.ToString("MMM d"): @day.OrderCount order@(day.OrderCount == 1 ? "" : "s")">
+                             aria-label="@day.Date.ToString("MMM d", CultureInfo.InvariantCulture): @day.OrderCount order@(day.OrderCount == 1 ? "" : "s")">
                             <span class="dash-trend-tooltip">
-                                <span class="dash-trend-tooltip-date">@(isToday ? "Today" : day.Date.ToString("MMM d"))</span>
+                                <span class="dash-trend-tooltip-date">@(isToday ? "Today" : day.Date.ToString("MMM d", CultureInfo.InvariantCulture))</span>
                                 <span class="dash-trend-tooltip-value">@day.OrderCount order@(day.OrderCount == 1 ? "" : "s")</span>
                             </span>
                             <div class="dash-trend-bar dash-trend-bar-orders" style="height: @(BarHeightPx(day.OrderCount, _maxOrderCount))px"></div>
@@ -178,9 +178,9 @@
                         var day = _dailyStats[i];
                         var isToday = i == _dailyStats.Count - 1;
                         <div class="dash-trend-bar-wrap @(isToday ? "dash-trend-bar-wrap-today" : "")" tabindex="0"
-                             aria-label="@day.Date.ToString("MMM d"): @day.KgSaved.ToString("0.#") kg saved">
+                             aria-label="@day.Date.ToString("MMM d", CultureInfo.InvariantCulture): @day.KgSaved.ToString("0.#") kg saved">
                             <span class="dash-trend-tooltip">
-                                <span class="dash-trend-tooltip-date">@(isToday ? "Today" : day.Date.ToString("MMM d"))</span>
+                                <span class="dash-trend-tooltip-date">@(isToday ? "Today" : day.Date.ToString("MMM d", CultureInfo.InvariantCulture))</span>
                                 <span class="dash-trend-tooltip-value">@day.KgSaved.ToString("0.#") kg saved</span>
                             </span>
                             <div class="dash-trend-bar dash-trend-bar-kg" style="height: @(BarHeightPx(day.KgSaved, _maxKgSaved))px"></div>
@@ -201,7 +201,7 @@
                             }
                             else if (i % 2 == 0)
                             {
-                                <span>@_dailyStats[i].Date.ToString("MMM d")</span>
+                                <span>@_dailyStats[i].Date.ToString("MMM d", CultureInfo.InvariantCulture)</span>
                             }
                         </div>
                     }
