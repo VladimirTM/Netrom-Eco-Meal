@@ -51,7 +51,8 @@ Components/
 │   ├── Impact.razor              # /impact — Phase 11 monthly kg-saved leaderboard, opt-in toggle
 │   ├── PaymentReturn.razor       # /checkout/return — Stripe success redirect landing page, confirms payment
 │   ├── PaymentCancel.razor       # /checkout/cancel — Stripe cancel redirect landing page
-│   ├── AccountSettings.razor     # /account/settings — display name + change password, any signed-in role
+│   ├── AccountSettings.razor     # /account/settings — PublicLayout host, any signed-in role
+│   ├── AccountSettingsDashboard.razor # /account-settings — MainLayout host, Admin/BusinessManager only
 │   ├── Orders.razor              # /orders — customer order history + cancel + reorder
 │   ├── OrderPickupPass.razor     # /orders/pickup/{Id} — QR code(s) for a Confirmed order, splittable into several
 │   ├── OrderScan.razor(.js)      # /orders/scan — manager camera scanner + manual order-number lookup fallback
@@ -72,6 +73,7 @@ Components/
 │   └── Types.razor               # /types — Phase 11 admin CRUD for BusinessType/PackageType
 │
 └── Shared/
+    ├── AccountSettingsPanel.razor # Name + password form, shared by both AccountSettings pages above
     ├── AnchoredDropdown.razor    # Generic trigger+panel dropdown, JS-positioned to escape overflow clipping
     ├── ConfirmDialog.razor       # Generic confirm/cancel modal
     ├── ForbiddenPanel.razor / NotFoundPanel.razor
@@ -184,7 +186,7 @@ One consequence worth knowing: when `NotFoundPage` renders via the Router's in-c
 | Layout | Used by | Shell |
 |---|---|---|
 | `PublicLayout` | Home, BusinessDetail, BusinessApply, Orders, OrderPickupPass, BasketPlanner, Impact, AccountSettings, AccessDenied, NotFound | Sticky header (logo, impact-leaderboard trophy link, notification bell, AI plan-basket sparkle for Customer, orders link + basket button/badge for Customer, dashboard link for staff, "list your business" link for Customer/BusinessManager, account-settings gear icon, logout), `@Body`, footer. Owns the `CartPanel` and (`AuthorizeView`-gated) `NotificationPanel`, and the cart's open/closed state |
-| `MainLayout` | Dashboard, Businesses(+Form), Packages(+Form), PackageTemplates, OrderManagement, Payments, Users, Reports, AuditLog, Types, OrderScan, OrderValidate, OrderValidateLegacy | Fixed left sidebar (`NavMenu`) + `<main>` content area — the classic admin-panel shell. Also owns `NotificationPanel` |
+| `MainLayout` | Dashboard, Businesses(+Form), Packages(+Form), PackageTemplates, OrderManagement, Payments, AccountSettingsDashboard, Users, Reports, AuditLog, Types, OrderScan, OrderValidate, OrderValidateLegacy | Fixed left sidebar (`NavMenu`) + `<main>` content area — the classic admin-panel shell. Also owns `NotificationPanel` |
 | `EmptyLayout` | Login, Register, ForgotPassword, ResetPassword, ConfirmEmail, PaymentReturn, PaymentCancel | Just `@Body` — no header, no sidebar, no footer; the login/register cards and the Stripe redirect landing pages all center themselves entirely via `app.css`'s `.login-page`/`.login-card`/`.cart-confirmation` (see §8) |
 
 `MainLayout`'s `.page`/`.sidebar` (`MainLayout.razor.css`) are sized `height: 100dvh`, not `100vh` — `vh` is the *largest possible* viewport and ignores transient browser chrome (an address bar, a devtools/automation banner), so a `100vh`-tall sidebar can render a few px taller than what's actually visible, pushing its footer past the real bottom edge. `dvh` tracks the actual visible viewport instead. `.page` also carries `overflow-x: hidden` — a safety net, not the thing that actually scrolls a wide table: a mobile-width admin table was dragging the whole page (header/sidebar included) into horizontal scroll before this was added, even though the table already sits inside Bootstrap's own `.table-responsive` (`overflow-x: auto`). That one line stops the overflow from escaping upward past `.page`; `.table-responsive` still owns the actual scrolling.
@@ -237,13 +239,16 @@ Both `RestoreAsync` and `InitializeAsync` are deferred to `OnAfterRenderAsync(fi
 
 **AI basket planner sparkle icon**: `bi-stars`, gated to `context.User.IsInRole(AppRoles.Customer)` only (unlike the basket/orders icons, which share that same `if`) — points at `/plan-basket` (§6 AI budget/basket planner).
 
-**Account settings icon**: `bi-person-gear`, links to `/account/settings` — the one header icon with no role gate beyond plain `<AuthorizeView>`, since every signed-in role (Customer, BusinessManager, Admin) has a name/password to manage. `NavMenu` carries the identical link (below) so staff reach the same page from the sidebar instead of the header.
+**Account settings icon**: `bi-person-gear`, links to `/account/settings` — the one header icon with no role gate beyond plain `<AuthorizeView>`, since every signed-in role (Customer, BusinessManager, Admin) has a name/password to manage. `NavMenu` links to a separate route for the same form (below), so staff get it inside the sidebar chrome instead of the public header.
 
-### AccountSettings — profile & password
+### AccountSettings / AccountSettingsDashboard — profile & password
 
-**File:** `Components/Pages/AccountSettings.razor` — `@page "/account/settings"`, `@layout PublicLayout`, `[Authorize]` (any signed-in role).
+The actual form — two cards, not one: a plain `EditForm`/`InputText` for the display name (`AuthController.UpdateNameAsync`, in-process like everywhere else), and — reusing the exact pattern `Login.razor` already established — a raw HTML `<form method="post" action="api/auth/change-password" data-enhance="false">` for the password, not an `EditForm`. `ChangePasswordFormAsync` needs a real HTTP response to refresh the auth cookie's security stamp, which an in-process Blazor circuit call can't provide; `data-enhance="false"` stops `blazor.web.js`'s enhanced navigation from swallowing the `?pwError=`/`?pwChanged=` redirect the endpoint responds with. This lives once in `Components/Shared/AccountSettingsPanel.razor`, with two thin `@page` hosts on top of it:
 
-Two independent cards, not one form: a plain `EditForm`/`InputText` for the display name (`AuthController.UpdateNameAsync`, in-process like everywhere else), and — reusing the exact pattern `Login.razor` already established — a raw HTML `<form method="post" action="api/auth/change-password" data-enhance="false">` for the password, not an `EditForm`. `ChangePasswordFormAsync` needs a real HTTP response to refresh the auth cookie's security stamp, which an in-process Blazor circuit call can't provide; `data-enhance="false"` stops `blazor.web.js`'s enhanced navigation from swallowing the `?pwError=`/`?pwChanged=` redirect the endpoint responds with. Reachable from both chromes: the header's gear icon (`PublicLayout`, above) for a customer, and a plain "Account Settings" row in `NavMenu` (below) for staff — same page either way, since a password belongs to the account, not the role.
+- `Components/Pages/AccountSettings.razor` — `@page "/account/settings"`, `@layout PublicLayout`, `[Authorize]` (any signed-in role) — reached via the header's gear icon, above.
+- `Components/Pages/AccountSettingsDashboard.razor` — `@page "/account-settings"`, default `MainLayout`, `[Authorize(Roles = "Admin,BusinessManager")]` — reached via `NavMenu`'s "Account Settings" row (below), so staff get the sidebar instead of the public header.
+
+Same panel either way, since a password belongs to the account, not the role or the chrome around it.
 
 ### NavMenu — role-aware sidebar
 

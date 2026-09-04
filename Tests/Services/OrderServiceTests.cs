@@ -318,19 +318,22 @@ public class OrderServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatusAsync_ConfirmedToNoShow_RestoresStock()
+    public async Task UpdateStatusAsync_ConfirmedToNoShow_DoesNotRestoreStock()
     {
+        // The business already prepared and held this stock for the customer, so unlike a
+        // cancellation it was never returned to the shelf (see ApplyStatusChangeAsync).
         var f = Build(AdminId, AppRoles.Admin);
         var user = TestData.User(CustomerId);
         var businessId = Guid.NewGuid();
         var package = TestData.Package(businessId, quantity: 3);
+        package.PickupEnd = DateTime.UtcNow.AddHours(-1);
         var order = TestData.Order(user, businessId, OrderStatuses.Confirmed, (package, 2));
         f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
 
         var result = await f.Service.UpdateStatusAsync(order.Id, OrderStatuses.NoShow);
 
         Assert.Equal(TestStatusIds.NoShow, result.StatusId);
-        Assert.Equal(5, package.Quantity);
+        Assert.Equal(3, package.Quantity);
         f.NotificationService.Verify(n => n.CreateAsync(user.Id, It.Is<string>(m => m.Contains("no-show")), It.IsAny<string>()), Times.Once);
     }
 
@@ -342,6 +345,7 @@ public class OrderServiceTests
         var user = TestData.User(CustomerId);
         var businessId = Guid.NewGuid();
         var package = TestData.Package(businessId, quantity: 3);
+        package.PickupEnd = DateTime.UtcNow.AddHours(-1);
         var order = TestData.Order(user, businessId, OrderStatuses.Confirmed, (package, 2));
         f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
         f.Db.Payments.Add(new Payment
@@ -357,6 +361,20 @@ public class OrderServiceTests
         f.StripeGateway.Verify(s => s.RefundAsync(It.IsAny<string>()), Times.Never);
         var payment = await f.Db.Payments.FirstAsync(p => p.OrderId == order.Id);
         Assert.Equal(PaymentStatuses.Succeeded, payment.Status);
+    }
+
+    [Fact]
+    public async Task UpdateStatusAsync_ConfirmedToNoShow_BeforePickupWindowCloses_Throws()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 3);
+        var order = TestData.Order(user, businessId, OrderStatuses.Confirmed, (package, 2));
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            f.Service.UpdateStatusAsync(order.Id, OrderStatuses.NoShow));
     }
 
     [Theory]

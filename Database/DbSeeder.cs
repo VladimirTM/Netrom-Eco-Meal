@@ -865,7 +865,7 @@ public static class DbSeeder
         await db.SaveChangesAsync();
     }
 
-    // True when there's no image, or it's on a placeholder host we've retired (picsum.photos) —
+    // True when there's no image, or it's on a retired placeholder host (picsum.photos) —
     // not loremflickr.com, which is also the current seed default and could be an admin's own choice.
     private static bool IsStalePlaceholderImage(string? imageUrl) =>
         string.IsNullOrWhiteSpace(imageUrl) || imageUrl.Contains("picsum.photos");

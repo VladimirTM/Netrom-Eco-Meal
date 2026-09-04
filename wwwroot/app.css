@@ -540,10 +540,6 @@ h1:focus {
     white-space: nowrap;
 }
 
-.public-header-inner .btn {
-    white-space: nowrap;
-}
-
 @media (max-width: 576px) {
     .public-header-inner {
         padding: 0.7rem 1rem;
@@ -559,9 +555,11 @@ h1:focus {
         font-size: 0.85rem;
     }
 
-    .public-header-inner .btn {
-        padding: 0.35rem 0.6rem;
+    .public-header-btn {
+        height: 32px;
+        padding: 0 0.7rem;
         font-size: 0.78rem;
+        border-radius: 8px;
     }
 
     /* The Authorized icon row (trophy/bell/orders/basket/apply/settings/logout) can run to 7
@@ -1150,6 +1148,43 @@ h1:focus {
 
 .public-cart-btn:hover {
     background: rgba(255, 255, 255, 0.16);
+}
+
+/* ── Sign in / Create account (public header, logged-out) ── */
+.public-header-btn {
+    height: 38px;
+    padding: 0 1rem;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 600;
+    white-space: nowrap;
+    text-decoration: none;
+    transition: background-color 0.15s, border-color 0.15s;
+}
+
+.public-header-btn-ghost {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.16);
+    color: #fff;
+}
+
+.public-header-btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+}
+
+.public-header-btn-primary {
+    background: var(--bs-primary);
+    color: #fff;
+}
+
+.public-header-btn-primary:hover {
+    background: #1a7540;
+    color: #fff;
 }
 
 .public-cart-badge {

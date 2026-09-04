@@ -66,8 +66,9 @@ whichever one they pick in the sidebar switcher:
 - See who did what — role changes, business create/edit/delete/staffing, approvals,
   moderation — on `/audit-log`
 
-Every role also gets `/account/settings` (a gear icon in the header) to update their display
-name or change their password.
+Every role also gets a page to update their display name or change their password — customers
+via the gear icon in the header (`/account/settings`), staff via "Account Settings" in the
+dashboard sidebar (`/account-settings`), same form either way.
 
 ## Stack
 

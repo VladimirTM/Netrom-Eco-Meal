@@ -29,9 +29,10 @@ one branded template with a single call-to-action button ("Confirm my account" /
 "Reset my password"); the reset link doesn't reveal whether the email address exists, so it's
 safe against account enumeration.
 
-Once signed in, the gear icon in the header (every role has one) opens `/account/settings` —
-update your display name, or change your password by entering the current one plus a new one
-twice. Both are separate forms, saved independently.
+Once signed in, the gear icon in the header (every role has one) — or, for Admin/BusinessManager,
+**Account Settings** in the dashboard sidebar — opens the same form: update your display name, or
+change your password by entering the current one plus a new one twice. Both are separate forms,
+saved independently.
 
 ### Browse and find something to rescue
 
