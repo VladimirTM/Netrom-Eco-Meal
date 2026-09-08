@@ -23,6 +23,9 @@ is just the capability summary.
   packages to a basket — the package list (and "N left"/"Sold out" state) updates live for
   anyone browsing it, with no refresh needed, if stock changes while they're looking
 - Check out via Stripe Checkout, and track past orders with pickup windows on `/orders`
+- Split a basket with friends as a Rescue Circle (2-6 people): everyone pays their own share
+  via their own Stripe Checkout, the order only moves forward once every share is in, and
+  each participant gets their own labeled pickup pass — see `/circles`
 - Show a QR pickup pass for a confirmed order, scanned by the business at collection —
   split a group order into several separate passes so whoever gets there first can scan
 - Leave a star rating and comment on a business (optionally tagged to a specific package)
@@ -170,7 +173,9 @@ or via the stale-Pending sweep) automatically refunds the charge; a `NoShow` del
 does **not** — the kept charge doubles as the no-show fee. If the refund itself fails (a
 Stripe-side error), the order still cancels but the payment is flagged `RefundFailed` instead
 of silently staying `Paid` — surfaced as a distinct badge everywhere payment status shows up,
-plus a note in the customer's cancellation email.
+plus a note in the customer's cancellation email. A Rescue Circle order (above) uses the same
+Stripe setup, just split into one Checkout session per participant instead of one for the whole
+order — cancelling it refunds whichever participants had actually paid, individually.
 
 ## Web Push Notifications
 
@@ -342,12 +347,19 @@ submitted by the demo customer), one existing demo business and one existing dem
 marked hidden with a reason, four `Report`s (open, dismissed, and two actioned), and an
 audit-log history consistent with all of it.
 
+It also seeds two Rescue Circles on `/circles` at different stages: one still collecting
+payments (organizer and demo.customer2 have paid, demo.customer3 has joined but still owes,
+and one seat is left open to join), and one already fully paid and confirmed, so the
+per-participant pickup passes it generates automatically are visible without having to run
+the whole flow yourself first.
+
 ## Running tests
 
 `Tests/Netrom-Eco-Meal.Tests.csproj` is a separate xUnit project (unit tests for
-`OrderService`'s status-transition/stock logic and `CheckoutService`'s Stripe checkout
-bridge, plus integration tests that run the real migrations + `DbSeeder` against a
-Postgres container via Testcontainers). Requires Docker to be running locally:
+`OrderService`'s status-transition/stock logic, `CheckoutService`'s Stripe checkout bridge,
+and `RescueCircleService`'s split-payment orchestration, plus integration tests that run the
+real migrations + `DbSeeder` against a Postgres container via Testcontainers). Requires
+Docker to be running locally:
 
 ```bash
 dotnet test

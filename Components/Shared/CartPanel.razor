@@ -1,10 +1,12 @@
 @using Microsoft.AspNetCore.Mvc
+@using Netrom_Eco_Meal.Constants
 @using Netrom_Eco_Meal.Controllers
 @using Netrom_Eco_Meal.Services
 @using Netrom_Eco_Meal.Services.Interfaces
 @implements IDisposable
 @inject CartService CartService
 @inject PaymentController PaymentController
+@inject RescueCircleController RescueCircleController
 @inject NavigationManager Navigation
 
 @if (IsOpen)
@@ -68,17 +70,55 @@
                     <span>Total</span>
                     <span class="cart-panel-total-value">@CartService.TotalPrice.ToString("C")</span>
                 </div>
-                <button type="button" class="btn btn-primary w-100 py-2" disabled="@_placing" @onclick="StartCheckoutAsync">
-                    @if (_placing)
-                    {
-                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                    }
-                    else
-                    {
-                        <i class="bi bi-credit-card me-2"></i>
-                    }
-                    Pay &amp; place order
-                </button>
+
+                @if (!_splitOpen)
+                {
+                    <button type="button" class="btn btn-primary w-100 py-2 mb-2" disabled="@_placing" @onclick="StartCheckoutAsync">
+                        @if (_placing)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-credit-card me-2"></i>
+                        }
+                        Pay &amp; place order
+                    </button>
+                    <button type="button" class="btn btn-link w-100 py-0 text-decoration-none small" @onclick="() => _splitOpen = true">
+                        <i class="bi bi-people me-1"></i>Split this with friends instead
+                    </button>
+                }
+                else
+                {
+                    <div class="rescue-circle-starter mb-2">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="small fw-semibold"><i class="bi bi-people me-1"></i>Rescue Circle</span>
+                            <button type="button" class="btn-close btn-sm" aria-label="Close" @onclick="() => _splitOpen = false"></button>
+                        </div>
+                        <p class="text-muted small mb-2">Split the @CartService.TotalPrice.ToString("C") total evenly — everyone pays their own share, and you'll get a link to invite them.</p>
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <button type="button" class="cart-step-btn" disabled="@(_participantCount <= RescueCircles.MinParticipants)" @onclick="() => _participantCount--">
+                                <i class="bi bi-dash"></i>
+                            </button>
+                            <span class="cart-line-qty">@_participantCount people</span>
+                            <button type="button" class="cart-step-btn" disabled="@(_participantCount >= RescueCircles.MaxParticipants)" @onclick="() => _participantCount++">
+                                <i class="bi bi-plus"></i>
+                            </button>
+                            <span class="text-muted small ms-auto">≈ @((CartService.TotalPrice / _participantCount).ToString("C")) each</span>
+                        </div>
+                        <button type="button" class="btn btn-primary w-100 py-2" disabled="@_placing" @onclick="StartCircleAsync">
+                            @if (_placing)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-credit-card me-2"></i>
+                            }
+                            Start &amp; pay my share
+                        </button>
+                    </div>
+                }
             </div>
         }
     </aside>
@@ -90,6 +130,8 @@
 
     private bool _placing;
     private string? _error;
+    private bool _splitOpen;
+    private int _participantCount = RescueCircles.MinParticipants;
 
     protected override void OnInitialized()
     {
@@ -126,6 +168,33 @@
             return;
         }
 
+        Navigation.NavigateTo(result.Value!, forceLoad: true);
+    }
+
+    // Unlike a solo checkout, a Rescue Circle's Order is placed immediately (see
+    // RescueCircleService.StartCircleAsync) — the group hasn't finished paying yet, but the basket
+    // itself has already become a real (Pending) order, so the cart is cleared right away instead
+    // of waiting for the /circles/return confirmation the way PaymentReturn.razor does.
+    private async Task StartCircleAsync()
+    {
+        if (CartService.BusinessId is null || _placing)
+            return;
+
+        _placing = true;
+        _error = null;
+
+        var businessId = CartService.BusinessId.Value;
+        var lines = CartService.Items.Select(i => new OrderLineRequest(i.Package.Id, i.Quantity)).ToList();
+        var result = await RescueCircleController.StartCircleAsync(businessId, lines, _participantCount);
+
+        if (result.Result is ConflictObjectResult conflict)
+        {
+            _placing = false;
+            _error = conflict.Value?.ToString() ?? "We couldn't start this Rescue Circle. Please try again.";
+            return;
+        }
+
+        await CartService.ClearAsync();
         Navigation.NavigateTo(result.Value!, forceLoad: true);
     }
 

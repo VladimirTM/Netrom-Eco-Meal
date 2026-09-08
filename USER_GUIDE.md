@@ -149,6 +149,25 @@ backing out of Stripe's page or just closing the tab cancels the attempt cleanly
 charged and nothing left behind. Once payment succeeds, you're redirected back with your order
 number and a "kg of food saved" figure for that order.
 
+### Split an order with friends (Rescue Circles)
+
+In the basket panel, **Split this with friends instead** (below **Pay & place order**) swaps
+the pay button for a people-count stepper (2–6) showing roughly how much each person's share
+will be. Clicking **Start & pay my share** places the order right away and takes you to Stripe
+to pay just your own portion — the order stays open for the rest of the group to join and pay
+theirs.
+
+You get a link (your circle's `/circles/{id}` page) to send around. Anyone signed in can open
+it to see how many of the seats are filled and how many shares are paid; a friend who isn't in
+it yet can join an open seat and pay their share the same way you did. The kitchen won't start
+preparing the order until **every** share is paid — once it is, everyone gets notified and each
+participant gets their own labeled QR pickup pass, so nobody has to be the one holding a single
+code for the whole group. If you paid but the circle isn't full yet, you can back out and get
+refunded from the same page — the organizer instead cancels the whole thing the normal way, from
+`/orders`, which refunds everyone who'd already paid.
+
+`/circles` (the people icon in the header) lists every circle you're organizing or have joined.
+
 ### Track and pick up
 
 `/orders` lists everything you've ever ordered, with a lifetime stats header (orders placed,
@@ -196,6 +215,10 @@ people are collecting (up to 6), and each gets their own tab with its own QR cod
 different one to each person. Whoever scans first completes the whole order for everyone; the
 rest just show "already picked up" if scanned afterward. Changing your mind about the count is
 free until someone actually redeems a pass.
+
+A Rescue Circle order (above) already arrives split this way once every share is paid — each
+tab is labeled with the participant's own name instead of "Pass 1"/"Pass 2", so nobody needs to
+set up the split by hand.
 
 ### Leave a review
 

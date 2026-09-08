@@ -126,6 +126,7 @@ builder.Services.AddScoped<IMarkdownPricingAgent, MarkdownPricingAgent>();
 builder.Services.AddScoped<IAppEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<IStripeGateway, StripeGateway>();
 builder.Services.AddScoped<ICheckoutService, CheckoutService>();
+builder.Services.AddScoped<IRescueCircleService, RescueCircleService>();
 builder.Services.AddScoped<CurrentUserAccessor>();
 // Singleton, not Scoped — see PackageStockBroadcaster's own comment for why one instance needs to
 // be shared across every circuit instead of living per-circuit like CartService below.
@@ -143,6 +144,7 @@ builder.Services.AddScoped<PackageTemplateController>();
 builder.Services.AddScoped<UserController>();
 builder.Services.AddScoped<OrderController>();
 builder.Services.AddScoped<PaymentController>();
+builder.Services.AddScoped<RescueCircleController>();
 builder.Services.AddScoped<ReviewController>();
 builder.Services.AddScoped<NotificationController>();
 builder.Services.AddScoped<FavoriteController>();

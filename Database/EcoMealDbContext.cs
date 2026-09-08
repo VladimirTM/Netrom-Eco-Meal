@@ -32,6 +32,8 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<BusinessHours> BusinessHours { get; set; }
     public DbSet<BusinessClosure> BusinessClosures { get; set; }
     public DbSet<PushSubscription> PushSubscriptions { get; set; }
+    public DbSet<RescueCircle> RescueCircles { get; set; }
+    public DbSet<RescueCircleParticipant> RescueCircleParticipants { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -151,6 +153,41 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
             .WithMany()
             .HasForeignKey(s => s.UserId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // One Rescue Circle per Order — deleting the order (it never happens outside tests, but
+        // mirrors OrderPickupPass's own cascade) takes the circle and its participants with it.
+        modelBuilder.Entity<RescueCircle>()
+            .HasOne(c => c.Order)
+            .WithOne(o => o.RescueCircle)
+            .HasForeignKey<RescueCircle>(c => c.OrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<RescueCircle>()
+            .HasIndex(c => c.OrderId)
+            .IsUnique();
+
+        modelBuilder.Entity<RescueCircle>()
+            .HasOne(c => c.Organizer)
+            .WithMany()
+            .HasForeignKey(c => c.OrganizerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<RescueCircleParticipant>()
+            .HasOne(p => p.RescueCircle)
+            .WithMany(c => c.Participants)
+            .HasForeignKey(p => p.RescueCircleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // One participant row per (circle, user) — joining twice just re-shows the existing slot.
+        modelBuilder.Entity<RescueCircleParticipant>()
+            .HasIndex(p => new { p.RescueCircleId, p.UserId })
+            .IsUnique();
+
+        modelBuilder.Entity<RescueCircleParticipant>()
+            .HasOne(p => p.User)
+            .WithMany()
+            .HasForeignKey(p => p.UserId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         // Optimistic concurrency so two managers confirming the same package can't oversell stock.
         modelBuilder.Entity<Package>()

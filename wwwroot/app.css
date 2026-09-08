@@ -1455,6 +1455,13 @@ h1:focus {
     color: var(--em-text);
 }
 
+.rescue-circle-starter {
+    background: #f8faf8;
+    border: 1px solid #e5e9e5;
+    border-radius: 12px;
+    padding: 0.85rem 1rem;
+}
+
 /* ── Toast ── */
 .toast-pill {
     position: fixed;

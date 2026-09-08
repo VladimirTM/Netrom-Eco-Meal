@@ -285,6 +285,14 @@ public class OrderService(
     // cancellation; returns true on failure so the caller can surface it instead of a silent "Paid".
     private async Task<bool> RefundIfPaidAsync(Order order)
     {
+        // A Rescue Circle order has no single Stripe charge to refund — each participant paid their
+        // own share separately (see RescueCircleService), so cancelling it means refunding whichever
+        // of them actually paid, individually, instead of the one-Payment path below.
+        var circle = await dbContext.RescueCircles.Include(c => c.Participants)
+            .FirstOrDefaultAsync(c => c.OrderId == order.Id);
+        if (circle is not null)
+            return await RefundRescueCircleAsync(order, circle);
+
         var payment = await dbContext.Payments.FirstOrDefaultAsync(p => p.OrderId == order.Id && p.Status == PaymentStatuses.Succeeded);
         if (payment?.StripePaymentIntentId is null)
             return false;
@@ -302,6 +310,38 @@ public class OrderService(
             payment.Status = PaymentStatuses.RefundFailed;
             return true;
         }
+    }
+
+    private async Task<bool> RefundRescueCircleAsync(Order order, RescueCircle circle)
+    {
+        var anyFailed = false;
+        foreach (var participant in circle.Participants.Where(p => p.PaidAt is not null && p.RefundedAt is null))
+        {
+            try
+            {
+                await stripeGateway.RefundAsync(participant.StripePaymentIntentId!);
+                participant.RefundedAt = DateTime.UtcNow;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to refund Rescue Circle participant {ParticipantId} for order #{OrderNumber:000}.", participant.Id, order.OrderNumber);
+                anyFailed = true;
+            }
+        }
+
+        circle.Status = RescueCircleStatuses.Cancelled;
+
+        // Only exists once RescueCircleService.CompleteShareCheckoutAsync marked the circle fully
+        // paid — keep it in sync with what actually happened so Payments.razor/OrderDetailModal/the
+        // CSV export don't need their own Rescue Circle awareness.
+        var summaryPayment = await dbContext.Payments.FirstOrDefaultAsync(p => p.OrderId == order.Id);
+        if (summaryPayment is not null)
+        {
+            summaryPayment.Status = anyFailed ? PaymentStatuses.RefundFailed : PaymentStatuses.Refunded;
+            summaryPayment.RefundedAt = DateTime.UtcNow;
+        }
+
+        return anyFailed;
     }
 
     public async Task<Dictionary<Guid, int>> GetPendingReservedQuantitiesAsync(IEnumerable<Guid> packageIds)
@@ -446,6 +486,18 @@ public class OrderService(
 
         if (statusName == OrderStatuses.Confirmed)
         {
+            // A Rescue Circle order shouldn't be confirmable until every participant's share is
+            // in — otherwise a manager could accept (and start preparing) an order the group never
+            // finished paying for. See RescueCircleService for how a share actually gets paid.
+            var circle = await dbContext.RescueCircles.Include(c => c.Participants).ThenInclude(p => p.User)
+                .FirstOrDefaultAsync(c => c.OrderId == order.Id);
+            if (circle is not null)
+            {
+                var unpaidCount = circle.ParticipantCount - circle.Participants.Count(p => p.PaidAt is not null);
+                if (unpaidCount > 0)
+                    throw new InvalidOperationException($"This Rescue Circle isn't fully paid yet — {unpaidCount} {(unpaidCount == 1 ? "share is" : "shares are")} still unpaid.");
+            }
+
             foreach (var line in order.OrderPackages)
             {
                 if (line.Quantity > line.Package.Quantity)
@@ -457,16 +509,38 @@ public class OrderService(
 
             // Every Confirmed order gets a pickup pass by default — customers who never bother
             // splitting it (see SplitPickupPassesAsync) still get exactly the one QR they had before.
+            // A Rescue Circle order instead gets one pass per participant automatically, so the
+            // organizer never has to split it by hand afterwards.
             // Adding via the DbSet (not just the order.PickupPasses navigation) matters here: a
             // client-assigned non-default Guid key discovered only through navigation fixup gets
             // tracked as Modified instead of Added, turning the INSERT into a no-op UPDATE.
-            dbContext.OrderPickupPasses.Add(new OrderPickupPass
+            var now = DateTime.UtcNow;
+            if (circle is not null)
             {
-                Id = Guid.NewGuid(),
-                OrderId = order.Id,
-                Label = "Pickup pass",
-                CreatedAt = DateTime.UtcNow,
-            });
+                var i = 0;
+                foreach (var participant in circle.Participants.OrderBy(p => p.JoinedAt))
+                {
+                    i++;
+                    dbContext.OrderPickupPasses.Add(new OrderPickupPass
+                    {
+                        Id = Guid.NewGuid(),
+                        OrderId = order.Id,
+                        Label = $"{participant.User.Name}'s pass",
+                        // A millisecond apart, not identical — see SplitPickupPassesAsync's own note.
+                        CreatedAt = now.AddMilliseconds(i),
+                    });
+                }
+            }
+            else
+            {
+                dbContext.OrderPickupPasses.Add(new OrderPickupPass
+                {
+                    Id = Guid.NewGuid(),
+                    OrderId = order.Id,
+                    Label = "Pickup pass",
+                    CreatedAt = now,
+                });
+            }
         }
         else if (currentStatusName == OrderStatuses.Confirmed && statusName == OrderStatuses.Cancelled)
         {

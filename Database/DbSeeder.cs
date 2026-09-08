@@ -89,6 +89,7 @@ public static class DbSeeder
         {
             await SeedReportsAndAuditLogAsync(db, demoCustomer, adminUser, demoManager?.Id, demoManager2?.Id);
             await SeedLeaderboardDemoDataAsync(db, demoCustomer, demoCustomer2, demoCustomer3);
+            await SeedRescueCircleDemoDataAsync(db, demoCustomer, demoCustomer2, demoCustomer3);
         }
     }
 
@@ -681,6 +682,114 @@ public static class DbSeeder
             newOrders.Add(MakeLeaderboardOrder(LeaderboardOrder3AId, demoCustomer3, packageIds[2], 2, now.AddDays(-3)));
 
         db.Orders.AddRange(newOrders);
+        await db.SaveChangesAsync();
+    }
+
+    // Phase 13: demos the Rescue Circle group-order feature on a fresh database with two circles at
+    // different stages — one still collecting payments (showing both an open slot and a joined-but-
+    // unpaid participant, so "who still owes" has something real to show), one fully paid and
+    // Confirmed (showing the per-participant pickup passes ApplyStatusChangeAsync generates instead
+    // of the usual single default pass). Guarded on RescueCircles so it only ever runs once.
+    private static async Task SeedRescueCircleDemoDataAsync(EcoMealDbContext db, ApplicationUser demoCustomer, ApplicationUser? demoCustomer2, ApplicationUser? demoCustomer3)
+    {
+        if (demoCustomer2 is null || demoCustomer3 is null) return;
+        if (await db.RescueCircles.AnyAsync()) return;
+
+        var pendingStatusId = await db.Statuses.Where(s => s.Name == OrderStatuses.Pending).Select(s => s.Id).FirstAsync();
+        var confirmedStatusId = await db.Statuses.Where(s => s.Name == OrderStatuses.Confirmed).Select(s => s.Id).FirstAsync();
+
+        // ---- An Open circle: organizer + one more have paid, one has joined but still owes, and
+        // one slot is still unclaimed — 3 of 4 seats filled, 2 of 4 shares paid.
+        var openBusinessId = new Guid("44444444-0000-0000-0000-000000000004"); // Poarta de Aur Bakery
+        var openPackageId = new Guid("55555555-0000-0000-0000-000000000007"); // Golden Goal Bread Bag, 6.50 lei
+        var openPackagePrice = await db.Packages.Where(p => p.Id == openPackageId).Select(p => p.Price).FirstAsync();
+        const int openQuantity = 3;
+        var openTotal = openPackagePrice * openQuantity; // 19.50
+        const int openParticipantCount = 4;
+        var openBaseShare = Math.Floor(openTotal / openParticipantCount * 100m) / 100m; // 4.87
+        var openOrganizerShare = openTotal - openBaseShare * (openParticipantCount - 1); // 4.89 — absorbs the rounding
+
+        var openOrderId = new Guid("99999999-0000-0000-0000-000000000001");
+        var openCircleId = new Guid("99999999-0000-0000-0000-000000000002");
+        var now = DateTime.UtcNow;
+
+        var openOrder = new Order
+        {
+            Id = openOrderId, UserId = demoCustomer.Id, User = demoCustomer, BusinessId = openBusinessId,
+            StatusId = pendingStatusId, CreatedAt = now.AddMinutes(-10),
+        };
+        openOrder.OrderPackages.Add(new OrderPackage { Id = Guid.NewGuid(), OrderId = openOrderId, PackageId = openPackageId, Quantity = openQuantity });
+
+        var openCircle = new RescueCircle
+        {
+            Id = openCircleId, OrderId = openOrderId, OrganizerId = demoCustomer.Id,
+            ParticipantCount = openParticipantCount, TotalAmount = openTotal, Status = RescueCircleStatuses.Open,
+            CreatedAt = now.AddMinutes(-10),
+        };
+
+        db.RescueCircleParticipants.AddRange(
+            new RescueCircleParticipant { Id = Guid.NewGuid(), RescueCircleId = openCircleId, UserId = demoCustomer.Id, ShareAmount = openOrganizerShare, JoinedAt = now.AddMinutes(-10), StripeCheckoutSessionId = $"cs_demo_{openCircleId:N}_1", PaidAt = now.AddMinutes(-9), StripePaymentIntentId = $"pi_demo_{openCircleId:N}_1" },
+            new RescueCircleParticipant { Id = Guid.NewGuid(), RescueCircleId = openCircleId, UserId = demoCustomer2.Id, ShareAmount = openBaseShare, JoinedAt = now.AddMinutes(-8), StripeCheckoutSessionId = $"cs_demo_{openCircleId:N}_2", PaidAt = now.AddMinutes(-7), StripePaymentIntentId = $"pi_demo_{openCircleId:N}_2" },
+            new RescueCircleParticipant { Id = Guid.NewGuid(), RescueCircleId = openCircleId, UserId = demoCustomer3.Id, ShareAmount = openBaseShare, JoinedAt = now.AddMinutes(-3), StripeCheckoutSessionId = $"cs_demo_{openCircleId:N}_3" }
+            // Fourth seat left unclaimed on purpose — shows an invite link with room left to join.
+        );
+
+        db.Orders.Add(openOrder);
+        db.RescueCircles.Add(openCircle);
+
+        // ---- A fully paid, Confirmed circle: every participant already paid, so it demos the
+        // per-participant pickup passes ApplyStatusChangeAsync generates for a Rescue Circle order.
+        var confirmedBusinessId = new Guid("44444444-0000-0000-0000-000000000005"); // Hat-Trick Bakery
+        var confirmedPackageId = new Guid("55555555-0000-0000-0000-000000000009"); // Kick-Off Bread Bag, 5.00 lei
+        var confirmedPackage = await db.Packages.FindAsync(confirmedPackageId);
+        const int confirmedQuantity = 3;
+        var confirmedTotal = confirmedPackage!.Price * confirmedQuantity; // 15.00, splits evenly
+        const int confirmedParticipantCount = 3;
+        var confirmedShare = confirmedTotal / confirmedParticipantCount; // 5.00 each
+
+        var confirmedOrderId = new Guid("99999999-0000-0000-0000-000000000003");
+        var confirmedCircleId = new Guid("99999999-0000-0000-0000-000000000004");
+        var confirmedCreatedAt = now.AddHours(-3);
+
+        var confirmedOrder = new Order
+        {
+            Id = confirmedOrderId, UserId = demoCustomer2.Id, User = demoCustomer2, BusinessId = confirmedBusinessId,
+            StatusId = confirmedStatusId, CreatedAt = confirmedCreatedAt,
+        };
+        confirmedOrder.OrderPackages.Add(new OrderPackage { Id = Guid.NewGuid(), OrderId = confirmedOrderId, PackageId = confirmedPackageId, Quantity = confirmedQuantity });
+        // Mirrors OrderService.ApplyStatusChangeAsync: a Confirmed order has already reserved its stock.
+        confirmedPackage.Quantity -= confirmedQuantity;
+
+        var confirmedCircle = new RescueCircle
+        {
+            Id = confirmedCircleId, OrderId = confirmedOrderId, OrganizerId = demoCustomer2.Id,
+            ParticipantCount = confirmedParticipantCount, TotalAmount = confirmedTotal, Status = RescueCircleStatuses.Open,
+            CreatedAt = confirmedCreatedAt,
+        };
+
+        db.RescueCircleParticipants.AddRange(
+            new RescueCircleParticipant { Id = Guid.NewGuid(), RescueCircleId = confirmedCircleId, UserId = demoCustomer2.Id, ShareAmount = confirmedShare, JoinedAt = confirmedCreatedAt, StripeCheckoutSessionId = $"cs_demo_{confirmedCircleId:N}_1", PaidAt = confirmedCreatedAt.AddMinutes(1), StripePaymentIntentId = $"pi_demo_{confirmedCircleId:N}_1" },
+            new RescueCircleParticipant { Id = Guid.NewGuid(), RescueCircleId = confirmedCircleId, UserId = demoCustomer.Id, ShareAmount = confirmedShare, JoinedAt = confirmedCreatedAt.AddMinutes(2), StripeCheckoutSessionId = $"cs_demo_{confirmedCircleId:N}_2", PaidAt = confirmedCreatedAt.AddMinutes(4), StripePaymentIntentId = $"pi_demo_{confirmedCircleId:N}_2" },
+            new RescueCircleParticipant { Id = Guid.NewGuid(), RescueCircleId = confirmedCircleId, UserId = demoCustomer3.Id, ShareAmount = confirmedShare, JoinedAt = confirmedCreatedAt.AddMinutes(3), StripeCheckoutSessionId = $"cs_demo_{confirmedCircleId:N}_3", PaidAt = confirmedCreatedAt.AddMinutes(5), StripePaymentIntentId = $"pi_demo_{confirmedCircleId:N}_3" }
+        );
+
+        db.Payments.Add(new Payment
+        {
+            Id = Guid.NewGuid(), OrderId = confirmedOrderId, Amount = confirmedTotal, Currency = "ron",
+            StripeCheckoutSessionId = $"circle_{confirmedCircleId:N}", Status = PaymentStatuses.Succeeded,
+            CreatedAt = confirmedCreatedAt.AddMinutes(5),
+        });
+
+        // One pass per participant, named the way ApplyStatusChangeAsync's Rescue Circle branch does.
+        db.OrderPickupPasses.AddRange(
+            new OrderPickupPass { Id = Guid.NewGuid(), OrderId = confirmedOrderId, Label = $"{demoCustomer2.Name}'s pass", CreatedAt = confirmedCreatedAt.AddMinutes(5).AddMilliseconds(1) },
+            new OrderPickupPass { Id = Guid.NewGuid(), OrderId = confirmedOrderId, Label = $"{demoCustomer.Name}'s pass", CreatedAt = confirmedCreatedAt.AddMinutes(5).AddMilliseconds(2) },
+            new OrderPickupPass { Id = Guid.NewGuid(), OrderId = confirmedOrderId, Label = $"{demoCustomer3.Name}'s pass", CreatedAt = confirmedCreatedAt.AddMinutes(5).AddMilliseconds(3) }
+        );
+
+        db.Orders.Add(confirmedOrder);
+        db.RescueCircles.Add(confirmedCircle);
+
         await db.SaveChangesAsync();
     }
 

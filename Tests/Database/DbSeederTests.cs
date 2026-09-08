@@ -116,12 +116,13 @@ public class DbSeederTests(PostgresFixture fixture)
         Assert.Contains(manager2.Id, stadionulStaffIds);
 
         var orders = await db.Orders.Include(o => o.Status).Where(o => o.UserId == customer.Id).ToListAsync();
-        // 7 original demo orders + 9 historical ones backing the Phase 8 analytics card.
-        Assert.Equal(16, orders.Count);
+        // 7 original demo orders + 9 historical ones backing the Phase 8 analytics card + 1 Phase 13
+        // Rescue Circle order (still Open/Pending, organized by this customer).
+        Assert.Equal(17, orders.Count);
         Assert.Equal(12, orders.Count(o => o.Status.Name == OrderStatuses.Completed));
         Assert.Single(orders, o => o.Status.Name == OrderStatuses.Confirmed);
         Assert.Single(orders, o => o.Status.Name == OrderStatuses.Cancelled);
-        Assert.Single(orders, o => o.Status.Name == OrderStatuses.Pending);
+        Assert.Equal(2, orders.Count(o => o.Status.Name == OrderStatuses.Pending));
         Assert.Single(orders, o => o.Status.Name == OrderStatuses.NoShow);
 
         // Every order should have been assigned a real OrderNumber by the DB sequence.
@@ -173,14 +174,18 @@ public class DbSeederTests(PostgresFixture fixture)
         await using var finalDb = provider.GetRequiredService<EcoMealDbContext>();
         Assert.Equal(14, await finalDb.Businesses.CountAsync());
         Assert.Equal(36, await finalDb.Packages.CountAsync());
-        // 16 original demo orders + 3 Phase 11 leaderboard-demo orders (2 for demo.customer2, 1 for demo.customer3).
-        Assert.Equal(19, await finalDb.Orders.CountAsync());
+        // 16 original demo orders + 3 Phase 11 leaderboard-demo orders (2 for demo.customer2, 1 for
+        // demo.customer3) + 2 Phase 13 Rescue Circle orders.
+        Assert.Equal(21, await finalDb.Orders.CountAsync());
         Assert.Equal(3, await finalDb.Favorites.CountAsync());
         Assert.Equal(2, await finalDb.Reviews.CountAsync());
         // Two demo managers each staff one or two of the demo businesses — must not double-insert.
         Assert.Equal(3, await finalDb.BusinessStaff.CountAsync());
         Assert.Equal(4, await finalDb.Reports.CountAsync());
         Assert.Equal(11, await finalDb.AuditLogs.CountAsync());
+        // Proves SeedRescueCircleDemoDataAsync's own guard actually held on the second run.
+        Assert.Equal(2, await finalDb.RescueCircles.CountAsync());
+        Assert.Equal(6, await finalDb.RescueCircleParticipants.CountAsync());
     }
 
     [Fact]
@@ -249,7 +254,9 @@ public class DbSeederTests(PostgresFixture fixture)
         Assert.True(customer2!.ShowOnLeaderboard);
         Assert.False(customer3!.ShowOnLeaderboard);
 
-        Assert.Equal(2, await db.Orders.CountAsync(o => o.UserId == customer2.Id));
+        // +1 for customer2: SeedRescueCircleDemoDataAsync's Confirmed circle is organized (and its
+        // Order owned) by them — customer3 only joins that circle as a participant, not an order owner.
+        Assert.Equal(3, await db.Orders.CountAsync(o => o.UserId == customer2.Id));
         Assert.Equal(1, await db.Orders.CountAsync(o => o.UserId == customer3.Id));
     }
 

@@ -26,4 +26,7 @@ public class Order
     // Created once the order is Confirmed (one by default) — see OrderService.ApplyStatusChangeAsync
     // and SplitPickupPassesAsync.
     public ICollection<OrderPickupPass> PickupPasses { get; set; } = [];
+    // Set when this order was started as a shared Rescue Circle basket instead of a solo checkout —
+    // see RescueCircleService. Null for every ordinary order.
+    public RescueCircle? RescueCircle { get; set; }
 }

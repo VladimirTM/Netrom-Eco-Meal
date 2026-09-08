@@ -51,6 +51,9 @@ Components/
 │   ├── Impact.razor              # /impact — Phase 11 monthly kg-saved leaderboard, opt-in toggle
 │   ├── PaymentReturn.razor       # /checkout/return — Stripe success redirect landing page, confirms payment
 │   ├── PaymentCancel.razor       # /checkout/cancel — Stripe cancel redirect landing page
+│   ├── RescueCircleList.razor    # /circles — Phase 13 "your Rescue Circles" list, organized or joined
+│   ├── RescueCircleInvite.razor  # /circles/{Id} — join/pay/leave a Rescue Circle, or view its public summary
+│   ├── RescueCircleReturn.razor  # /circles/return — Stripe success/failure landing page for one participant's share
 │   ├── AccountSettings.razor     # /account/settings — PublicLayout host, any signed-in role
 │   ├── AccountSettingsDashboard.razor # /account-settings — MainLayout host, Admin/BusinessManager only
 │   ├── Orders.razor              # /orders — customer order history + cancel + reorder
@@ -238,6 +241,8 @@ Both `RestoreAsync` and `InitializeAsync` are deferred to `OnAfterRenderAsync(fi
 **Impact leaderboard trophy icon (Phase 11)**: unlike every other header control, this one is duplicated into *both* the `Authorized` and `NotAuthorized` branches of `PublicLayout`'s `<AuthorizeView>` rather than gated to one — `/impact` itself has no `[Authorize]` (§6 Impact leaderboard), so the link needs to be reachable by an anonymous visitor too, and `<AuthorizeView>`'s two branches are mutually exclusive, so there's no single place outside both that would render for everyone.
 
 **AI basket planner sparkle icon**: `bi-stars`, gated to `context.User.IsInRole(AppRoles.Customer)` only (unlike the basket/orders icons, which share that same `if`) — points at `/plan-basket` (§6 AI budget/basket planner).
+
+**Rescue Circles icon (Phase 13)**: `bi-people`, sitting right next to the orders receipt icon inside the same `context.User.IsInRole(AppRoles.Customer)` block — points at `/circles` (§8 Cart Panel & Checkout).
 
 **Account settings icon**: `bi-person-gear`, links to `/account/settings` — the one header icon with no role gate beyond plain `<AuthorizeView>`, since every signed-in role (Customer, BusinessManager, Admin) has a name/password to manage. `NavMenu` links to a separate route for the same form (below), so staff get it inside the sidebar chrome instead of the public header.
 
@@ -602,6 +607,21 @@ Three render states: a "Confirming your payment…" spinner while the `CompleteC
 
 `PaymentCancel.razor` is comparatively trivial — no query params, no service calls, just a static "Payment cancelled, nothing was charged, your basket is still saved" message with a link back to `/`. Stripe redirects here when the customer backs out of the hosted Checkout page instead of completing it; the cart survives because nothing about it was ever touched — `StartCheckoutAsync` above never clears the basket itself, only a confirmed `PaymentReturn.razor` success does.
 
+### Rescue Circles — splitting an order with friends (Phase 13)
+
+**Files:** `Components/Shared/CartPanel.razor` (the starter), `Components/Pages/RescueCircleList.razor` (`/circles`), `Components/Pages/RescueCircleInvite.razor` (`/circles/{Id}`), `Components/Pages/RescueCircleReturn.razor` (`/circles/return`).
+
+`CartPanel`'s "Pay & place order" button gets a sibling link, "Split this with friends instead" (`_splitOpen`), that swaps the button for a small `.rescue-circle-starter` panel: a people-count stepper clamped to `Constants.RescueCircles.MinParticipants`/`MaxParticipants` (2–6) with a live "≈ X each" estimate (`CartService.TotalPrice / _participantCount`, client-side only — the real per-share rounding happens server-side, §5 RescueCircle in `BACKEND_ARCHITECTURE.md`), and a "Start & pay my share" button calling `RescueCircleController.StartCircleAsync`. Unlike a solo checkout, this clears the basket **immediately** rather than waiting for a return-page confirmation:
+```csharp
+await CartService.ClearAsync();
+Navigation.NavigateTo(result.Value!, forceLoad: true);
+```
+because the underlying `Order` is placed the moment the circle starts (`RescueCircleService.StartCircleAsync`) — the group hasn't finished paying yet, but the basket itself has already become a real (`Pending`) order, unlike a solo checkout where the `Order` doesn't exist at all until `PaymentReturn.razor` confirms payment.
+
+`RescueCircleReturn.razor` (`@layout EmptyLayout`, same `.login-page`/`.cart-confirmation` shapes as `PaymentReturn.razor`) is where `RescueCircleService.CompleteShareCheckoutAsync` gets called from, driven by the `circle`/`participant`/`session_id` query params the success URL was built with. Same three render states as `PaymentReturn.razor` (confirming spinner / success / error), except the success copy branches on whether the *whole circle* is now fully paid ("Everyone's paid — the kitchen will confirm the order soon") or just this one share ("N of M people have paid so far — share the link so the rest can chip in"), and either way it links back to `/circles/{Id}` rather than an order-history page — there's no basket to clear here since `CartPanel` already did that when the circle started.
+
+`RescueCircleInvite.razor` (`/circles/{Id}`) is the page the invite link itself points at, reachable by any signed-in customer — not just participants — since deciding "should I join?" needs a public-enough summary. It calls `RescueCircleController.GetDetailAsync` first (the full per-person paid/unpaid breakdown, organizer/participant-only) and falls back to `GetSummaryAsync` (participant count/total/status only, no names) on a `Conflict()` — the same shape `RescueCircleService`'s two read methods enforce server-side (`BACKEND_ARCHITECTURE.md` §5). The page then renders one of four actions depending on the viewer's own relationship to the circle: pay their own unpaid share, join an open slot and pay, leave (refunding themselves) if they've already paid but the circle hasn't, or nothing actionable if it's full/cancelled/theirs-and-fully-paid. `RescueCircleList.razor` (`/circles`) is the plain list of every circle the current customer organizes or has joined (`GetMyCirclesAsync`), rendered as the same `.order-ticket` cards `Orders.razor` uses, each linking into its own `RescueCircleInvite.razor`.
+
 ---
 
 ## 9. Orders Page & Reorder
@@ -681,7 +701,7 @@ var payloadUrl = $"{NavigationManager.BaseUri}orders/validate/{_order!.Id}/{pass
 var qrData = new QRCodeGenerator().CreateQrCode(payloadUrl, QRCodeGenerator.ECCLevel.Q);
 _qrSvg = new SvgQRCode(qrData).GetGraphic(5, "#0b1f13", "#ffffff", true, SvgQRCode.SizingMode.ViewBoxAttribute);
 ```
-Rendered inline via `@((MarkupString)_qrSvg!)`. Only shown when `Order.Status == Confirmed` — every other status renders an explanatory empty state instead (`StatusExplanation` switch) rather than a broken/stale QR code. A Confirmed order with more than one pass shows a row of `.pickup-pass-tab` buttons above the ticket (labeled "Pass 1", "Pass 2"...) — clicking one swaps `_selectedPass` and regenerates the QR client-side, no server round-trip needed since the SVG is cheap to recompute. Below the ticket, "Splitting with a group? Get separate passes" reveals a `<select>` (1–`PickupPasses.MaxPasses`) + "Update passes" button calling `OrderController.SplitPickupPassesAsync`, then reloads the order and resets the selected pass to the first one.
+Rendered inline via `@((MarkupString)_qrSvg!)`. Only shown when `Order.Status == Confirmed` — every other status renders an explanatory empty state instead (`StatusExplanation` switch) rather than a broken/stale QR code. A Confirmed order with more than one pass shows a row of `.pickup-pass-tab` buttons above the ticket (labeled "Pass 1", "Pass 2"...) — clicking one swaps `_selectedPass` and regenerates the QR client-side, no server round-trip needed since the SVG is cheap to recompute. Below the ticket, "Splitting with a group? Get separate passes" reveals a `<select>` (1–`PickupPasses.MaxPasses`) + "Update passes" button calling `OrderController.SplitPickupPassesAsync`, then reloads the order and resets the selected pass to the first one. **Phase 13**: a Rescue Circle order arrives already split — each tab is labeled with the participant's own name ("Alex's pass") rather than "Pass 1"/"Pass 2", since `OrderService.ApplyStatusChangeAsync` generated them per participant automatically on confirm; the organizer never needs the "Splitting with a group?" control for one, though it still works if they want a different split.
 
 ### OrderScan — the camera scanner
 

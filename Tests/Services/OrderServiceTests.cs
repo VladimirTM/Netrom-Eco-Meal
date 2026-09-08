@@ -524,6 +524,133 @@ public class OrderServiceTests
         Assert.Null(pass.RedeemedAt);
     }
 
+    // ---- Rescue Circle gating/per-participant passes/refunds ---------------
+
+    [Fact]
+    public async Task UpdateStatusAsync_Confirm_RescueCircleNotFullyPaid_Throws()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 5);
+        var order = TestData.Order(user, businessId, OrderStatuses.Pending, (package, 2));
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        var circle = new RescueCircle
+        {
+            Id = Guid.NewGuid(), OrderId = order.Id, OrganizerId = user.Id,
+            ParticipantCount = 2, TotalAmount = 20m, Status = RescueCircleStatuses.Open, CreatedAt = DateTime.UtcNow,
+        };
+        f.Db.RescueCircles.Add(circle);
+        f.Db.RescueCircleParticipants.Add(new RescueCircleParticipant
+        {
+            Id = Guid.NewGuid(), RescueCircleId = circle.Id, UserId = user.Id, ShareAmount = 10m,
+            JoinedAt = DateTime.UtcNow, PaidAt = DateTime.UtcNow,
+        });
+        // Second participant hasn't paid yet.
+        f.Db.RescueCircleParticipants.Add(new RescueCircleParticipant
+        {
+            Id = Guid.NewGuid(), RescueCircleId = circle.Id, UserId = "customer-3", ShareAmount = 10m,
+            JoinedAt = DateTime.UtcNow,
+        });
+        await f.Db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            f.Service.UpdateStatusAsync(order.Id, OrderStatuses.Confirmed));
+
+        Assert.Contains("isn't fully paid", ex.Message);
+        Assert.Equal(5, package.Quantity); // Untouched on failure.
+    }
+
+    [Fact]
+    public async Task UpdateStatusAsync_Confirm_RescueCircleFullyPaid_CreatesOnePassPerParticipant()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var user = TestData.User(CustomerId);
+        var organizer = TestData.User("organizer-1", "Organizer Name");
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 5);
+        var order = TestData.Order(organizer, businessId, OrderStatuses.Pending, (package, 2));
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        // The Rescue Circle branch's own query reloads participants (with their User navigation)
+        // fresh from the DbContext, independent of the hand-built order/orderRepo mock above — both
+        // users need to actually exist in f.Db for that Include(...).ThenInclude(p => p.User) to
+        // populate the name each pickup pass is labeled with.
+        f.Db.Users.AddRange(user, organizer);
+        var circle = new RescueCircle
+        {
+            Id = Guid.NewGuid(), OrderId = order.Id, OrganizerId = organizer.Id,
+            ParticipantCount = 2, TotalAmount = 20m, Status = RescueCircleStatuses.Open, CreatedAt = DateTime.UtcNow,
+        };
+        f.Db.RescueCircles.Add(circle);
+        f.Db.RescueCircleParticipants.Add(new RescueCircleParticipant
+        {
+            Id = Guid.NewGuid(), RescueCircleId = circle.Id, UserId = organizer.Id, ShareAmount = 10m,
+            JoinedAt = DateTime.UtcNow, PaidAt = DateTime.UtcNow,
+        });
+        f.Db.RescueCircleParticipants.Add(new RescueCircleParticipant
+        {
+            Id = Guid.NewGuid(), RescueCircleId = circle.Id, UserId = user.Id, ShareAmount = 10m,
+            JoinedAt = DateTime.UtcNow.AddMinutes(1), PaidAt = DateTime.UtcNow.AddMinutes(1),
+        });
+        await f.Db.SaveChangesAsync();
+
+        await f.Service.UpdateStatusAsync(order.Id, OrderStatuses.Confirmed);
+
+        Assert.Equal(3, package.Quantity);
+        var passes = f.Db.OrderPickupPasses.Local.Where(p => p.OrderId == order.Id).ToList();
+        Assert.Equal(2, passes.Count);
+        Assert.Contains(passes, p => p.Label == "Organizer Name's pass");
+        Assert.Contains(passes, p => p.Label == $"{user.Name}'s pass");
+    }
+
+    [Fact]
+    public async Task UpdateStatusAsync_ConfirmedToCancelled_RescueCircle_RefundsOnlyPaidParticipants()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var user = TestData.User(CustomerId);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 3);
+        var order = TestData.Order(user, businessId, OrderStatuses.Confirmed, (package, 2));
+        f.OrderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        var circle = new RescueCircle
+        {
+            Id = Guid.NewGuid(), OrderId = order.Id, OrganizerId = user.Id,
+            ParticipantCount = 2, TotalAmount = 20m, Status = RescueCircleStatuses.Open, CreatedAt = DateTime.UtcNow,
+        };
+        f.Db.RescueCircles.Add(circle);
+        f.Db.RescueCircleParticipants.Add(new RescueCircleParticipant
+        {
+            Id = Guid.NewGuid(), RescueCircleId = circle.Id, UserId = user.Id, ShareAmount = 10m,
+            JoinedAt = DateTime.UtcNow, PaidAt = DateTime.UtcNow, StripePaymentIntentId = "pi_paid",
+        });
+        f.Db.RescueCircleParticipants.Add(new RescueCircleParticipant
+        {
+            // Never paid — shouldn't trigger a refund call.
+            Id = Guid.NewGuid(), RescueCircleId = circle.Id, UserId = "customer-3", ShareAmount = 10m,
+            JoinedAt = DateTime.UtcNow,
+        });
+        f.Db.Payments.Add(new Payment
+        {
+            Id = Guid.NewGuid(), OrderId = order.Id, Amount = 20m, Currency = "ron",
+            StripeCheckoutSessionId = "circle_test", Status = PaymentStatuses.Succeeded, CreatedAt = DateTime.UtcNow,
+        });
+        await f.Db.SaveChangesAsync();
+
+        await f.Service.UpdateStatusAsync(order.Id, OrderStatuses.Cancelled);
+
+        f.StripeGateway.Verify(s => s.RefundAsync("pi_paid"), Times.Once);
+        f.StripeGateway.Verify(s => s.RefundAsync(It.IsAny<string>()), Times.Once);
+        var paidParticipant = await f.Db.RescueCircleParticipants.FirstAsync(p => p.UserId == user.Id);
+        Assert.NotNull(paidParticipant.RefundedAt);
+        var reloadedCircle = await f.Db.RescueCircles.FirstAsync(c => c.Id == circle.Id);
+        Assert.Equal(RescueCircleStatuses.Cancelled, reloadedCircle.Status);
+        var summaryPayment = await f.Db.Payments.FirstAsync(p => p.OrderId == order.Id);
+        Assert.Equal(PaymentStatuses.Refunded, summaryPayment.Status);
+    }
+
     [Fact]
     public async Task SplitPickupPassesAsync_NotOwner_Throws()
     {
