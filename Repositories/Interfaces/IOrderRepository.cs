@@ -34,6 +34,12 @@ public interface IOrderRepository
     public Task<List<Order>> GetPickupReminderCandidatesAsync(DateTime remindBy, DateTime now);
     // Sum of Pending reservations per package — Package.Quantity alone overstates what's still bookable.
     public Task<Dictionary<Guid, int>> GetPendingQuantitiesByPackageIdsAsync(IEnumerable<Guid> packageIds);
+    // Completed orders a customer placed at a business within [rangeStart, rangeEndExclusive) —
+    // feeds LoyaltyService's punch-card progress/discount calculation.
+    public Task<int> GetCompletedOrderCountAsync(string userId, Guid businessId, DateTime rangeStart, DateTime rangeEndExclusive);
+    // Total spend at a business in range, excluding Cancelled (refunded, so it never really cost
+    // anything) — feeds StandingOrderService's weekly budget check.
+    public Task<decimal> GetSpendInRangeAsync(string userId, Guid businessId, Guid? packageTypeId, string? dietaryTag, DateTime rangeStart, DateTime rangeEndExclusive);
     public Task AddAsync(Order order);
     public Task DeleteAsync(Guid id);
     public Task SaveChangesAsync();

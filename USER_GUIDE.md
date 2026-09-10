@@ -112,6 +112,24 @@ kitchen than what's already in your basket opens a confirmation dialog ("Start a
 warning that continuing will clear your existing basket first. Cancelling that dialog keeps
 your current basket untouched.
 
+### Loyalty rewards and standing orders
+
+Some kitchens run a **punch card**: order there often enough in a calendar month and your next
+checkout gets a discount, automatically — no code to enter. If a kitchen you're viewing has one
+set up, you'll see a banner under its description like *"2 more completed orders this month
+unlock 2 lei off your next order here!"* — it counts down as you actually pick up orders (not
+just place them), and resets every month.
+
+Order the same thing from a kitchen often enough to want it on autopilot? Scroll to the
+**Standing order** section on that kitchen's page and save your "usual" — optionally narrowed to
+a package type and/or a dietary tag, plus a weekly budget you're comfortable spending there. From
+then on, whenever that kitchen publishes something matching (including its daily recurring
+packages), and your spend on matches there over the last 7 days is still under your budget,
+you'll get notified and the matching package is added straight to your basket — you still have
+to open it and pay yourself, nothing is ever charged automatically. `/standing-orders` (the 🔁
+icon in the header) lists every standing order you've set up across every kitchen, where you can
+pause, resume, or remove one at any time.
+
 ### Manage your basket
 
 Open the basket panel from the header icon. Each line shows the package name, its per-unit
@@ -292,6 +310,15 @@ If you're staffed to more than one business, a **switcher** appears at the top o
 everything below (packages, orders, dashboard, payments) is scoped to whichever one is
 currently selected there. Staffed to just one? The switcher doesn't show up at all; there's
 nothing to switch between.
+
+### Set up a loyalty punch card
+
+Still on `/businesses/edit/{id}`, the **Loyalty punch card** fields ("Every N orders/month gets
+X lei off") let you reward regulars automatically — set both a threshold and a discount amount
+and it's live immediately, applied as a real discount the moment a returning customer's
+checkout would be their Nth completed order at your kitchen that month. Leave either field blank
+(or clear both) to turn it off. There's nothing else to configure — no coupon codes to generate,
+no manual tracking; it's counted straight from real completed orders and never double-applies.
 
 ### Set your hours and closures
 

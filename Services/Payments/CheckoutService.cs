@@ -13,6 +13,7 @@ public class CheckoutService(
     IOrderService orderService,
     IBusinessService businessService,
     IPackageRepository packageRepository,
+    ILoyaltyService loyaltyService,
     EcoMealDbContext dbContext,
     CurrentUserAccessor currentUser,
     IConfiguration configuration) : ICheckoutService
@@ -73,7 +74,14 @@ public class CheckoutService(
         var successUrl = $"{baseUrl}/checkout/return?pc={pendingCheckout.Id}&session_id={{CHECKOUT_SESSION_ID}}";
         var cancelUrl = $"{baseUrl}/checkout/cancel?pc={pendingCheckout.Id}";
 
-        var session = await stripeGateway.CreateCheckoutSessionAsync(pendingCheckout.Id, business.Name, checkoutLines, successUrl, cancelUrl);
+        // Punch-card reward, if due — clamped below the subtotal so a coupon can never zero out
+        // (or invert) the Stripe Checkout total.
+        var subtotal = checkoutLines.Sum(l => l.UnitPrice * l.Quantity);
+        var rawDiscount = await loyaltyService.EvaluateDiscountAsync(userId, businessId);
+        decimal? discount = rawDiscount is > 0 ? Math.Min(rawDiscount.Value, subtotal - Loyalty.MinDiscountAmount) : null;
+        var discountLabel = discount is > 0 ? "Loyalty reward — thanks for coming back!" : null;
+
+        var session = await stripeGateway.CreateCheckoutSessionAsync(pendingCheckout.Id, business.Name, checkoutLines, successUrl, cancelUrl, discount, discountLabel);
 
         pendingCheckout.StripeCheckoutSessionId = session.SessionId;
         await dbContext.SaveChangesAsync();

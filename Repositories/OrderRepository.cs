@@ -173,6 +173,28 @@ public class OrderRepository(EcoMealDbContext context) : IOrderRepository
             .ToDictionaryAsync(g => g.PackageId, g => g.Quantity);
     }
 
+    public async Task<int> GetCompletedOrderCountAsync(string userId, Guid businessId, DateTime rangeStart, DateTime rangeEndExclusive)
+    {
+        return await context.Orders.CountAsync(o =>
+            o.UserId == userId && o.BusinessId == businessId && o.Status.Name == OrderStatuses.Completed
+            && o.CreatedAt >= rangeStart && o.CreatedAt < rangeEndExclusive);
+    }
+
+    public async Task<decimal> GetSpendInRangeAsync(string userId, Guid businessId, Guid? packageTypeId, string? dietaryTag, DateTime rangeStart, DateTime rangeEndExclusive)
+    {
+        var query = context.OrderPackages.Where(op =>
+            op.Order.UserId == userId && op.Order.BusinessId == businessId && op.Order.Status.Name != OrderStatuses.Cancelled
+            && op.Order.CreatedAt >= rangeStart && op.Order.CreatedAt < rangeEndExclusive);
+
+        if (packageTypeId.HasValue)
+            query = query.Where(op => op.Package.PackageTypeId == packageTypeId.Value);
+
+        if (!string.IsNullOrWhiteSpace(dietaryTag))
+            query = query.Where(op => op.Package.DietaryTags.Contains(dietaryTag));
+
+        return await query.SumAsync(op => (decimal?)(op.Quantity * op.Package.Price)) ?? 0m;
+    }
+
     public async Task AddAsync(Order order)
     {
         await context.Orders.AddAsync(order);

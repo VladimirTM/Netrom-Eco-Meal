@@ -10,8 +10,11 @@ public record StripeSessionStatus(bool IsPaid, string? PaymentIntentId, decimal 
 // OrderService's refund path. Breaks what would otherwise be a circular DI dependency.
 public interface IStripeGateway
 {
+    // discountAmount, when given, is applied as a one-off Stripe Coupon (Duration = "once") rather
+    // than a negative line item — Stripe's price_data.unit_amount can't go negative.
     Task<CheckoutSessionResult> CreateCheckoutSessionAsync(
-        Guid pendingCheckoutId, string businessName, List<CheckoutLineItem> lines, string successUrl, string cancelUrl);
+        Guid pendingCheckoutId, string businessName, List<CheckoutLineItem> lines, string successUrl, string cancelUrl,
+        decimal? discountAmount = null, string? discountLabel = null);
     Task<StripeSessionStatus> GetSessionStatusAsync(string sessionId);
     Task RefundAsync(string paymentIntentId);
 }

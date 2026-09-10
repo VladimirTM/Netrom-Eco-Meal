@@ -63,6 +63,7 @@ public class BusinessService(
         await currentUser.EnsureAdminAsync();
 
         business.Status = BusinessStatuses.Approved;
+        (business.LoyaltyPunchThreshold, business.LoyaltyDiscountAmount) = NormalizeLoyalty(business.LoyaltyPunchThreshold, business.LoyaltyDiscountAmount);
         await businessRepository.AddAsync(business);
         await businessRepository.SaveChangesAsync();
 
@@ -324,5 +325,19 @@ public class BusinessService(
         businessToUpdate.Latitude = business.Latitude;
         businessToUpdate.Longitude = business.Longitude;
         businessToUpdate.BusinessTypeId = business.BusinessTypeId;
+        (businessToUpdate.LoyaltyPunchThreshold, businessToUpdate.LoyaltyDiscountAmount) = NormalizeLoyalty(business.LoyaltyPunchThreshold, business.LoyaltyDiscountAmount);
+    }
+
+    // Both-or-neither: an incomplete pair (e.g. a stale threshold after the discount field was
+    // cleared) silently turns the reward off. Clamped to sane bounds rather than rejected, since
+    // a manager fat-fingering "5000" shouldn't fail the whole save.
+    private static (int?, decimal?) NormalizeLoyalty(int? threshold, decimal? discount)
+    {
+        if (threshold is null || discount is null || discount <= 0)
+            return (null, null);
+
+        var clampedThreshold = Math.Clamp(threshold.Value, Loyalty.MinPunchThreshold, Loyalty.MaxPunchThreshold);
+        var clampedDiscount = Math.Max(discount.Value, Loyalty.MinDiscountAmount);
+        return (clampedThreshold, clampedDiscount);
     }
 }

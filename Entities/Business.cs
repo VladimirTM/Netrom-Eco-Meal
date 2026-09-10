@@ -23,6 +23,11 @@ public class Business
     public string? HiddenReason { get; set; }
     // Who submitted this business for approval — null for businesses an admin created directly.
     public string? SubmittedByUserId { get; set; }
+    // Punch-card loyalty, both null by default (off). When set, every LoyaltyPunchThreshold-th
+    // Completed order a customer places here in a calendar month gets LoyaltyDiscountAmount off
+    // their next checkout — see LoyaltyService.
+    public int? LoyaltyPunchThreshold { get; set; }
+    public decimal? LoyaltyDiscountAmount { get; set; }
     public Guid BusinessTypeId { get; set; }
     [ForeignKey(nameof(BusinessTypeId))]
     public BusinessType BusinessType { get; set; } = null!;

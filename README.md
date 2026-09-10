@@ -34,6 +34,9 @@ is just the capability summary.
   admin review on `/businesses/apply`
 - Opt in to the `/impact` community leaderboard, ranking the month's top food-rescuers by kg
   saved — off by default, and a customer who never opts in never appears on it
+- Earn an automatic discount from a kitchen's loyalty punch card (where one's configured), and
+  save a "usual" as a standing order — matched against a kitchen's newly published packages and
+  added straight to your basket to confirm, up to a weekly budget you set, on `/standing-orders`
 
 **BusinessManager** — staff of one or more businesses (assigned by an Admin), scoped to
 whichever one they pick in the sidebar switcher:
@@ -42,8 +45,9 @@ whichever one they pick in the sidebar switcher:
   (upload or paste a URL), "repeat this every day" recurring templates managed on
   `/packages/templates`, bulk duplicate/adjust-quantity/extend-pickup-window actions, and an
   AI markdown-price suggestion for any package closing soon with stock still unsold
-- Set your business's weekly opening hours and one-off holiday closures, and upload a
-  business photo, from the business edit page
+- Set your business's weekly opening hours and one-off holiday closures, upload a business
+  photo, and configure a loyalty punch card (every N orders/month, X lei off) — all from the
+  business edit page
 - Confirm, complete or cancel orders placed at the currently selected business on
   `/orders/manage` — cancelling automatically refunds the customer's Stripe payment
 - Scan a customer's pickup QR code on `/orders/scan` to confirm pickup, or look the order up by
@@ -352,6 +356,13 @@ payments (organizer and demo.customer2 have paid, demo.customer3 has joined but 
 and one seat is left open to join), and one already fully paid and confirmed, so the
 per-participant pickup passes it generates automatically are visible without having to run
 the whole flow yourself first.
+
+Stadionul de Gusturi is seeded with a loyalty punch card (every 8 completed orders/month, 2 lei
+off), and the demo customer already has a standing order there (any package, up to 25 lei/week)
+on `/standing-orders` — set up against the same business whose "Golden Boot Surprise Bag"
+recurring template regenerates daily, so the next real generation tick actually demonstrates a
+live match, not just the saved preference itself. demo.customer2 has a second one at VAR Bistro
+narrowed to the `Vegetarian` tag.
 
 ## Running tests
 

@@ -16,6 +16,8 @@
 @inject FavoriteController FavoriteController
 @inject OrderController OrderController
 @inject ReportController ReportController
+@inject LoyaltyController LoyaltyController
+@inject StandingOrderController StandingOrderController
 @inject CartService CartService
 @inject ClientTimeZoneService ClientTimeZoneService
 @inject PackageStockBroadcaster PackageStockBroadcaster
@@ -75,6 +77,20 @@ else
 
             <div class="biz-modal-body">
                 <p class="biz-modal-desc">@_business.Description</p>
+
+                <AuthorizeView Roles="@AppRoles.Customer" Context="loyaltyAuth">
+                    <Authorized>
+                        @if (_loyaltyProgress is not null)
+                        {
+                            <div class="biz-modal-inline-toast">
+                                <i class="bi bi-award-fill"></i>
+                                @(_loyaltyProgress.OrdersUntilReward == 1
+                                    ? $"1 more completed order this month unlocks {_loyaltyProgress.DiscountAmount.ToString("C")} off your next order here!"
+                                    : $"{_loyaltyProgress.OrdersUntilReward} more completed orders this month unlock {_loyaltyProgress.DiscountAmount.ToString("C")} off your next order here!")
+                            </div>
+                        }
+                    </Authorized>
+                </AuthorizeView>
 
                 @if (_toastMessage is not null)
                 {
@@ -186,6 +202,82 @@ else
                     }
                 </section>
 
+                <AuthorizeView Roles="@AppRoles.Customer" Context="standingAuth">
+                    <Authorized>
+                        <div class="biz-modal-divider"></div>
+
+                        <section class="biz-modal-section">
+                            <h3 class="biz-modal-section-title"><i class="bi bi-arrow-repeat"></i> Standing order</h3>
+
+                            @if (_myStandingOrder is null)
+                            {
+                                <p class="biz-modal-review-hint">Save your usual here — we'll add it to your basket and notify you the moment it's back, up to a weekly budget you set.</p>
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-sm-4">
+                                        <label class="form-label small">Package type <span class="text-muted">(optional)</span></label>
+                                        <select class="form-select form-select-sm" @bind="_newStandingPackageTypeIdText">
+                                            <option value="">Any type</option>
+                                            @foreach (var type in _businessPackageTypes)
+                                            {
+                                                <option value="@type.Id">@type.Name</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <label class="form-label small">Dietary tag <span class="text-muted">(optional)</span></label>
+                                        <select class="form-select form-select-sm" @bind="_newStandingDietaryTag">
+                                            <option value="">Any</option>
+                                            @foreach (var tag in DietaryTags.All)
+                                            {
+                                                <option value="@tag">@tag</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <div class="col-sm-3">
+                                        <label class="form-label small">Weekly budget</label>
+                                        <div class="input-group input-group-sm">
+                                            <input type="number" min="1" step="0.5" class="form-control" @bind="_newStandingBudget"/>
+                                            <span class="input-group-text">lei</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-1">
+                                        <button type="button" class="btn btn-primary btn-sm w-100" disabled="@_savingStandingOrder" @onclick="CreateStandingOrderAsync">
+                                            @if (_savingStandingOrder)
+                                            {
+                                                <span class="spinner-border spinner-border-sm" role="status"></span>
+                                            }
+                                            else
+                                            {
+                                                <span>Save</span>
+                                            }
+                                        </button>
+                                    </div>
+                                </div>
+                                @if (_standingOrderError is not null)
+                                {
+                                    <div class="text-danger small mt-1">@_standingOrderError</div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                    <div class="small">
+                                        <strong>@(_myStandingOrder.PackageType?.Name ?? "Any package")</strong>@(_myStandingOrder.DietaryTag is null ? "" : $" · {_myStandingOrder.DietaryTag}")
+                                        — up to @_myStandingOrder.MaxWeeklySpend.ToString("C")/week
+                                        <span class="badge @(_myStandingOrder.IsActive ? "bg-success" : "bg-secondary") ms-2">@(_myStandingOrder.IsActive ? "Active" : "Paused")</span>
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_savingStandingOrder" @onclick="ToggleStandingOrderAsync">
+                                            @(_myStandingOrder.IsActive ? "Pause" : "Resume")
+                                        </button>
+                                        <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_savingStandingOrder" @onclick="DeleteStandingOrderAsync">Remove</button>
+                                    </div>
+                                </div>
+                            }
+                        </section>
+                    </Authorized>
+                </AuthorizeView>
+
                 <div class="biz-modal-divider"></div>
 
                 <section class="biz-modal-section">
@@ -296,6 +388,11 @@ else
 @code {
     [Parameter] public Guid Id { get; set; }
 
+    // Set by StandingOrderService's post-generation match notification link — auto-adds the
+    // matched package to the customer's basket so "confirm" is just clicking Pay.
+    [SupplyParameterFromQuery(Name = "reserve")]
+    public Guid? ReservePackageId { get; set; }
+
     private bool _loading = true;
     private Business? _business;
     private List<Package> _packages = [];
@@ -316,6 +413,16 @@ else
     private Dictionary<Guid, int> _reservedByPackage = [];
     private bool _reportPromptOpen;
     private bool _reportBusy;
+    private LoyaltyProgress? _loyaltyProgress;
+    private List<StandingOrder> _myStandingOrders = [];
+    private List<PackageType> _businessPackageTypes = [];
+    private string _newStandingPackageTypeIdText = "";
+    private string _newStandingDietaryTag = "";
+    private decimal _newStandingBudget = 20m;
+    private bool _savingStandingOrder;
+    private string? _standingOrderError;
+
+    private StandingOrder? _myStandingOrder => _myStandingOrders.FirstOrDefault(s => s.BusinessId == Id);
 
     private static readonly DayOfWeek[] WeekOrder =
         [DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday];
@@ -371,7 +478,32 @@ else
         await LoadPackagesAsync();
         _loadingPackages = false;
 
+        _businessPackageTypes = _packages.Select(p => p.PackageType).DistinctBy(t => t.Id).OrderBy(t => t.Name).ToList();
+        _loyaltyProgress = (await LoyaltyController.GetMyProgressAsync(Id)).Value;
+        _myStandingOrders = (await StandingOrderController.GetMyStandingOrdersAsync()).Value ?? [];
+
+        await TryAutoReserveAsync();
         await ReloadReviewsAsync(Id);
+    }
+
+    // Fired from a "your usual is live" notification link — only steps in when it's safe to,
+    // never overriding an in-progress basket from a different kitchen.
+    private async Task TryAutoReserveAsync()
+    {
+        if (ReservePackageId is not { } reserveId)
+            return;
+
+        var package = _packages.FirstOrDefault(p => p.Id == reserveId);
+        if (package is null || CartService.InCartQuantity(package.Id) > 0 || CartService.WouldReplaceCart(package))
+            return;
+
+        var available = CartService.AvailableQuantity(package, _reservedByPackage.GetValueOrDefault(package.Id));
+        if (available <= 0)
+            return;
+
+        await CartService.AddAsync(package);
+        _toastMessage = $"Reserved your usual — \"{package.Name}\" is in your basket.";
+        _toastToken = Guid.NewGuid();
     }
 
     private async Task LoadPackagesAsync()
@@ -525,6 +657,48 @@ else
         }
 
         await ReloadReviewsAsync(_business.Id);
+    }
+
+    private async Task CreateStandingOrderAsync()
+    {
+        _standingOrderError = null;
+        _savingStandingOrder = true;
+
+        Guid? packageTypeId = Guid.TryParse(_newStandingPackageTypeIdText, out var typeId) ? typeId : null;
+        string? dietaryTag = string.IsNullOrWhiteSpace(_newStandingDietaryTag) ? null : _newStandingDietaryTag;
+        var result = await StandingOrderController.CreateAsync(Id, packageTypeId, dietaryTag, _newStandingBudget);
+        _savingStandingOrder = false;
+
+        if (result.Result is ConflictObjectResult conflict)
+        {
+            _standingOrderError = conflict.Value?.ToString() ?? "We couldn't save your standing order.";
+            return;
+        }
+
+        if (result.Value is { } created)
+            _myStandingOrders.Add(created);
+    }
+
+    private async Task ToggleStandingOrderAsync()
+    {
+        if (_myStandingOrder is not { } standing)
+            return;
+
+        _savingStandingOrder = true;
+        await StandingOrderController.UpdateAsync(standing.Id, standing.MaxWeeklySpend, !standing.IsActive);
+        _savingStandingOrder = false;
+        standing.IsActive = !standing.IsActive;
+    }
+
+    private async Task DeleteStandingOrderAsync()
+    {
+        if (_myStandingOrder is not { } standing)
+            return;
+
+        _savingStandingOrder = true;
+        await StandingOrderController.DeleteAsync(standing.Id);
+        _savingStandingOrder = false;
+        _myStandingOrders.RemoveAll(s => s.Id == standing.Id);
     }
 
     private void HandleCartChanged() => InvokeAsync(StateHasChanged);

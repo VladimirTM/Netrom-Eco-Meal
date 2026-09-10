@@ -20,7 +20,8 @@ public class StripeGateway(IConfiguration configuration) : IStripeGateway
     }
 
     public async Task<CheckoutSessionResult> CreateCheckoutSessionAsync(
-        Guid pendingCheckoutId, string businessName, List<CheckoutLineItem> lines, string successUrl, string cancelUrl)
+        Guid pendingCheckoutId, string businessName, List<CheckoutLineItem> lines, string successUrl, string cancelUrl,
+        decimal? discountAmount = null, string? discountLabel = null)
     {
         EnsureConfigured();
 
@@ -44,6 +45,18 @@ public class StripeGateway(IConfiguration configuration) : IStripeGateway
             SuccessUrl = successUrl,
             CancelUrl = cancelUrl,
         };
+
+        if (discountAmount is > 0)
+        {
+            var coupon = await new CouponService().CreateAsync(new CouponCreateOptions
+            {
+                AmountOff = (long)Math.Round(discountAmount.Value * 100m, MidpointRounding.AwayFromZero),
+                Currency = Currency,
+                Duration = "once",
+                Name = discountLabel ?? "Loyalty reward",
+            });
+            options.Discounts = [new SessionDiscountOptions { Coupon = coupon.Id }];
+        }
 
         var service = new SessionService();
         var session = await service.CreateAsync(options);

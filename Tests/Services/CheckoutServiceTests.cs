@@ -26,6 +26,7 @@ public class CheckoutServiceTests
         Mock<IOrderService> OrderService,
         Mock<IBusinessService> BusinessService,
         Mock<IPackageRepository> PackageRepo,
+        Mock<ILoyaltyService> LoyaltyService,
         EcoMealDbContext Db);
 
     private static Fixture Build(string? userId, params string[] roles)
@@ -35,14 +36,18 @@ public class CheckoutServiceTests
         var orderService = new Mock<IOrderService>();
         var businessService = new Mock<IBusinessService>();
         var packageRepo = new Mock<IPackageRepository>();
+        // No reward due by default — CheckoutServiceTests isn't about loyalty math, that's
+        // LoyaltyServiceTests' job. Individual tests override this when they need to.
+        var loyaltyService = new Mock<ILoyaltyService>();
+        loyaltyService.Setup(l => l.EvaluateDiscountAsync(It.IsAny<string>(), It.IsAny<Guid>())).ReturnsAsync((decimal?)null);
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
         var configuration = new ConfigurationBuilder().Build();
 
         var service = new CheckoutService(
-            stripeGateway.Object, orderService.Object, businessService.Object, packageRepo.Object,
+            stripeGateway.Object, orderService.Object, businessService.Object, packageRepo.Object, loyaltyService.Object,
             db, currentUser, configuration);
 
-        return new Fixture(service, stripeGateway, orderService, businessService, packageRepo, db);
+        return new Fixture(service, stripeGateway, orderService, businessService, packageRepo, loyaltyService, db);
     }
 
     // ---- StartCheckoutAsync -------------------------------------------------

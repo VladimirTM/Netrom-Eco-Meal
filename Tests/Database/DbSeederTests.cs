@@ -186,6 +186,36 @@ public class DbSeederTests(PostgresFixture fixture)
         // Proves SeedRescueCircleDemoDataAsync's own guard actually held on the second run.
         Assert.Equal(2, await finalDb.RescueCircles.CountAsync());
         Assert.Equal(6, await finalDb.RescueCircleParticipants.CountAsync());
+        // Proves SeedStandingOrderDemoDataAsync's own guard actually held on the second run.
+        Assert.Equal(2, await finalDb.StandingOrders.CountAsync());
+    }
+
+    [Fact]
+    public async Task SeedAsync_FreshDatabase_SeedsLoyaltyAndStandingOrderDemoData()
+    {
+        await using var provider = await BuildSeededServicesAsync();
+        using var scope = provider.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var db = scope.ServiceProvider.GetRequiredService<EcoMealDbContext>();
+
+        var stadionulId = new Guid("44444444-0000-0000-0000-000000000001");
+        var stadionul = await db.Businesses.FindAsync(stadionulId);
+        Assert.Equal(8, stadionul!.LoyaltyPunchThreshold);
+        Assert.Equal(2m, stadionul.LoyaltyDiscountAmount);
+
+        var customer = await userManager.FindByEmailAsync("demo.customer@ecomeal.local");
+        var customer2 = await userManager.FindByEmailAsync("demo.customer2@ecomeal.local");
+        Assert.NotNull(customer);
+        Assert.NotNull(customer2);
+
+        Assert.Equal(2, await db.StandingOrders.CountAsync());
+        var mine = await db.StandingOrders.SingleAsync(s => s.UserId == customer.Id);
+        Assert.Equal(stadionulId, mine.BusinessId);
+        Assert.Null(mine.PackageTypeId);
+        Assert.True(mine.IsActive);
+
+        var theirs = await db.StandingOrders.SingleAsync(s => s.UserId == customer2.Id);
+        Assert.Equal(DietaryTags.Vegetarian, theirs.DietaryTag);
     }
 
     [Fact]

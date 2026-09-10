@@ -12,6 +12,7 @@ public interface IPackageTemplateService
     public Task DeleteAsync(Guid id);
 
     // No current-user auth (background-sweep call) — generates today's Package instance for every
-    // active template that hasn't already been generated today.
-    public Task<int> GenerateDueInstancesAsync();
+    // active template that hasn't already been generated today. Returns the instances themselves,
+    // not just a count, so the sweep can hand them to IStandingOrderService.MatchNewPackagesAsync.
+    public Task<List<Package>> GenerateDueInstancesAsync();
 }

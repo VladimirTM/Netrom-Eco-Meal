@@ -16,10 +16,17 @@ public class PackageTemplateGenerationService(IServiceScopeFactory scopeFactory,
             {
                 using var scope = scopeFactory.CreateScope();
                 var templateService = scope.ServiceProvider.GetRequiredService<IPackageTemplateService>();
+                var standingOrderService = scope.ServiceProvider.GetRequiredService<IStandingOrderService>();
 
                 var generated = await templateService.GenerateDueInstancesAsync();
-                if (generated > 0)
-                    logger.LogInformation("Generated {Count} package instance(s) from recurring templates.", generated);
+                if (generated.Count > 0)
+                {
+                    logger.LogInformation("Generated {Count} package instance(s) from recurring templates.", generated.Count);
+
+                    var matched = await standingOrderService.MatchNewPackagesAsync(generated);
+                    if (matched > 0)
+                        logger.LogInformation("Matched {Count} standing order(s) against freshly generated packages.", matched);
+                }
             }
             catch (Exception ex)
             {

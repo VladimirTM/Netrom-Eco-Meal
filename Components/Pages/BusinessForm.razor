@@ -132,6 +132,28 @@
                             <div class="text-danger small mt-1">@_locationError</div>
                         }
                     </div>
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">
+                            Loyalty punch card <span class="text-muted fw-normal">(optional — rewards a customer for coming back)</span>
+                        </label>
+                        <div class="row g-3">
+                            <div class="col-sm-6">
+                                <div class="input-group">
+                                    <span class="input-group-text">Every</span>
+                                    <InputNumber class="form-control" placeholder="e.g. 6" @bind-Value="_model.LoyaltyPunchThreshold"/>
+                                    <span class="input-group-text">orders/month</span>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="input-group">
+                                    <span class="input-group-text">gets</span>
+                                    <InputNumber class="form-control" placeholder="e.g. 2" @bind-Value="_model.LoyaltyDiscountAmount"/>
+                                    <span class="input-group-text">lei off</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-text">Leave both blank to turn the punch card off. Applied automatically at checkout — no code needed.</div>
+                    </div>
                     <button type="submit" class="btn btn-primary w-100 py-2">
                         <i class="bi bi-check-lg me-1"></i> @(IsEdit ? "Save Changes" : "Create Business")
                     </button>
@@ -332,6 +354,8 @@
             _model.Latitude = existing.Latitude;
             _model.Longitude = existing.Longitude;
             _model.BusinessTypeId = existing.BusinessTypeId;
+            _model.LoyaltyPunchThreshold = existing.LoyaltyPunchThreshold;
+            _model.LoyaltyDiscountAmount = existing.LoyaltyDiscountAmount;
 
             _hoursRows = BuildWeekRows(existing.Hours);
             _closures = existing.Closures.OrderBy(c => c.StartDate).ToList();
@@ -470,7 +494,9 @@
                 ImageUrl = _model.ImageUrl,
                 Latitude = _model.Latitude,
                 Longitude = _model.Longitude,
-                BusinessTypeId = _model.BusinessTypeId
+                BusinessTypeId = _model.BusinessTypeId,
+                LoyaltyPunchThreshold = _model.LoyaltyPunchThreshold,
+                LoyaltyDiscountAmount = _model.LoyaltyDiscountAmount
             };
             await BusinessController.UpdateAsync(business);
         }
@@ -484,7 +510,9 @@
                 ImageUrl = _model.ImageUrl,
                 Latitude = _model.Latitude,
                 Longitude = _model.Longitude,
-                BusinessTypeId = _model.BusinessTypeId
+                BusinessTypeId = _model.BusinessTypeId,
+                LoyaltyPunchThreshold = _model.LoyaltyPunchThreshold,
+                LoyaltyDiscountAmount = _model.LoyaltyDiscountAmount
             };
             await BusinessController.AddAsync(business);
         }
@@ -544,5 +572,11 @@
         public double? Longitude { get; set; }
 
         public Guid BusinessTypeId { get; set; }
+
+        [Range(2, 50, ErrorMessage = "Threshold must be between 2 and 50 orders.")]
+        public int? LoyaltyPunchThreshold { get; set; }
+
+        [Range(0.5, 1000, ErrorMessage = "Discount must be at least 0.5 lei.")]
+        public decimal? LoyaltyDiscountAmount { get; set; }
     }
 }

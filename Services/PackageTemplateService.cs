@@ -78,11 +78,11 @@ public class PackageTemplateService(
         await templateRepository.SaveChangesAsync();
     }
 
-    public async Task<int> GenerateDueInstancesAsync()
+    public async Task<List<Package>> GenerateDueInstancesAsync()
     {
         var templates = await templateRepository.GetActiveAsync();
         var todayUtc = DateOnly.FromDateTime(DateTime.UtcNow);
-        var generated = 0;
+        var generated = new List<Package>();
         var touched = false;
 
         foreach (var template in templates)
@@ -124,7 +124,7 @@ public class PackageTemplateService(
 
             await packageRepository.AddAsync(package);
             template.LastGeneratedDate = todayUtc;
-            generated++;
+            generated.Add(package);
         }
 
         if (touched)

@@ -90,6 +90,7 @@ public static class DbSeeder
             await SeedReportsAndAuditLogAsync(db, demoCustomer, adminUser, demoManager?.Id, demoManager2?.Id);
             await SeedLeaderboardDemoDataAsync(db, demoCustomer, demoCustomer2, demoCustomer3);
             await SeedRescueCircleDemoDataAsync(db, demoCustomer, demoCustomer2, demoCustomer3);
+            await SeedStandingOrderDemoDataAsync(db, demoCustomer, demoCustomer2);
         }
     }
 
@@ -178,7 +179,7 @@ public static class DbSeeder
         // street/square estimates — good enough to demo distance sort and the map view.
         var seedBusinesses = new List<Business>
         {
-            new Business { Id = new Guid("44444444-0000-0000-0000-000000000001"), Name = "Stadionul de Gusturi", Description = "Matchday feasts inspired by World Cup host cities, made from the day's surplus.",       Address = "Bulevardul Revoluției 1989 10, Timișoara", BusinessTypeId = restaurant, ImageUrl = "https://loremflickr.com/640/400/soccer,stadium/all?lock=201", Latitude = 45.7556, Longitude = 21.2280 },
+            new Business { Id = new Guid("44444444-0000-0000-0000-000000000001"), Name = "Stadionul de Gusturi", Description = "Matchday feasts inspired by World Cup host cities, made from the day's surplus.",       Address = "Bulevardul Revoluției 1989 10, Timișoara", BusinessTypeId = restaurant, ImageUrl = "https://loremflickr.com/640/400/soccer,stadium/all?lock=201", Latitude = 45.7556, Longitude = 21.2280, LoyaltyPunchThreshold = 8, LoyaltyDiscountAmount = 2m },
             new Business { Id = new Guid("44444444-0000-0000-0000-000000000002"), Name = "VAR Bistro",           Description = "Reviewing yesterday's dishes so nothing goes offside — or to waste.",                    Address = "Bulevardul Take Ionescu 56, Timișoara",    BusinessTypeId = restaurant, ImageUrl = "https://loremflickr.com/640/400/football,referee/all?lock=202", Latitude = 45.7531, Longitude = 21.2352 },
             new Business { Id = new Guid("44444444-0000-0000-0000-000000000003"), Name = "Derby Deli",           Description = "Home-cooked rivalries: hearty plates from Timișoara's derby-day kitchens.",              Address = "Strada Coriolan Brediceanu 3, Timișoara",  BusinessTypeId = restaurant, ImageUrl = "https://loremflickr.com/640/400/football,derby/all?lock=203", Latitude = 45.7492, Longitude = 21.2231 },
             new Business { Id = new Guid("44444444-0000-0000-0000-000000000004"), Name = "Poarta de Aur Bakery", Description = "Golden-goal bread and pastries fresh off the bench every morning.",                      Address = "Piața Unirii 4, Timișoara",                 BusinessTypeId = bakery,     ImageUrl = "https://loremflickr.com/640/400/football,goal/all?lock=204", Latitude = 45.7579, Longitude = 21.2233 },
@@ -218,6 +219,14 @@ public static class DbSeeder
             {
                 existing.Latitude = seed.Latitude;
                 existing.Longitude = seed.Longitude;
+            }
+
+            // Same backfill-only reasoning — only Stadionul de Gusturi's seed row defines a punch
+            // card, so this is a no-op for every other business either way.
+            if (existing.LoyaltyPunchThreshold is null && existing.LoyaltyDiscountAmount is null)
+            {
+                existing.LoyaltyPunchThreshold = seed.LoyaltyPunchThreshold;
+                existing.LoyaltyDiscountAmount = seed.LoyaltyDiscountAmount;
             }
         }
 
@@ -789,6 +798,38 @@ public static class DbSeeder
 
         db.Orders.Add(confirmedOrder);
         db.RescueCircles.Add(confirmedCircle);
+
+        await db.SaveChangesAsync();
+    }
+
+    // Fresh-database-only, same gating shape as SeedRescueCircleDemoDataAsync. The primary demo
+    // customer's row targets Stadionul de Gusturi — the same business SeedPackageTemplateAsync
+    // daily-generates from, so the next real sweep tick exercises MatchNewPackagesAsync for real.
+    private static async Task SeedStandingOrderDemoDataAsync(EcoMealDbContext db, ApplicationUser demoCustomer, ApplicationUser? demoCustomer2)
+    {
+        if (await db.StandingOrders.AnyAsync()) return;
+
+        db.StandingOrders.Add(new StandingOrder
+        {
+            Id = new Guid("88888888-0000-0000-0000-000000000001"),
+            UserId = demoCustomer.Id,
+            BusinessId = DemoManagedBusinessId,
+            MaxWeeklySpend = 25m,
+            CreatedAt = DateTime.UtcNow,
+        });
+
+        if (demoCustomer2 is not null)
+        {
+            db.StandingOrders.Add(new StandingOrder
+            {
+                Id = new Guid("88888888-0000-0000-0000-000000000002"),
+                UserId = demoCustomer2.Id,
+                BusinessId = new Guid("44444444-0000-0000-0000-000000000002"), // VAR Bistro
+                DietaryTag = DietaryTags.Vegetarian,
+                MaxWeeklySpend = 15m,
+                CreatedAt = DateTime.UtcNow,
+            });
+        }
 
         await db.SaveChangesAsync();
     }

@@ -34,6 +34,7 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<PushSubscription> PushSubscriptions { get; set; }
     public DbSet<RescueCircle> RescueCircles { get; set; }
     public DbSet<RescueCircleParticipant> RescueCircleParticipants { get; set; }
+    public DbSet<StandingOrder> StandingOrders { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -188,6 +189,30 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
             .WithMany()
             .HasForeignKey(p => p.UserId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Disappears with the account or the kitchen it targets; a deleted package-type narrowing
+        // just widens it back to "any type" instead of deleting the row.
+        modelBuilder.Entity<StandingOrder>()
+            .HasOne(s => s.User)
+            .WithMany()
+            .HasForeignKey(s => s.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<StandingOrder>()
+            .HasOne(s => s.Business)
+            .WithMany()
+            .HasForeignKey(s => s.BusinessId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<StandingOrder>()
+            .HasOne(s => s.PackageType)
+            .WithMany()
+            .HasForeignKey(s => s.PackageTypeId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // A customer's own standing-order list is the only read pattern.
+        modelBuilder.Entity<StandingOrder>()
+            .HasIndex(s => s.UserId);
 
         // Optimistic concurrency so two managers confirming the same package can't oversell stock.
         modelBuilder.Entity<Package>()
