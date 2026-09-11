@@ -81,6 +81,7 @@ public static class DbSeeder
             await SeedApprovalDemoBusinessesAsync(db, demoCustomer.Id);
 
         await SeedModerationDemoDataAsync(db);
+        await SeedDonationDemoDataAsync(db);
 
         if (demoCustomer is not null && demoManager is not null)
             await SeedDemoActivityAsync(db, demoCustomer, demoManager.Id);
@@ -276,6 +277,16 @@ public static class DbSeeder
         var markdownDemoStart = DateTime.UtcNow.AddHours(-2);
         var markdownDemoEnd = DateTime.UtcNow.AddMinutes(90);
 
+        // Impact Phase 1 demo: closed recently, never referenced by any seeded order — always a
+        // live "mark as donated" candidate on /packages and for the sweep's notification.
+        var donationCandidateStart = DateTime.UtcNow.AddHours(-4);
+        var donationCandidateEnd = DateTime.UtcNow.AddHours(-2);
+
+        // Same shape as the candidate above, but SeedDonationDemoDataAsync marks this one donated
+        // — gives the home hero/`/impact`/business widget a non-zero donated contribution out of the box.
+        var alreadyDonatedStart = DateTime.UtcNow.AddDays(-1).AddHours(-2);
+        var alreadyDonatedEnd = DateTime.UtcNow.AddDays(-1);
+
         var seedPackages = new List<Package>
         {
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000001"), BusinessId = b1,  PackageTypeId = surpriseBag, Name = "Golden Boot Surprise Bag",     Description = "A top-scoring surprise selection of today's leftover dishes.",              Price = 12.99m, Quantity = 5,  WeightKg = 1.5m, PickupStart = At(17,  0), PickupEnd = At(20,  0), ImageUrl = "https://loremflickr.com/640/360/football,goldenboot/all?lock=301" },
@@ -311,7 +322,11 @@ public static class DbSeeder
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000026"), BusinessId = b1,  PackageTypeId = mealBox,     Name = "Late Save Meal Box",           Description = "One more meal box rescued in the closing minutes before the counter shuts.",Price =  9.75m, Quantity = 2,  WeightKg = 1.2m, PickupStart = nearExpiryNudgeDemoStart, PickupEnd = nearExpiryNudgeDemoEnd, ImageUrl = "https://loremflickr.com/640/360/football,latesave/all?lock=326" },
             // Phase 5 demo: see markdownDemoStart/End above — priced above this business's own
             // recent mealBox comps, still fully unsold with its window closing soon.
-            new Package { Id = new Guid("55555555-0000-0000-0000-000000000027"), BusinessId = b1,  PackageTypeId = mealBox,     Name = "Away Day Meal Box",            Description = "A road-trip-sized meal box, priced for away-day appetites.",               Price = 12.99m, Quantity = 4,  WeightKg = 1.2m, PickupStart = markdownDemoStart, PickupEnd = markdownDemoEnd, ImageUrl = "https://loremflickr.com/640/360/football,awayday/all?lock=327" }
+            new Package { Id = new Guid("55555555-0000-0000-0000-000000000027"), BusinessId = b1,  PackageTypeId = mealBox,     Name = "Away Day Meal Box",            Description = "A road-trip-sized meal box, priced for away-day appetites.",               Price = 12.99m, Quantity = 4,  WeightKg = 1.2m, PickupStart = markdownDemoStart, PickupEnd = markdownDemoEnd, ImageUrl = "https://loremflickr.com/640/360/football,awayday/all?lock=327" },
+            // Impact Phase 1 demo: see donationCandidateStart/End above — never referenced by any seeded order.
+            new Package { Id = new Guid("55555555-0000-0000-0000-000000000028"), BusinessId = b1,  PackageTypeId = surpriseBag, Name = "Extra Time Surprise Bag",      Description = "A surprise bag nobody claimed before the final whistle.",                  Price =  7.50m, Quantity = 3,  WeightKg = 1.5m, PickupStart = donationCandidateStart, PickupEnd = donationCandidateEnd, ImageUrl = "https://loremflickr.com/640/360/football,extratime/all?lock=328" },
+            // Impact Phase 1 demo: see alreadyDonatedStart/End above — SeedDonationDemoDataAsync marks this donated.
+            new Package { Id = new Guid("55555555-0000-0000-0000-000000000029"), BusinessId = b1,  PackageTypeId = breadBag,    Name = "Bench Warmer Bread Bag",       Description = "Bread that sat on the bench all night and never got called up.",           Price =  4.50m, Quantity = 6,  WeightKg = 1.4m, PickupStart = alreadyDonatedStart, PickupEnd = alreadyDonatedEnd, ImageUrl = "https://loremflickr.com/640/360/football,benchwarmer/all?lock=329" }
         };
 
         // Plausible default tags per package type, so the feature has real demo data out of the box.
@@ -362,6 +377,7 @@ public static class DbSeeder
                 // reconsider it instead of treating a previous run's nudge/dismissal as current.
                 existing.NearExpiryNudgeSentAt = null;
                 existing.MarkdownDismissedAt = null;
+                existing.DonationOfferedAt = null;
             }
 
             if (IsStalePlaceholderImage(existing.ImageUrl))
@@ -563,6 +579,20 @@ public static class DbSeeder
         {
             redCardPastryBox.IsHidden = true;
             redCardPastryBox.HiddenReason = "Reported for inaccurate allergen labeling — under review.";
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    // Marks "Bench Warmer Bread Bag" as already donated, so the home hero, /impact, and the
+    // dashboard widget all have a non-zero donated figure on a fresh DB. Backfill-only, same
+    // reasoning as SeedModerationDemoDataAsync — never re-donates something already undone.
+    private static async Task SeedDonationDemoDataAsync(EcoMealDbContext db)
+    {
+        var benchWarmerBreadBag = await db.Packages.FindAsync(new Guid("55555555-0000-0000-0000-000000000029"));
+        if (benchWarmerBreadBag is not null && benchWarmerBreadBag.DonatedAt is null)
+        {
+            benchWarmerBreadBag.DonatedAt = DateTime.UtcNow.AddDays(-1);
         }
 
         await db.SaveChangesAsync();

@@ -120,6 +120,33 @@ public class PackageRepository(EcoMealDbContext context) : IPackageRepository
             .ToListAsync();
     }
 
+    public async Task<List<Package>> GetDonationCandidatesAsync(Guid? businessId, DateTime now)
+    {
+        var query = context.Packages
+            .Include(p => p.Business)
+            .Where(p => !p.IsHidden && p.DonatedAt == null && p.PickupEnd < now && !p.OrderPackages.Any());
+
+        if (businessId.HasValue)
+            query = query.Where(p => p.BusinessId == businessId);
+
+        return await query.OrderBy(p => p.PickupEnd).ToListAsync();
+    }
+
+    public async Task<bool> HasAnyOrdersAsync(Guid packageId)
+    {
+        return await context.OrderPackages.AnyAsync(op => op.PackageId == packageId);
+    }
+
+    public async Task<decimal> GetDonatedWeightKgAsync(Guid? businessId)
+    {
+        var query = context.Packages.Where(p => p.DonatedAt != null);
+
+        if (businessId.HasValue)
+            query = query.Where(p => p.BusinessId == businessId);
+
+        return await query.SumAsync(p => (decimal?)p.WeightKg) ?? 0m;
+    }
+
     public async Task AddAsync(Package package)
     {
         await context.Packages.AddAsync(package);

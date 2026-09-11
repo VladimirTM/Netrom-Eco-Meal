@@ -226,6 +226,67 @@ public class PackageService(
         await packageRepository.SaveChangesAsync();
     }
 
+    public async Task<List<Package>> GetDonationCandidatesAsync(Guid? businessId)
+    {
+        var (isAdmin, userId) = await currentUser.GetCurrentUserAsync();
+        if (!isAdmin)
+        {
+            if (userId is null || businessId is null || !await businessService.IsStaffAsync(businessId.Value, userId))
+                throw new UnauthorizedAccessException("You can only view donation candidates for your own business.");
+        }
+
+        return await packageRepository.GetDonationCandidatesAsync(businessId, DateTime.UtcNow);
+    }
+
+    public async Task<Package?> MarkAsDonatedAsync(Guid packageId)
+    {
+        var package = await packageRepository.GetByIdAsync(packageId);
+        if (package is null)
+            return null;
+
+        await EnsureCanManageBusinessAsync(package.BusinessId);
+
+        if (package.DonatedAt is not null)
+            return package;
+
+        if (package.PickupEnd >= DateTime.UtcNow)
+            throw new InvalidOperationException("Only a package whose pickup window has closed can be marked as donated.");
+
+        if (await packageRepository.HasAnyOrdersAsync(packageId))
+            throw new InvalidOperationException("This package had orders placed against it, so it wasn't completely unsold.");
+
+        package.DonatedAt = DateTime.UtcNow;
+        await packageRepository.SaveChangesAsync();
+
+        await auditLogService.LogAsync(AuditActions.PackageDonated, AuditTargetTypes.Package, package.Id.ToString(), package.Name);
+
+        return package;
+    }
+
+    public async Task<int> NotifyDonationCandidatesAsync()
+    {
+        var now = DateTime.UtcNow;
+        var candidates = (await packageRepository.GetDonationCandidatesAsync(null, now))
+            .Where(p => p.DonationOfferedAt is null)
+            .ToList();
+
+        if (candidates.Count == 0)
+            return 0;
+
+        foreach (var package in candidates)
+        {
+            package.DonationOfferedAt = now;
+
+            var staff = await businessService.GetStaffAsync(package.BusinessId);
+            var message = $"\"{package.Name}\" closed with none sold — mark it as donated on /packages to count it toward your food-saved impact.";
+            foreach (var member in staff)
+                await notificationService.CreateAsync(member.Id, message, "/packages");
+        }
+
+        await packageRepository.SaveChangesAsync();
+        return candidates.Count;
+    }
+
     public async Task<Package?> HideAsync(Guid packageId, string reason, bool notify = true)
     {
         var package = await packageRepository.GetByIdAsync(packageId);

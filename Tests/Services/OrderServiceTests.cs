@@ -1012,4 +1012,18 @@ public class OrderServiceTests
 
         Assert.Equal([businessId], broadcasts);
     }
+
+    // ---- GetTotalKgSavedAsync -------------------------------------------------
+
+    [Fact]
+    public async Task GetTotalKgSavedAsync_AddsOrderedAndDonatedWeight()
+    {
+        var f = Build(null);
+        f.OrderRepo.Setup(r => r.GetTotalWeightSavedKgAsync()).ReturnsAsync(12.5m);
+        f.PackageRepo.Setup(r => r.GetDonatedWeightKgAsync(null)).ReturnsAsync(3m);
+
+        var total = await f.Service.GetTotalKgSavedAsync();
+
+        Assert.Equal(15.5m, total);
+    }
 }

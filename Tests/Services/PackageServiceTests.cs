@@ -520,4 +520,119 @@ public class PackageServiceTests
 
         Assert.Equal([businessId], broadcasts);
     }
+
+    // ---- MarkAsDonatedAsync / GetDonationCandidatesAsync / NotifyDonationCandidatesAsync ------
+
+    [Fact]
+    public async Task MarkAsDonatedAsync_PickupWindowStillOpen_Throws()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId); // PickupEnd defaults to +2h — still open.
+        f.Repo.Setup(r => r.GetByIdAsync(package.Id)).ReturnsAsync(package);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Service.MarkAsDonatedAsync(package.Id));
+    }
+
+    [Fact]
+    public async Task MarkAsDonatedAsync_HadOrders_Throws()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        package.PickupEnd = DateTime.UtcNow.AddHours(-1);
+        f.Repo.Setup(r => r.GetByIdAsync(package.Id)).ReturnsAsync(package);
+        f.Repo.Setup(r => r.HasAnyOrdersAsync(package.Id)).ReturnsAsync(true);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Service.MarkAsDonatedAsync(package.Id));
+    }
+
+    [Fact]
+    public async Task MarkAsDonatedAsync_ClosedAndCompletelyUnsold_SetsDonatedAt()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        package.PickupEnd = DateTime.UtcNow.AddHours(-1);
+        f.Repo.Setup(r => r.GetByIdAsync(package.Id)).ReturnsAsync(package);
+        f.Repo.Setup(r => r.HasAnyOrdersAsync(package.Id)).ReturnsAsync(false);
+
+        var result = await f.Service.MarkAsDonatedAsync(package.Id);
+
+        Assert.NotNull(result!.DonatedAt);
+        f.Repo.Verify(r => r.SaveChangesAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task MarkAsDonatedAsync_AlreadyDonated_IsIdempotentNoOp()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        package.PickupEnd = DateTime.UtcNow.AddHours(-1);
+        package.DonatedAt = DateTime.UtcNow.AddDays(-1);
+        f.Repo.Setup(r => r.GetByIdAsync(package.Id)).ReturnsAsync(package);
+
+        await f.Service.MarkAsDonatedAsync(package.Id);
+
+        f.Repo.Verify(r => r.SaveChangesAsync(), Times.Never);
+    }
+
+    [Fact]
+    public async Task MarkAsDonatedAsync_ManagerNotStaffOfBusiness_Throws()
+    {
+        var f = Build(ManagerId, AppRoles.BusinessManager);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        package.PickupEnd = DateTime.UtcNow.AddHours(-1);
+        f.Repo.Setup(r => r.GetByIdAsync(package.Id)).ReturnsAsync(package);
+        f.BusinessService.Setup(b => b.IsStaffAsync(businessId, ManagerId)).ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.MarkAsDonatedAsync(package.Id));
+    }
+
+    [Fact]
+    public async Task GetDonationCandidatesAsync_ManagerNotStaffOfBusiness_Throws()
+    {
+        var f = Build(ManagerId, AppRoles.BusinessManager);
+        var businessId = Guid.NewGuid();
+        f.BusinessService.Setup(b => b.IsStaffAsync(businessId, ManagerId)).ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.GetDonationCandidatesAsync(businessId));
+    }
+
+    [Fact]
+    public async Task NotifyDonationCandidatesAsync_NotifiesStaffOnceAndSetsOfferedAt()
+    {
+        var f = Build(null);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        package.PickupEnd = DateTime.UtcNow.AddHours(-1);
+        var staffMember = TestData.User("staff-1");
+        f.Repo.Setup(r => r.GetDonationCandidatesAsync(null, It.IsAny<DateTime>())).ReturnsAsync([package]);
+        f.BusinessService.Setup(b => b.GetStaffAsync(businessId)).ReturnsAsync([staffMember]);
+
+        var count = await f.Service.NotifyDonationCandidatesAsync();
+
+        Assert.Equal(1, count);
+        Assert.NotNull(package.DonationOfferedAt);
+        f.NotificationService.Verify(n => n.CreateAsync(staffMember.Id, It.IsAny<string>(), "/packages"), Times.Once);
+        f.Repo.Verify(r => r.SaveChangesAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task NotifyDonationCandidatesAsync_SkipsPackagesAlreadyOffered()
+    {
+        var f = Build(null);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        package.PickupEnd = DateTime.UtcNow.AddHours(-1);
+        package.DonationOfferedAt = DateTime.UtcNow.AddMinutes(-5);
+        f.Repo.Setup(r => r.GetDonationCandidatesAsync(null, It.IsAny<DateTime>())).ReturnsAsync([package]);
+
+        var count = await f.Service.NotifyDonationCandidatesAsync();
+
+        Assert.Equal(0, count);
+        f.Repo.Verify(r => r.SaveChangesAsync(), Times.Never);
+    }
 }

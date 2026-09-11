@@ -117,6 +117,20 @@ public class OrderRepository(EcoMealDbContext context) : IOrderRepository
             .SumAsync(op => (decimal?)(op.Quantity * op.Package.WeightKg)) ?? 0m;
     }
 
+    public async Task<(decimal TotalKg, decimal MonthKg, int CompletedOrders)> GetBusinessImpactStatsAsync(Guid businessId, DateTime monthStart)
+    {
+        var completedLines = context.OrderPackages
+            .Where(op => op.Order.BusinessId == businessId && op.Order.Status.Name == OrderStatuses.Completed);
+
+        var totalKg = await completedLines.SumAsync(op => (decimal?)(op.Quantity * op.Package.WeightKg)) ?? 0m;
+        var monthKg = await completedLines.Where(op => op.Order.CreatedAt >= monthStart)
+            .SumAsync(op => (decimal?)(op.Quantity * op.Package.WeightKg)) ?? 0m;
+        var completedOrders = await context.Orders
+            .CountAsync(o => o.BusinessId == businessId && o.Status.Name == OrderStatuses.Completed);
+
+        return (totalKg, monthKg, completedOrders);
+    }
+
     public async Task<List<LeaderboardEntry>> GetTopRescuersAsync(DateTime rangeStart, DateTime rangeEndExclusive, int take)
     {
         var grouped = context.OrderPackages

@@ -178,7 +178,9 @@ public class OrderService(
     // Public aggregate for the home hero — no per-user data exposed, so no auth check needed.
     public async Task<decimal> GetTotalKgSavedAsync()
     {
-        return await orderRepository.GetTotalWeightSavedKgAsync();
+        var orderedKg = await orderRepository.GetTotalWeightSavedKgAsync();
+        var donatedKg = await packageRepository.GetDonatedWeightKgAsync(null);
+        return orderedKg + donatedKg;
     }
 
     // No current-user auth (background-sweep call). Pending orders never touched Package.Quantity,

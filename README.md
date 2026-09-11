@@ -33,7 +33,9 @@ is just the capability summary.
 - Report a business or package that looks wrong, and apply to list your own business for
   admin review on `/businesses/apply`
 - Opt in to the `/impact` community leaderboard, ranking the month's top food-rescuers by kg
-  saved — off by default, and a customer who never opts in never appears on it
+  saved — off by default, and a customer who never opts in never appears on it; the page also
+  shows the platform's total kg saved translated into a rough km-driven/water-saved equivalency,
+  the same one shown on a completed order's own receipt
 - Earn an automatic discount from a kitchen's loyalty punch card (where one's configured), and
   save a "usual" as a standing order — matched against a kitchen's newly published packages and
   added straight to your basket to confirm, up to a weekly budget you set, on `/standing-orders`
@@ -44,7 +46,9 @@ whichever one they pick in the sidebar switcher:
 - Manage packages on `/packages` for the currently selected business — including a photo
   (upload or paste a URL), "repeat this every day" recurring templates managed on
   `/packages/templates`, bulk duplicate/adjust-quantity/extend-pickup-window actions, and an
-  AI markdown-price suggestion for any package closing soon with stock still unsold
+  AI markdown-price suggestion for any package closing soon with stock still unsold, and
+  "mark as donated" for a package that closed with nothing sold, so it still counts toward
+  food-saved impact instead of just expiring
 - Set your business's weekly opening hours and one-off holiday closures, upload a business
   photo, and configure a loyalty punch card (every N orders/month, X lei off) — all from the
   business edit page
@@ -55,6 +59,9 @@ whichever one they pick in the sidebar switcher:
 - See stats scoped to the currently selected business on `/dashboard` (including a
   sell-through rate and busiest pickup hours), a payout ledger of every payment collected
   (and refunded) on `/payments`, and export order history as CSV
+- Grab a public, read-only "share your impact" embed snippet from `/dashboard` — a small script
+  your own website can drop in to show your kitchen's live kg-saved/CO2e/water numbers, no login
+  needed on the visitor's end
 - Staffing more than one business surfaces a switcher in the sidebar to pick which one is
   "current" for every page above — staffing just one skips the switcher entirely
 
@@ -363,6 +370,13 @@ on `/standing-orders` — set up against the same business whose "Golden Boot Su
 recurring template regenerates daily, so the next real generation tick actually demonstrates a
 live match, not just the saved preference itself. demo.customer2 has a second one at VAR Bistro
 narrowed to the `Vegetarian` tag.
+
+Stadionul de Gusturi also has two packages demonstrating the donation flow: "Extra Time Surprise
+Bag" closed recently with nothing sold and is still a live "mark as donated" candidate on
+`/packages` (re-armed on every restart, so the background notification fires again each time),
+while "Bench Warmer Bread Bag" is seeded already marked donated — so the home hero's kg-saved
+figure, `/impact`'s equivalency stats, and a fresh `/dashboard` "share your impact" snippet all
+have a real, non-zero donated contribution right away.
 
 ## Running tests
 

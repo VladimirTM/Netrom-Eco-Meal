@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Netrom_Eco_Meal.Models;
 using Netrom_Eco_Meal.Services.Interfaces;
@@ -9,6 +11,17 @@ namespace Netrom_Eco_Meal.Controllers;
 [Route("/")]
 public class ImpactController(IImpactService impactService) : ControllerBase
 {
+    // The one action here meant to be a real cross-origin HTTP request — from a business's own
+    // website via wwwroot/js/impact-widget.js — rather than DI'd in-process like the rest below.
+    [HttpGet("/api/businesses/{businessId:guid}/impact")]
+    [AllowAnonymous]
+    [EnableCors("PublicImpactWidget")]
+    public async Task<ActionResult<BusinessImpactWidgetDto>> GetBusinessWidgetAsync(Guid businessId)
+    {
+        var stats = await impactService.GetBusinessWidgetStatsAsync(businessId);
+        return stats is null ? NotFound() : stats;
+    }
+
     public async Task<ActionResult<List<LeaderboardEntry>>> GetMonthlyLeaderboardAsync(int take = 20)
     {
         return await impactService.GetMonthlyLeaderboardAsync(take);

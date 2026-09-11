@@ -28,6 +28,14 @@ public interface IPackageRepository
     // most recent first, capped at MarkdownSettings.MaxHistoryRecords — feeds
     // MarkdownPricingAgent's get_sell_through_history tool.
     public Task<List<Package>> GetSellThroughHistoryAsync(Guid businessId, Guid excludePackageId, DateTime since);
+    // Live, unhidden, closed packages that never had a unit ordered and aren't yet donated — feeds
+    // the /packages "mark as donated" badge and the sweep's donation notification.
+    public Task<List<Package>> GetDonationCandidatesAsync(Guid? businessId, DateTime now);
+    // Whether any order has ever included this package — MarkAsDonatedAsync's "completely unsold" guard.
+    public Task<bool> HasAnyOrdersAsync(Guid packageId);
+    // Sum of WeightKg across every donated package, optionally scoped to one business — feeds
+    // OrderService.GetTotalKgSavedAsync and the business impact widget.
+    public Task<decimal> GetDonatedWeightKgAsync(Guid? businessId);
     public Task AddAsync(Package package);
     public Task DeleteAsync(Guid id);
     public Task SaveChangesAsync();

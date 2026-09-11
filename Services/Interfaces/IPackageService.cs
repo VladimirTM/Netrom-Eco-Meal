@@ -41,4 +41,13 @@ public interface IPackageService
     // validate — the caller shows "no suggestion right now".
     public Task<MarkdownSuggestion?> GetMarkdownSuggestionAsync(Guid packageId, CancellationToken cancellationToken = default);
     public Task DismissMarkdownSuggestionAsync(Guid packageId);
+
+    // Backs the /packages "mark as donated" badge — same admin-or-own-business-staff
+    // authorization shape as GetMarkdownCandidatesAsync.
+    public Task<List<Package>> GetDonationCandidatesAsync(Guid? businessId);
+    // Throws InvalidOperationException if the pickup window hasn't closed yet or the package ever
+    // had a real order — donation is only for food that closed completely unsold.
+    public Task<Package?> MarkAsDonatedAsync(Guid packageId);
+    // System-triggered (background sweep) — notifies each candidate's business staff once.
+    public Task<int> NotifyDonationCandidatesAsync();
 }

@@ -28,6 +28,10 @@ public class Package
     public DateTime? NearExpiryNudgeSentAt { get; set; }
     // Set when a manager dismisses the markdown-pricing suggestion for this package — keeps it from reappearing on /packages.
     public DateTime? MarkdownDismissedAt { get; set; }
+    // Set when a manager marks a closed, completely-unsold package as donated instead of letting it expire.
+    public DateTime? DonatedAt { get; set; }
+    // Set once OrderLifecycleSweepService has notified staff this package qualifies for donation — keeps it from re-notifying every tick.
+    public DateTime? DonationOfferedAt { get; set; }
     [ForeignKey(nameof(BusinessId))]
     public Business Business { get; set; } = null!;
     [ForeignKey(nameof(PackageTypeId))]

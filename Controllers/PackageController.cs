@@ -116,6 +116,34 @@ public class PackageController(IPackageService packageService, IPackageAiAssista
         }
     }
 
+    public async Task<ActionResult<List<Package>>> GetDonationCandidatesAsync(Guid? businessId)
+    {
+        try
+        {
+            return await packageService.GetDonationCandidatesAsync(businessId);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized();
+        }
+    }
+
+    public async Task<ActionResult<Package?>> MarkAsDonatedAsync(Guid packageId)
+    {
+        try
+        {
+            return await packageService.MarkAsDonatedAsync(packageId);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(ex.Message);
+        }
+    }
+
     public async Task<ActionResult> HideAsync(Guid packageId, string reason)
     {
         await packageService.HideAsync(packageId, reason);

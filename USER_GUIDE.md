@@ -194,6 +194,8 @@ Confirmed, Completed, NoShow, Cancelled. Each order renders as a ticket card —
 on it to open the full detail view, including a payment badge ("Paid", "Refunded", or — if the
 automatic refund itself failed — "Refund failed") when applicable, and the pickup window
 formatted as e.g. "Aug 8 · 14:00–16:00" (or spanning two dates if the window crosses midnight).
+A **Completed** order's receipt also shows what that pickup actually meant — roughly how many
+km of driving and liters of water it's equivalent to, right under the total.
 
 - **Pending** orders can be cancelled — the kitchen hasn't confirmed yet, so cancelling issues
   an automatic refund. A confirmation dialog ("Cancel order?") double-checks before it's final.
@@ -294,7 +296,11 @@ running ranking of this month's top rescuers by kg saved. It's opt-in: your name
 if you turn on **Appear on this leaderboard** — a toggle at the top of the page, visible only
 when you're signed in as a Customer, off by default. Flip it and your own row appears or
 disappears immediately, highlighted with a **You** badge among the ranked list. If nobody's
-opted in yet this month, the page just says so instead of showing an empty table.
+opted in yet this month, the page just says so instead of showing an empty table. Above the
+board, the page also shows the platform's total kg saved to date, translated into roughly how
+many km of driving and liters of water that's equivalent to — the same equivalency shown on a
+Completed order's own receipt (see [Track and pick up](#track-and-pick-up)), just added up
+across everyone.
 
 ---
 
@@ -396,6 +402,14 @@ reason. It's only ever a suggestion: nothing changes until you edit the package 
 **Dismiss** hides it for that package going forward. If no cut looks warranted, or the AI feature
 isn't configured on the server, you'll see a message saying so instead of a number.
 
+A ♡ heart icon next to a package's name means its pickup window closed with **nobody ordering a
+single unit of it**. Click it and choose **Mark as donated** to have it count toward your (and
+the platform's) food-saved impact numbers instead of just quietly expiring — it doesn't change
+anything else about the package, and you'll only ever see the icon on something that genuinely
+closed unsold. Once confirmed, the icon becomes a green **Donated** badge. You don't have to
+catch these yourself, either — a background check notifies you the first time a package
+qualifies, so it's easy to come back to later from the notification.
+
 ### Manage recurring templates
 
 `/packages/templates` lists every template for the current business: name and description,
@@ -470,6 +484,12 @@ days:
 - **Busiest pickup hours** — a 24-bar chart of completed pickups bucketed by hour of day (in
   *your* local time), so you can see when foot traffic actually peaks. Hover or focus a bar for
   the exact hour range and count.
+
+A **Share your impact** card below that gives you a snippet to paste into your own website —
+`<script src="..." data-business-id="...">`. It renders a small, self-updating card showing your
+kitchen's total kg saved plus the same km-driven/water-saved equivalency customers see, pulled
+live from Eco Meal every time your page loads. No account or setup needed on your end beyond
+pasting the snippet — hit **Copy** and drop it wherever you'd like it to show up.
 
 `/payments` is the money version, scoped the same way: every order for your business with its
 payment status (Unpaid/Paid/Refunded/Refund failed), amount, and paid/refunded timestamps, plus

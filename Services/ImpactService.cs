@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Models;
 using Netrom_Eco_Meal.Repositories.Interfaces;
@@ -8,6 +9,8 @@ namespace Netrom_Eco_Meal.Services;
 
 public class ImpactService(
     IOrderRepository orderRepository,
+    IPackageRepository packageRepository,
+    IBusinessRepository businessRepository,
     UserManager<ApplicationUser> userManager,
     CurrentUserAccessor currentUser) : IImpactService
 {
@@ -41,5 +44,23 @@ public class ImpactService(
 
         user.ShowOnLeaderboard = showOnLeaderboard;
         await userManager.UpdateAsync(user);
+    }
+
+    public async Task<BusinessImpactWidgetDto?> GetBusinessWidgetStatsAsync(Guid businessId)
+    {
+        var business = await businessRepository.GetByIdAsync(businessId);
+        if (business is null || business.IsHidden || business.Status != BusinessStatuses.Approved)
+            return null;
+
+        var now = DateTime.UtcNow;
+        var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var (orderedKg, monthKg, completedOrders) = await orderRepository.GetBusinessImpactStatsAsync(businessId, monthStart);
+        var donatedKg = await packageRepository.GetDonatedWeightKgAsync(businessId);
+        var totalKg = orderedKg + donatedKg;
+
+        return new BusinessImpactWidgetDto(
+            business.Id, business.Name, totalKg, monthKg, completedOrders,
+            ImpactEquivalency.Co2eKg(totalKg), ImpactEquivalency.KmNotDriven(totalKg), ImpactEquivalency.LitersOfWater(totalKg));
     }
 }

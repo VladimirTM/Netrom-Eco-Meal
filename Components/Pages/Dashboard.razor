@@ -20,6 +20,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ManagedBusinessContext ManagedBusinessContext
 @inject ClientTimeZoneService ClientTimeZoneService
+@inject NavigationManager NavigationManager
 @attribute [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]
 
 <PageTitle>Dashboard — Eco Meal</PageTitle>
@@ -283,6 +284,25 @@
     </div>
 </div>
 
+@if (_myBusinessId is not null)
+{
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-transparent border-0 pt-4 px-4 pb-0">
+            <h6 class="fw-semibold mb-0">Share your impact</h6>
+            <p class="text-muted small mb-0">A public, read-only widget for your own website — pulls your live numbers straight from Eco Meal, no login needed on your end.</p>
+        </div>
+        <div class="card-body px-4 pb-4">
+            <div class="input-group">
+                <input type="text" class="form-control font-monospace small" readonly value="@ImpactWidgetSnippet" onclick="this.select();" id="impact-widget-snippet"/>
+                <button type="button" class="btn btn-outline-secondary" onclick="const el = document.getElementById('impact-widget-snippet'); el.select(); navigator.clipboard.writeText(el.value); this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy', 1500);">
+                    Copy
+                </button>
+            </div>
+            <p class="text-muted small mt-2 mb-0">Paste this anywhere in your site's HTML — it renders your kitchen's total kg saved plus a CO2e/water equivalency.</p>
+        </div>
+    </div>
+}
+
 <div class="card border-0 shadow-sm">
     <div class="card-header bg-transparent border-0 pt-4 px-4 pb-0">
         <h6 class="fw-semibold mb-0">Quick Actions</h6>
@@ -347,6 +367,12 @@
     private decimal _sellThroughRate;
     private int[] _hourlyPickupQty = new int[24];
     private int _maxHourlyQty = 1;
+    private Guid? _myBusinessId;
+
+    // NavigationManager.BaseUri, not App:BaseUrl config — reflects whatever host/port the manager
+    // actually reached this page through.
+    private string ImpactWidgetSnippet =>
+        $"""<script src="{NavigationManager.BaseUri.TrimEnd('/')}/js/impact-widget.js" data-business-id="{_myBusinessId}"></script>""";
 
     protected override async Task OnInitializedAsync()
     {
@@ -383,6 +409,9 @@
             myBusinessId = ManagedBusinessContext.SelectedBusinessId;
             _packageCount = myBusinessId is null ? 0 : allPackages.Count(p => p.BusinessId == myBusinessId);
         }
+
+        // Backs the "Share your impact" snippet below — admins manage no single business, so they get none.
+        _myBusinessId = myBusinessId;
 
         var orders = await OrderController.GetOrdersForManagementAsync(myBusinessId);
         if (orders.Result is UnauthorizedResult)

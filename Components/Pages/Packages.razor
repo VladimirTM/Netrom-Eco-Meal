@@ -181,6 +181,18 @@
                                         <i class="bi bi-eye-slash"></i> Hidden
                                     </span>
                                 }
+                                @if (package.DonatedAt is not null)
+                                {
+                                    <span class="badge rounded-pill bg-success-subtle text-success ms-1" title="Marked as donated — counts toward food-saved impact">
+                                        <i class="bi bi-heart-fill"></i> Donated
+                                    </span>
+                                }
+                                else if (canManage && _donationCandidateIds.Contains(package.Id))
+                                {
+                                    <button type="button" class="btn btn-sm btn-link p-0 ms-1" title="Closed with none sold — mark it as donated instead of letting it silently expire" @onclick="() => OpenDonatePrompt(package)">
+                                        <i class="bi bi-heart text-success"></i>
+                                    </button>
+                                }
                             </div>
                             <div class="text-muted small">@package.Description</div>
                         </td>
@@ -258,6 +270,15 @@
               Error="@_hidePromptError"
               OnSubmit="SubmitHidePromptAsync"
               OnCancel="() => { _hidePromptPackage = null; _hidePromptError = null; }"/>
+
+<ConfirmDialog IsOpen="@(_donatePromptPackage is not null)"
+               Title="@(_donatePromptPackage is null ? "" : $"Mark \"{_donatePromptPackage.Name}\" as donated?")"
+               Message="It closed with none sold. Marking it as donated counts its weight toward your food-saved impact instead of letting it just expire — it doesn't change anything else about the package."
+               ConfirmLabel="Mark as donated"
+               ConfirmClass="btn-success"
+               Busy="@_donatePromptBusy"
+               OnConfirm="ConfirmDonateAsync"
+               OnCancel="() => _donatePromptPackage = null"/>
 
 <ConfirmDialog IsOpen="_confirmingDuplicate"
                Title="Duplicate packages?"
@@ -401,6 +422,11 @@
     private string? _markdownSuggestionError;
     private bool _markdownDismissBusy;
 
+    // Same "fetched business-wide, not paginated" reasoning as _markdownCandidateIds above.
+    private HashSet<Guid> _donationCandidateIds = [];
+    private Package? _donatePromptPackage;
+    private bool _donatePromptBusy;
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -418,6 +444,7 @@
 
         await LoadPageAsync();
         await LoadMarkdownCandidatesAsync();
+        await LoadDonationCandidatesAsync();
 
         ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
         ManagedBusinessContext.OnChange += HandleManagedBusinessChanged;
@@ -433,6 +460,7 @@
         {
             await LoadPageAsync();
             await LoadMarkdownCandidatesAsync();
+            await LoadDonationCandidatesAsync();
             StateHasChanged();
         });
     }
@@ -471,6 +499,50 @@
         }
 
         _markdownSuggestionLoading = false;
+    }
+
+    // Same admin-sees-everything / manager-sees-own-business convention as LoadMarkdownCandidatesAsync.
+    private async Task LoadDonationCandidatesAsync()
+    {
+        if (!_isAdmin && !_isBusinessManager)
+            return;
+
+        Guid? businessId = _isBusinessManager ? _myBusinessId ?? Guid.Empty : null;
+        var result = await PackageController.GetDonationCandidatesAsync(businessId);
+        _donationCandidateIds = result.Result is UnauthorizedResult ? [] : (result.Value ?? []).Select(p => p.Id).ToHashSet();
+    }
+
+    private void OpenDonatePrompt(Package package)
+    {
+        if (!_isAdmin && package.BusinessId != _myBusinessId)
+            return;
+
+        _donatePromptPackage = package;
+    }
+
+    private async Task ConfirmDonateAsync()
+    {
+        if (_donatePromptPackage is null)
+            return;
+
+        _donatePromptBusy = true;
+        try
+        {
+            await PackageController.MarkAsDonatedAsync(_donatePromptPackage.Id);
+            _donationCandidateIds.Remove(_donatePromptPackage.Id);
+            await ReloadAsync();
+        }
+        catch (Exception)
+        {
+            // Same reasoning as SubmitHidePromptAsync — surface it via the bulk-action alert slot
+            // rather than leaving the dialog stuck busy with no feedback.
+            _bulkError = "Couldn't mark this package as donated. Please refresh and try again.";
+        }
+        finally
+        {
+            _donatePromptBusy = false;
+            _donatePromptPackage = null;
+        }
     }
 
     private void CloseMarkdownSuggestion()

@@ -68,6 +68,11 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddCascadingAuthenticationState();
 
+// Only ImpactController's GetBusinessWidgetAsync opts into this — wwwroot/js/impact-widget.js
+// fetches it cross-origin from a business's own website. Nothing else in the app needs CORS.
+builder.Services.AddCors(options =>
+    options.AddPolicy("PublicImpactWidget", policy => policy.AllowAnyOrigin().WithMethods("GET")));
+
 var connectionString = builder.Configuration.GetConnectionString("EcoMealContext");
 // Lets NotificationRepository open short-lived contexts, so the polling bell doesn't race the
 // page over the shared per-circuit EcoMealDbContext below (also sourced from this factory).
@@ -200,6 +205,8 @@ app.UseStaticFiles(new StaticFileOptions
     FileProvider = new PhysicalFileProvider(uploadsPath),
     RequestPath = "/uploads"
 });
+
+app.UseCors();
 
 app.UseAuthentication();
 app.UseAuthorization();

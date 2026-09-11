@@ -25,6 +25,7 @@ public interface IOrderService
     public Task<Order> SplitPickupPassesAsync(Guid orderId, int passCount);
     // Manager/admin-only — redeeming any one pass on a Confirmed order completes the whole order.
     public Task<Order> RedeemPickupPassAsync(Guid orderId, Guid passId);
+    // Includes both Completed-order pickups and donated packages (Package.DonatedAt).
     public Task<decimal> GetTotalKgSavedAsync();
     // System-triggered, no current-user auth — called by the background expiry sweep.
     public Task<int> ExpireStalePendingOrdersAsync();

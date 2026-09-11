@@ -22,6 +22,9 @@ public interface IOrderRepository
     // audience, alongside IFavoriteRepository.GetFavoritingUsersAsync.
     public Task<List<ApplicationUser>> GetPastCustomersAsync(Guid businessId);
     public Task<decimal> GetTotalWeightSavedKgAsync();
+    // All-time and this-month kg saved plus a Completed-order count for one business —
+    // order-pickups only; ImpactService adds donated weight on top. Feeds the business impact widget.
+    public Task<(decimal TotalKg, decimal MonthKg, int CompletedOrders)> GetBusinessImpactStatsAsync(Guid businessId, DateTime monthStart);
     // Top opted-in (ApplicationUser.ShowOnLeaderboard) rescuers by kg saved within [from, toExclusive)
     // — feeds the /impact page. A user who never opted in never appears, full stop, not as an
     // anonymized row.

@@ -62,10 +62,11 @@ public class DbSeederTests(PostgresFixture fixture)
 
         // 12 approved storefront kitchens + 2 Phase 9 self-service applications (1 pending, 1 rejected).
         Assert.Equal(14, await db.Businesses.CountAsync());
-        // 27 live storefront packages (24 + the Phase 12 low-stock demo package + the Phase 3
-        // near-expiry nudge demo package + the Phase 5 markdown-suggestion demo package) + 9
-        // historical ones backing the Phase 8 analytics card.
-        Assert.Equal(36, await db.Packages.CountAsync());
+        // 29 live storefront packages (24 + the Phase 12 low-stock demo package + the Phase 3
+        // near-expiry nudge demo package + the Phase 5 markdown-suggestion demo package + the
+        // Phase 1 donation-candidate and already-donated demo packages) + 9 historical ones
+        // backing the Phase 8 analytics card.
+        Assert.Equal(38, await db.Packages.CountAsync());
     }
 
     [Fact]
@@ -173,7 +174,7 @@ public class DbSeederTests(PostgresFixture fixture)
 
         await using var finalDb = provider.GetRequiredService<EcoMealDbContext>();
         Assert.Equal(14, await finalDb.Businesses.CountAsync());
-        Assert.Equal(36, await finalDb.Packages.CountAsync());
+        Assert.Equal(38, await finalDb.Packages.CountAsync());
         // 16 original demo orders + 3 Phase 11 leaderboard-demo orders (2 for demo.customer2, 1 for
         // demo.customer3) + 2 Phase 13 Rescue Circle orders.
         Assert.Equal(21, await finalDb.Orders.CountAsync());
@@ -260,6 +261,25 @@ public class DbSeederTests(PostgresFixture fixture)
         Assert.NotNull(redCardPastryBox);
         Assert.True(redCardPastryBox!.IsHidden);
         Assert.False(string.IsNullOrWhiteSpace(redCardPastryBox.HiddenReason));
+    }
+
+    [Fact]
+    public async Task SeedAsync_FreshDatabase_SeedsDonationDemoData()
+    {
+        await using var provider = await BuildSeededServicesAsync();
+        await using var db = provider.GetRequiredService<EcoMealDbContext>();
+
+        // Still a live "mark as donated" candidate — closed recently, never ordered, not yet donated.
+        var extraTimeSurpriseBag = await db.Packages.FindAsync(new Guid("55555555-0000-0000-0000-000000000028"));
+        Assert.NotNull(extraTimeSurpriseBag);
+        Assert.Null(extraTimeSurpriseBag!.DonatedAt);
+        Assert.True(extraTimeSurpriseBag.PickupEnd < DateTime.UtcNow);
+
+        // Already marked as donated by SeedDonationDemoDataAsync — gives the impact stats a
+        // non-zero donated contribution out of the box.
+        var benchWarmerBreadBag = await db.Packages.FindAsync(new Guid("55555555-0000-0000-0000-000000000029"));
+        Assert.NotNull(benchWarmerBreadBag);
+        Assert.NotNull(benchWarmerBreadBag!.DonatedAt);
     }
 
     [Fact]

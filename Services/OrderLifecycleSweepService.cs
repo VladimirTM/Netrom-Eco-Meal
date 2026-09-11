@@ -8,8 +8,8 @@ namespace Netrom_Eco_Meal.Services;
 // orders that were never confirmed (and refunds them, since they were paid for at checkout time)
 // so they stop locking stock via the pendingElsewhere reservation check in
 // OrderService.PlaceOrderAsync, reminds customers shortly before a Confirmed order's pickup
-// window closes, and marks Confirmed orders whose pickup window fully closed as NoShow,
-// restoring stock.
+// window closes, marks Confirmed orders whose pickup window fully closed as NoShow, restoring
+// stock, and notifies staff about packages that closed completely unsold instead of expiring silently.
 public class OrderLifecycleSweepService(IServiceScopeFactory scopeFactory, ILogger<OrderLifecycleSweepService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -22,6 +22,7 @@ public class OrderLifecycleSweepService(IServiceScopeFactory scopeFactory, ILogg
                 using var scope = scopeFactory.CreateScope();
                 var orderService = scope.ServiceProvider.GetRequiredService<IOrderService>();
                 var checkoutService = scope.ServiceProvider.GetRequiredService<ICheckoutService>();
+                var packageService = scope.ServiceProvider.GetRequiredService<IPackageService>();
 
                 var expiredCheckouts = await checkoutService.ExpireStalePendingCheckoutsAsync();
                 if (expiredCheckouts > 0)
@@ -38,6 +39,10 @@ public class OrderLifecycleSweepService(IServiceScopeFactory scopeFactory, ILogg
                 var noShows = await orderService.ExpireNoShowOrdersAsync();
                 if (noShows > 0)
                     logger.LogInformation("Marked {Count} order(s) as no-show.", noShows);
+
+                var donationNotices = await packageService.NotifyDonationCandidatesAsync();
+                if (donationNotices > 0)
+                    logger.LogInformation("Notified staff about {Count} unsold-at-cutoff package(s).", donationNotices);
             }
             catch (Exception ex)
             {

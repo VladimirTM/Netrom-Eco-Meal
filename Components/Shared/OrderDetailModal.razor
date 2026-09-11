@@ -68,6 +68,11 @@
                 <span>Total</span>
                 <span class="order-ticket-total-value">@Order.OrderPackages.Sum(op => op.Quantity * op.Package.Price).ToString("C")</span>
             </div>
+
+            @if (Order.Status.Name == OrderStatuses.Completed)
+            {
+                <ImpactEquivalencyStats KgSaved="@Order.OrderPackages.Sum(op => op.Quantity * op.Package.WeightKg)"/>
+            }
         </div>
     </div>
 }

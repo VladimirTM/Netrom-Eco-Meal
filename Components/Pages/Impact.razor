@@ -7,6 +7,7 @@
 @using Netrom_Eco_Meal.Models
 @rendermode InteractiveServer
 @inject ImpactController ImpactController
+@inject OrderController OrderController
 @inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Community Impact — Eco Meal</PageTitle>
@@ -19,6 +20,13 @@
             Every completed pickup keeps real food out of the bin. This board ranks the customers who've
             saved the most this month — opt in below to add your own name to it.
         </p>
+        @if (_totalKgSaved is > 0)
+        {
+            <p class="home-hero-sub mb-0">
+                <strong>@_totalKgSaved.Value.ToString("0.#") kg</strong> saved platform-wide so far.
+            </p>
+            <ImpactEquivalencyStats KgSaved="@_totalKgSaved.Value"/>
+        }
     </div>
 </section>
 
@@ -83,6 +91,7 @@
     private bool _optedIn;
     private bool _optInBusy;
     private string? _currentUserId;
+    private decimal? _totalKgSaved;
 
     protected override async Task OnInitializedAsync()
     {
@@ -93,6 +102,7 @@
             _optedIn = (await ImpactController.GetMyOptInStatusAsync()).Value;
 
         _leaderboard = (await ImpactController.GetMonthlyLeaderboardAsync()).Value ?? [];
+        _totalKgSaved = (await OrderController.GetTotalKgSavedAsync()).Value;
     }
 
     private async Task ToggleOptInAsync(ChangeEventArgs e)

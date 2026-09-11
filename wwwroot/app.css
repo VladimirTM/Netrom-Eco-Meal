@@ -1803,6 +1803,26 @@ h1:focus {
     margin-top: 0.85rem;
 }
 
+/* ImpactEquivalencyStats.razor — reused on the order receipt (OrderDetailModal) and /impact. */
+.impact-equivalency {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+}
+
+.impact-equivalency-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--em-leaf-dark);
+    background: var(--em-rescue-soft);
+    padding: 0.4rem 0.75rem;
+    border-radius: 999px;
+}
+
 .order-ticket-seam {
     position: relative;
     width: 0;

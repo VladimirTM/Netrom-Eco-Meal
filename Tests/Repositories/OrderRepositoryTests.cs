@@ -81,4 +81,47 @@ public class OrderRepositoryTests
 
         Assert.Empty(results);
     }
+
+    [Fact]
+    public async Task GetBusinessImpactStatsAsync_ScopesToBusinessAndSplitsThisMonth()
+    {
+        await using var db = InMemoryDb.Create();
+        var repo = new OrderRepository(db);
+        var business = TestData.Business();
+        var otherBusiness = TestData.Business();
+        db.BusinessTypes.Add(new BusinessType { Id = business.BusinessTypeId, Name = "Type A" });
+        db.BusinessTypes.Add(new BusinessType { Id = otherBusiness.BusinessTypeId, Name = "Type B" });
+        db.Businesses.AddRange(business, otherBusiness);
+
+        var user = TestData.User();
+        db.Users.Add(user);
+
+        var package = TestData.Package(business.Id, weightKg: 2m);
+        var otherPackage = TestData.Package(otherBusiness.Id, weightKg: 2m);
+        db.Packages.AddRange(package, otherPackage);
+        await db.SaveChangesAsync();
+
+        var now = DateTime.UtcNow;
+        var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        Order MakeOrder(Guid businessId, Guid packageId, int quantity, Guid statusId, DateTime createdAt) => new()
+        {
+            Id = Guid.NewGuid(), UserId = user.Id, User = user, BusinessId = businessId,
+            StatusId = statusId, CreatedAt = createdAt,
+            OrderPackages = { new OrderPackage { Id = Guid.NewGuid(), PackageId = packageId, Quantity = quantity } },
+        };
+
+        db.Orders.AddRange(
+            MakeOrder(business.Id, package.Id, 2, TestStatusIds.Completed, monthStart.AddDays(1)),   // this month -> counts both
+            MakeOrder(business.Id, package.Id, 3, TestStatusIds.Completed, monthStart.AddMonths(-2)), // earlier month -> total only
+            MakeOrder(business.Id, package.Id, 10, TestStatusIds.Confirmed, monthStart.AddDays(1)),   // not Completed -> excluded
+            MakeOrder(otherBusiness.Id, otherPackage.Id, 10, TestStatusIds.Completed, monthStart.AddDays(1))); // other business -> excluded
+        await db.SaveChangesAsync();
+
+        var (totalKg, monthKg, completedOrders) = await repo.GetBusinessImpactStatsAsync(business.Id, monthStart);
+
+        Assert.Equal(10m, totalKg);   // (2 + 3) units * 2kg
+        Assert.Equal(4m, monthKg);    // 2 units * 2kg
+        Assert.Equal(2, completedOrders);
+    }
 }
