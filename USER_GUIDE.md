@@ -135,7 +135,12 @@ pause, resume, or remove one at any time.
 Open the basket panel from the header icon. Each line shows the package name, its per-unit
 price, a `-`/`+` quantity stepper (the `+` button disables itself once you hit the package's
 remaining stock, so you can't reserve more than actually exists), and a remove button. The
-footer shows a running total and a **Pay & place order** button.
+footer shows a running total, an optional **Note for the business** field, and a **Pay & place
+order** button.
+
+The note is a free-text field for anything the kitchen should know at pickup — "running late,"
+"can't carry it to my car," "will call when I arrive" — and shows up on the order for whoever
+confirms it, whether you check out solo or split it with friends below.
 
 If checkout can't start — you're not signed in as a Customer, something in your basket sold
 out in the meantime, or Stripe isn't configured on this deployment — you'll see an inline error
@@ -218,6 +223,14 @@ Order history is paginated, 10 per page. Every status transition above also fire
 same branded template as account emails) alongside the in-app notification, so you don't have
 to keep the tab open to know your order was confirmed, is about to close, or was marked as a
 no-show.
+
+### Plan a pickup route
+
+If you've got more than one order waiting to be picked up at once, `/trip-planner` (the signpost
+icon in the header, next to your orders) suggests an order to collect them in: a numbered list
+next to a map, nearest stop first. It starts from your own location if you allow it, or just from
+your first order otherwise — either way, one stop per kitchen, with every order you have there
+listed underneath. With only one active order there's nothing to route yet, so it just says so.
 
 ### Show your pickup pass
 
@@ -425,7 +438,9 @@ removes packages that already exist.
 `/orders/manage` is your order queue — searchable by order number or customer name, and
 filterable by status (All, Pending, Confirmed, Completed, NoShow, Cancelled). Each row shows
 the order number, customer, line items, total, pickup window, status, and payment badge
-("Paid"/"Refunded"/"Refund failed", blank if unpaid yet).
+("Paid"/"Refunded"/"Refund failed", blank if unpaid yet). A small note icon next to the order
+number means the customer left something for you at checkout — hover it for a preview, or open
+the order to read it in full.
 
 Action buttons follow the same state machine customers see from the other side:
 

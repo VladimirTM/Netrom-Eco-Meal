@@ -19,14 +19,14 @@ public class RescueCircleService(
 {
     private string BaseUrl => (configuration["App:BaseUrl"] ?? "http://localhost:8080").TrimEnd('/');
 
-    public async Task<string> StartCircleAsync(Guid businessId, List<OrderLineRequest> lines, int participantCount)
+    public async Task<string> StartCircleAsync(Guid businessId, List<OrderLineRequest> lines, int participantCount, string? logisticsNote = null)
     {
         if (participantCount is < RescueCircles.MinParticipants or > RescueCircles.MaxParticipants)
             throw new InvalidOperationException($"A Rescue Circle needs between {RescueCircles.MinParticipants} and {RescueCircles.MaxParticipants} people.");
 
         // Reuses every existing rule PlaceOrderAsync already enforces (customer-only, rate limit,
         // stock availability) — the only difference from a solo order is that nobody's paid yet.
-        var order = await orderService.PlaceOrderAsync(businessId, lines);
+        var order = await orderService.PlaceOrderAsync(businessId, lines, logisticsNote);
 
         var packageIds = lines.Select(l => l.PackageId).Distinct().ToList();
         var packages = (await packageRepository.GetByIdsAsync(packageIds)).ToDictionary(p => p.Id);

@@ -22,7 +22,12 @@ is just the capability summary.
 - View a business's live packages, including its weekly hours/holiday closures, and add
   packages to a basket — the package list (and "N left"/"Sold out" state) updates live for
   anyone browsing it, with no refresh needed, if stock changes while they're looking
-- Check out via Stripe Checkout, and track past orders with pickup windows on `/orders`
+- Check out via Stripe Checkout, and track past orders with pickup windows on `/orders` —
+  optionally leaving a free-text logistics note for the business ("running late," "can't carry
+  it to my car"...) right in the basket before paying
+- Once more than one order is live at once, plan a pickup route on `/trip-planner` — a
+  nearest-neighbor stop order (starting from your own location, if shared) over a numbered list
+  and map
 - Split a basket with friends as a Rescue Circle (2-6 people): everyone pays their own share
   via their own Stripe Checkout, the order only moves forward once every share is in, and
   each participant gets their own labeled pickup pass — see `/circles`
@@ -53,7 +58,8 @@ whichever one they pick in the sidebar switcher:
   photo, and configure a loyalty punch card (every N orders/month, X lei off) — all from the
   business edit page
 - Confirm, complete or cancel orders placed at the currently selected business on
-  `/orders/manage` — cancelling automatically refunds the customer's Stripe payment
+  `/orders/manage` — cancelling automatically refunds the customer's Stripe payment; a customer's
+  free-text logistics note, if left, shows right on the order
 - Scan a customer's pickup QR code on `/orders/scan` to confirm pickup, or look the order up by
   number instead when scanning isn't practical
 - See stats scoped to the currently selected business on `/dashboard` (including a
@@ -328,7 +334,12 @@ instead of an empty app:
   (completed, confirmed, cancelled, no-show, pending) across several businesses, so
   `/orders`, reorder, the QR pickup pass, favorites and reviews all show something real.
   One confirmed order comes pre-split into 3 passes, to demo the group-pickup flow without
-  having to split one yourself first.
+  having to split one yourself first. Between the seeded pending/confirmed orders and the
+  Rescue Circle basket below, this account also has three simultaneous active orders across
+  three different businesses, so `/trip-planner` has a real multi-stop route to plan on a
+  fresh database instead of an empty state. The pending order carries a demo
+  `LogisticsNote` ("Running about 10 minutes late…"), visible as a note icon on
+  `/orders/manage`.
 - **BusinessManager** — demo.manager@ecomeal.local / Demo123! — staffs both Stadionul de
   Gusturi and VAR Bistro, so the sidebar's business switcher has something to switch
   between out of the box. Has a pending order waiting to be confirmed on `/orders/manage`

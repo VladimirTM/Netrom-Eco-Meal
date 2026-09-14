@@ -56,6 +56,7 @@ Components/
 │   ├── RescueCircleReturn.razor  # /circles/return — Stripe success/failure landing page for one participant's share
 │   ├── AccountSettings.razor     # /account/settings — PublicLayout host, any signed-in role
 │   ├── AccountSettingsDashboard.razor # /account-settings — MainLayout host, Admin/BusinessManager only
+│   ├── TripPlanner.razor         # /trip-planner — nearest-neighbor pickup route across live orders (Phase 15)
 │   ├── Orders.razor              # /orders — customer order history + cancel + reorder
 │   ├── OrderPickupPass.razor     # /orders/pickup/{Id} — QR code(s) for a Confirmed order, splittable into several
 │   ├── OrderScan.razor(.js)      # /orders/scan — manager camera scanner + manual order-number lookup fallback
@@ -89,7 +90,7 @@ Components/
     ├── StarRating.razor         # Read-only fractional-fill display + editable 1-5 picker, same component
     └── CartPanel.razor          # Slide-in basket + checkout
 
-Constants/  Models/               # Debouncer, PaginatedList<T>, GeoDistance — see below and BACKEND_ARCHITECTURE.md
+Constants/  Models/               # Debouncer, PaginatedList<T>, GeoDistance, TripPlanner — see below and BACKEND_ARCHITECTURE.md
 wwwroot/
 ├── app.css                       # ~4100 lines, one file, no preprocessor — see §13
 ├── js/site.js                    # window.EcoMeal namespace — see §14
@@ -189,7 +190,7 @@ One consequence worth knowing: when `NotFoundPage` renders via the Router's in-c
 
 | Layout | Used by | Shell |
 |---|---|---|
-| `PublicLayout` | Home, BusinessDetail, BusinessApply, Orders, OrderPickupPass, BasketPlanner, Impact, AccountSettings, AccessDenied, NotFound | Sticky header (logo, impact-leaderboard trophy link, notification bell, AI plan-basket sparkle for Customer, orders link + basket button/badge for Customer, dashboard link for staff, "list your business" link for Customer/BusinessManager, account-settings gear icon, logout), `@Body`, footer. Owns the `CartPanel` and (`AuthorizeView`-gated) `NotificationPanel`, and the cart's open/closed state |
+| `PublicLayout` | Home, BusinessDetail, BusinessApply, Orders, TripPlanner, OrderPickupPass, BasketPlanner, Impact, AccountSettings, AccessDenied, NotFound | Sticky header (logo, impact-leaderboard trophy link, notification bell, AI plan-basket sparkle for Customer, orders link + trip-planner link + basket button/badge for Customer, dashboard link for staff, "list your business" link for Customer/BusinessManager, account-settings gear icon, logout), `@Body`, footer. Owns the `CartPanel` and (`AuthorizeView`-gated) `NotificationPanel`, and the cart's open/closed state |
 | `MainLayout` | Dashboard, Businesses(+Form), Packages(+Form), PackageTemplates, OrderManagement, Payments, AccountSettingsDashboard, Users, Reports, AuditLog, Types, OrderScan, OrderValidate, OrderValidateLegacy | Fixed left sidebar (`NavMenu`) + `<main>` content area — the classic admin-panel shell. Also owns `NotificationPanel` |
 | `EmptyLayout` | Login, Register, ForgotPassword, ResetPassword, ConfirmEmail, PaymentReturn, PaymentCancel | Just `@Body` — no header, no sidebar, no footer; the login/register cards and the Stripe redirect landing pages all center themselves entirely via `app.css`'s `.login-page`/`.login-card`/`.cart-confirmation` (see §8) |
 
@@ -246,6 +247,8 @@ Both `RestoreAsync` and `InitializeAsync` are deferred to `OnAfterRenderAsync(fi
 **Rescue Circles icon (Phase 13)**: `bi-people`, sitting right next to the orders receipt icon inside the same `context.User.IsInRole(AppRoles.Customer)` block — points at `/circles` (§8 Cart Panel & Checkout).
 
 **Standing orders icon (Phase 14)**: `bi-arrow-repeat`, right next to the Rescue Circles icon in the same `Customer`-only block — points at `/standing-orders` (§7 StandingOrders).
+
+**Trip planner icon (Phase 15)**: `bi-signpost-2`, sitting between the orders receipt icon and the Rescue Circles icon in the same `Customer`-only block — points at `/trip-planner` (§9 TripPlanner).
 
 **Account settings icon**: `bi-person-gear`, links to `/account/settings` — the one header icon with no role gate beyond plain `<AuthorizeView>`, since every signed-in role (Customer, BusinessManager, Admin) has a name/password to manage. `NavMenu` links to a separate route for the same form (below), so staff get it inside the sidebar chrome instead of the public header.
 
@@ -594,6 +597,8 @@ private async Task StartCheckoutAsync()
 ```
 The `ConflictObjectResult` check is exactly how the rate-limit error, stock-conflict errors, "payments aren't configured yet," and any other `CheckoutService.StartCheckoutAsync` exception surface to the customer — one `if`, no exception-type-specific handling needed client-side, because `PaymentController.CreateCheckoutSessionAsync` already collapsed every relevant exception into `Conflict(ex.Message)` (see `BACKEND_ARCHITECTURE.md` §6, §5 CheckoutService). On success, `result.Value` is Stripe's own hosted checkout URL — `forceLoad: true` is required here, not stylistic, since this is a genuine cross-origin navigation off the Blazor circuit entirely, not an in-app route a soft navigation could handle. The cart itself is left untouched at this point; it's only cleared once the customer actually comes back from Stripe having paid.
 
+**Logistics note (Phase 15)**: a plain `<textarea @bind="_logisticsNote">` sits right above the Pay button, `maxlength` set from `Constants.OrderLogistics.MaxNoteLength` for an immediate browser-side cap ahead of the server's own trim/clamp. `_logisticsNote` is passed straight through as the last argument to both `PaymentController.CreateCheckoutSessionAsync` (above) and `RescueCircleController.StartCircleAsync` (below) — one field backs whichever button the customer actually presses, since a basket can only go through one checkout path at a time.
+
 ### PaymentReturn / PaymentCancel — the Stripe redirect landing pages
 
 **Files:** `Components/Pages/PaymentReturn.razor` (`/checkout/return`), `Components/Pages/PaymentCancel.razor` (`/checkout/cancel`) — both `@layout EmptyLayout`, reusing the same `.login-page`/`.login-card`/`.cart-confirmation` CSS shapes the auth pages and the old in-panel confirmation used, so the visual language doesn't shift just because the flow moved pages.
@@ -687,6 +692,31 @@ This is a **pure frontend feature** — no new `OrderService` method exists for 
 ### Cancel & pickup pass
 
 Both `Pending` and `Confirmed` tickets show a "Cancel order" button (`ConfirmDialog`-gated); `Confirmed` additionally shows a "Show QR code" link to `/orders/pickup/{id}` (§10). Cancelling refreshes **both** the unfiltered hero stats and the currently-visible paged list, since a cancellation can move an order out of whatever status filter is active.
+
+### TripPlanner — multi-stop pickup routing (Phase 15)
+
+**File:** `Components/Pages/TripPlanner.razor` — `@page "/trip-planner"`, `@layout PublicLayout`.
+
+Groups the customer's own `Pending`/`Confirmed` orders (loaded the same way `Orders.razor`'s hero stats are, via `OrderController.GetMyOrdersAsync`) into one stop per `BusinessId` — an active order can't span businesses — then hands each stop's `Business.Latitude`/`Longitude` to `Models.TripPlanner.PlanRoute` (`BACKEND_ARCHITECTURE.md` §5) for a nearest-neighbor walk order:
+
+```csharp
+protected override async Task OnAfterRenderAsync(bool firstRender)
+{
+    if (firstRender && _stops.Count > 1)
+    {
+        var position = await JSRuntime.InvokeAsync<GeoPosition?>("EcoMeal.geo.getPosition");
+        if (position is not null) { _lat = position.Lat; _lng = position.Lng; BuildStops(); }
+        else { _locationDenied = true; }
+    }
+
+    if (_mapNeedsRender)
+    {
+        var markers = _stops.Select((s, i) => new { id = s.BusinessId, name = $"{i + 1}. {s.BusinessName}", lat = s.Lat, lng = s.Lng });
+        await JSRuntime.InvokeVoidAsync("EcoMeal.map.render", "trip-map", markers);
+    }
+}
+```
+Geolocation is only requested once there's more than one stop to actually route — a single active order has nothing to plan a route between, so there's no reason to prompt for location permission (§15 "Geolocation always degrades, never blocks" applies here too: a denial just falls back to starting from the first stop). The resulting order renders as a numbered `<ol class="list-group-numbered">` next to a `home-map`-styled Leaflet map (§6 Map view) — reusing `EcoMeal.map.render` unmodified, since prefixing each marker's `name` with its stop number ("1. Stadionul de Gusturi") was enough to show the sequence without touching the shared JS at all. A stop with several orders against the same business lists each one's `#order-number`/status underneath, rather than the trip planner picking one to show.
 
 ---
 
@@ -920,6 +950,8 @@ This is a **plain `<a href>`**, not a button wired to `OrderController` — it h
 
 A manager's `businessId` (both for the paged list and for `ExportHref` above) comes from `ManagedBusinessContext.SelectedBusinessId`, not a page-local dropdown — an admin instead picks from `_businessFilter`, a plain `<select>` over every business. `OnInitializedAsync` subscribes to `ManagedBusinessContext.OnChange` (`HandleManagedBusinessChanged`, resetting `_pageIndex` back to 1 before reloading) so switching businesses in `NavMenu` refreshes the order queue in place. If a manager staffs zero businesses, `GetOrdersForManagementPagedAsync` returns `UnauthorizedResult` and the page renders `ForbiddenPanel` ("You don't manage a business yet…") instead of an empty table.
 
+**Logistics note hint (Phase 15)**: a small `bi-chat-left-text` icon next to the order number, `@if (!string.IsNullOrWhiteSpace(order.LogisticsNote))`, its `title` attribute carrying the note text for an at-a-glance hover — the full note itself only renders in `OrderDetailModal` (§12) once the row is clicked open.
+
 ### Payments
 
 **File:** `Components/Pages/Payments.razor` — `@page "/payments"`, manager/admin payout ledger.
@@ -963,7 +995,7 @@ Delete still goes through `ConfirmDialog` (§12) — a single shared dialog inst
 | `ReportDialog` (Phase 9) | Same `.confirm-backdrop`/`.confirm-dialog` shell as `ConfirmDialog` (both capped at `max-height: calc(100vh - 3rem)` with `overflow-y: auto`, so a tall message/reason can't push the buttons off a short viewport), plus a required reason `<textarea>` — the Submit button stays disabled until non-whitespace text is entered. Optional `Title`/`Message`/`Placeholder`/`ConfirmLabel` parameters default to the customer-facing report copy ("Report {TargetLabel}" / "Submit report"), used as-is by the report action on `BusinessDetail.razor`/`PackageDetailModal.razor` (submits via `ReportController.SubmitAsync`). The admin-facing Reject/Hide actions on `Businesses.razor`/`Packages.razor` (§11) pass their own copy instead ("Hide '{name}'?" / "Hide package", etc.) — those two call sites never touch `ReportController` at all, they just borrow the modal shape for its `EventCallback<string>` |
 | `ForbiddenPanel` / `NotFoundPanel` | Inline empty-state panels — the former for "wrong role," the latter for "this specific entity no longer exists" (distinct from the global 404 route, used by edit pages when a fetched-by-ID entity comes back null) |
 | `NotificationBell` / `NotificationPanel` | Split into a trigger (`NotificationBell`, rendered inside the sidebar footer / public header) and the popup itself (`NotificationPanel`, rendered once from each layout's top level, outside the sidebar/header entirely) sharing state through `NotificationPanelState` (§5) — not one component, because one component can't render in two DOM locations at once, and the popup *has* to live outside the sidebar/header's subtree (§4). Styled as a centered modal (`.notif-panel`, `position: fixed; top/left: 50%; transform: translate(-50%,-50%)`, `max-height: calc(100vh - 3rem)` with internal scroll) — the same family as `ConfirmDialog`/`ReportDialog`, chosen after a corner-pinned/`AnchoredDropdown`-based panel kept re-clipping against the sidebar's edge across several earlier fixes; centering plus a viewport-fraction max-height can't clip against any edge, on any screen size. A `System.Threading.Timer` on `NotificationPanelState` polls `GetMyUnreadCountAsync` every 30 seconds regardless of whether the panel is open, so the badge count stays fresh for e.g. a manager waiting on new orders; opening the panel separately fetches the actual list (`GetMyNotificationsAsync(20)`) on demand rather than keeping 20 rows in memory at all times. Unread items get a `--em-rescue` left accent bar rather than the generic dot the shared dropdowns use. `NotificationPanel`'s header also carries a bell-icon toggle for **web push** — `OnAfterRenderAsync(firstRender)` calls `PushSubscriptionController.GetPublicKey()` (hides the toggle entirely when `null`, i.e. `WebPush:*` isn't configured server-side — `BACKEND_ARCHITECTURE.md` §10) and `EcoMeal.push.getSubscriptionEndpoint()` (§14) to seed its on/off state without prompting for permission; clicking it calls `EcoMeal.push.subscribe`/`unsubscribe` then mirrors the result to `PushSubscriptionController.SubscribeAsync`/`UnsubscribeAsync`. Gated behind a bare `<AuthorizeView>` (any signed-in role, not just `Customer` — managers/admins get order-lifecycle pushes too) since subscribing needs a real `userId` to attach the row to |
-| `OrderDetailModal` / `PackageDetailModal` | Drill-down modals from a ticket/row click — same visual shell (`biz-modal-*`/`pkg-modal-*` CSS classes), one shows order line items + status, the other a package's full description/tags/price with an "Add to basket" action. **Impact Phase 1**: `OrderDetailModal` renders `<ImpactEquivalencyStats>` under the total, only for a `Completed` order. `PackageDetailModal`'s `RatingAverage`/`ReviewCount` parameters are plain caller-computed numbers, not a fetch of its own — `BusinessDetail.razor` passes them in from `_reviews` (above); the `StarRating` only renders when `ReviewCount > 0`, so a never-reviewed package shows no rating rather than a misleading 0-star one. Its `.pkg-modal-hero` image banner only renders `@if (!string.IsNullOrWhiteSpace(Package.ImageUrl))` — a package with no photo used to still get the hero block, just empty; now it gets no hero section at all, same "nothing configured → no section" rule the business hours panel (§7) follows |
+| `OrderDetailModal` / `PackageDetailModal` | Drill-down modals from a ticket/row click — same visual shell (`biz-modal-*`/`pkg-modal-*` CSS classes), one shows order line items + status, the other a package's full description/tags/price with an "Add to basket" action. **Impact Phase 1**: `OrderDetailModal` renders `<ImpactEquivalencyStats>` under the total, only for a `Completed` order. **Phase 15**: a "Customer note" fact row renders `@if (!string.IsNullOrWhiteSpace(Order.LogisticsNote))` — shared by both `Orders.razor` (the customer's own ticket) and `OrderManagement.razor` (the business side), so no separate note UI was needed for either. `PackageDetailModal`'s `RatingAverage`/`ReviewCount` parameters are plain caller-computed numbers, not a fetch of its own — `BusinessDetail.razor` passes them in from `_reviews` (above); the `StarRating` only renders when `ReviewCount > 0`, so a never-reviewed package shows no rating rather than a misleading 0-star one. Its `.pkg-modal-hero` image banner only renders `@if (!string.IsNullOrWhiteSpace(Package.ImageUrl))` — a package with no photo used to still get the hero block, just empty; now it gets no hero section at all, same "nothing configured → no section" rule the business hours panel (§7) follows |
 | `Pagination` | Renders nothing at all when `TotalPages <= 1` — every paged list page is written to just drop the component in unconditionally rather than wrapping it in its own visibility check |
 | `StarRating` | One component, two modes: `Editable=false` renders a fractional-fill overlay (two stacked 5-star rows, the top one clipped to `Value/5 * 100%` width) for display; `Editable=true` renders a real 1-5 click/hover picker. Both business cards and the review form use the same component, just with different parameters |
 
@@ -1146,7 +1178,7 @@ The one place in the whole app where the frontend can't just `@inject` a control
 
 ### Geolocation always degrades, never blocks
 
-`EcoMeal.geo.getPosition` resolving to `null` instead of rejecting (§14) is a deliberate contract, not an implementation shortcut: browser geolocation can fail for reasons entirely outside the app's control (permission denied, no hardware, a slow/absent GPS fix, a corporate policy blocking it outright), and none of those should be able to break the page it's called from. Both call sites (`Home.razor`'s "near me" toggle, `BusinessForm.razor`'s "use my location") treat a `null` result identically — show an inline error string, leave everything else exactly as it was before the click. Contrast with a typical SPA pattern of a rejected promise bubbling into an error boundary; here there's no boundary to catch it; the JS side absorbs the failure so the C# side never has to.
+`EcoMeal.geo.getPosition` resolving to `null` instead of rejecting (§14) is a deliberate contract, not an implementation shortcut: browser geolocation can fail for reasons entirely outside the app's control (permission denied, no hardware, a slow/absent GPS fix, a corporate policy blocking it outright), and none of those should be able to break the page it's called from. `Home.razor`'s "near me" toggle and `BusinessForm.razor`'s "use my location" both treat a `null` result identically — show an inline error string, leave everything else exactly as it was before the click. `TripPlanner.razor` (Phase 15) is the first caller with an actual functional fallback rather than just an error message: a `null` result still produces a usable route, just starting from the first stop instead of the customer's own position. Contrast with a typical SPA pattern of a rejected promise bubbling into an error boundary; here there's no boundary to catch it; the JS side absorbs the failure so the C# side never has to.
 
 ### "Available" quantity needed a live/local split, not just a local calculation
 

@@ -131,7 +131,13 @@
                 @foreach (var order in _paged.Items)
                 {
                     <tr class="order-row-clickable" @onclick="() => _selectedOrder = order">
-                        <td class="px-4 fw-semibold">#@order.OrderNumber.ToString("000")</td>
+                        <td class="px-4 fw-semibold">
+                            #@order.OrderNumber.ToString("000")
+                            @if (!string.IsNullOrWhiteSpace(order.LogisticsNote))
+                            {
+                                <i class="bi bi-chat-left-text text-primary ms-1" title="@order.LogisticsNote"></i>
+                            }
+                        </td>
                         @if (_isAdmin)
                         {
                             <td>@order.Business.Name</td>

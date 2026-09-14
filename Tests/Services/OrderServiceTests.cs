@@ -203,6 +203,65 @@ public class OrderServiceTests
     }
 
     [Fact]
+    public async Task PlaceOrderAsync_LogisticsNote_IsTrimmedAndSaved()
+    {
+        var f = Build(CustomerId, AppRoles.Customer);
+        var user = TestData.User(CustomerId);
+        f.Db.Users.Add(user);
+        await f.Db.SaveChangesAsync();
+
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 5);
+        f.PackageRepo.Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>())).ReturnsAsync([package]);
+        f.BusinessService.Setup(b => b.GetByIdAsync(businessId)).ReturnsAsync(TestData.Business(businessId));
+        f.BusinessService.Setup(b => b.GetStaffAsync(businessId)).ReturnsAsync([]);
+
+        var order = await f.Service.PlaceOrderAsync(businessId, [new OrderLineRequest(package.Id, 1)],
+            "  Running late, please hold my order.  ");
+
+        Assert.Equal("Running late, please hold my order.", order.LogisticsNote);
+    }
+
+    [Fact]
+    public async Task PlaceOrderAsync_BlankLogisticsNote_IsStoredAsNull()
+    {
+        var f = Build(CustomerId, AppRoles.Customer);
+        var user = TestData.User(CustomerId);
+        f.Db.Users.Add(user);
+        await f.Db.SaveChangesAsync();
+
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 5);
+        f.PackageRepo.Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>())).ReturnsAsync([package]);
+        f.BusinessService.Setup(b => b.GetByIdAsync(businessId)).ReturnsAsync(TestData.Business(businessId));
+        f.BusinessService.Setup(b => b.GetStaffAsync(businessId)).ReturnsAsync([]);
+
+        var order = await f.Service.PlaceOrderAsync(businessId, [new OrderLineRequest(package.Id, 1)], "   ");
+
+        Assert.Null(order.LogisticsNote);
+    }
+
+    [Fact]
+    public async Task PlaceOrderAsync_OverlongLogisticsNote_IsClampedToMaxLength()
+    {
+        var f = Build(CustomerId, AppRoles.Customer);
+        var user = TestData.User(CustomerId);
+        f.Db.Users.Add(user);
+        await f.Db.SaveChangesAsync();
+
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 5);
+        f.PackageRepo.Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>())).ReturnsAsync([package]);
+        f.BusinessService.Setup(b => b.GetByIdAsync(businessId)).ReturnsAsync(TestData.Business(businessId));
+        f.BusinessService.Setup(b => b.GetStaffAsync(businessId)).ReturnsAsync([]);
+
+        var order = await f.Service.PlaceOrderAsync(businessId, [new OrderLineRequest(package.Id, 1)],
+            new string('x', Netrom_Eco_Meal.Constants.OrderLogistics.MaxNoteLength + 50));
+
+        Assert.Equal(Netrom_Eco_Meal.Constants.OrderLogistics.MaxNoteLength, order.LogisticsNote!.Length);
+    }
+
+    [Fact]
     public async Task PlaceOrderAsync_BusinessWithoutStaff_DoesNotNotify()
     {
         var f = Build(CustomerId, AppRoles.Customer);

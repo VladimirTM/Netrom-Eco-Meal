@@ -10,11 +10,11 @@ namespace Netrom_Eco_Meal.Controllers;
 [Route("/")]
 public class OrderController(IOrderService orderService) : ControllerBase
 {
-    public async Task<ActionResult<Order>> PlaceOrderAsync(Guid businessId, List<OrderLineRequest> lines)
+    public async Task<ActionResult<Order>> PlaceOrderAsync(Guid businessId, List<OrderLineRequest> lines, string? logisticsNote = null)
     {
         try
         {
-            return await orderService.PlaceOrderAsync(businessId, lines);
+            return await orderService.PlaceOrderAsync(businessId, lines, logisticsNote);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or InvalidOperationException)
         {

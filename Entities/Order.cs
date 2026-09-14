@@ -14,6 +14,9 @@ public class Order
     public DateTime CreatedAt { get; set; }
     // Set once OrderLifecycleSweepService sends the "pickup closes soon" reminder, so it isn't sent twice.
     public DateTime? PickupReminderSentAt { get; set; }
+    // Free-text logistics note from the customer at checkout ("running late," "can't carry it to
+    // my car"...) — shown to the business on /orders/manage. Null when left blank.
+    public string? LogisticsNote { get; set; }
     [ForeignKey(nameof(UserId))]
     public required ApplicationUser User { get; set; }
     [ForeignKey(nameof(BusinessId))]

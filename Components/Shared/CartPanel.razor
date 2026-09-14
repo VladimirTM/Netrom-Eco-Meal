@@ -71,6 +71,13 @@
                     <span class="cart-panel-total-value">@CartService.TotalPrice.ToString("C")</span>
                 </div>
 
+                <div class="mb-2">
+                    <label for="cart-logistics-note" class="form-label small text-muted mb-1">Note for the business (optional)</label>
+                    <textarea id="cart-logistics-note" class="form-control form-control-sm" rows="2"
+                              placeholder="Running late, can't carry it to my car, will call when I arrive…"
+                              maxlength="@OrderLogistics.MaxNoteLength" @bind="_logisticsNote"></textarea>
+                </div>
+
                 @if (!_splitOpen)
                 {
                     <button type="button" class="btn btn-primary w-100 py-2 mb-2" disabled="@_placing" @onclick="StartCheckoutAsync">
@@ -132,6 +139,7 @@
     private string? _error;
     private bool _splitOpen;
     private int _participantCount = RescueCircles.MinParticipants;
+    private string? _logisticsNote;
 
     protected override void OnInitialized()
     {
@@ -158,7 +166,7 @@
 
         var businessId = CartService.BusinessId.Value;
         var lines = CartService.Items.Select(i => new OrderLineRequest(i.Package.Id, i.Quantity)).ToList();
-        var result = await PaymentController.CreateCheckoutSessionAsync(businessId, lines);
+        var result = await PaymentController.CreateCheckoutSessionAsync(businessId, lines, _logisticsNote);
 
         // PaymentController returns Conflict() for auth/stock/unconfigured-Stripe failures instead of throwing.
         if (result.Result is ConflictObjectResult conflict)
@@ -185,7 +193,7 @@
 
         var businessId = CartService.BusinessId.Value;
         var lines = CartService.Items.Select(i => new OrderLineRequest(i.Package.Id, i.Quantity)).ToList();
-        var result = await RescueCircleController.StartCircleAsync(businessId, lines, _participantCount);
+        var result = await RescueCircleController.StartCircleAsync(businessId, lines, _participantCount, _logisticsNote);
 
         if (result.Result is ConflictObjectResult conflict)
         {

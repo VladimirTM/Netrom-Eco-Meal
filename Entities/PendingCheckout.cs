@@ -12,6 +12,9 @@ public class PendingCheckout
     public required Guid BusinessId { get; set; }
     // Serialized List<OrderLineRequest> — the cart contents at the moment checkout started.
     public required string LinesJson { get; set; }
+    // Carries Order.LogisticsNote across the round trip to Stripe and back, so
+    // CompleteCheckoutAsync can set it on the Order it places.
+    public string? LogisticsNote { get; set; }
     public string? StripeCheckoutSessionId { get; set; }
     public DateTime CreatedAt { get; set; }
     // Set once CheckoutService.CompleteCheckoutAsync has resolved this one way or another —

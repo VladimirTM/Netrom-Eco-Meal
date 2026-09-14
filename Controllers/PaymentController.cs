@@ -9,11 +9,11 @@ namespace Netrom_Eco_Meal.Controllers;
 [Route("/")]
 public class PaymentController(ICheckoutService checkoutService) : ControllerBase
 {
-    public async Task<ActionResult<string>> CreateCheckoutSessionAsync(Guid businessId, List<OrderLineRequest> lines)
+    public async Task<ActionResult<string>> CreateCheckoutSessionAsync(Guid businessId, List<OrderLineRequest> lines, string? logisticsNote = null)
     {
         try
         {
-            return await checkoutService.StartCheckoutAsync(businessId, lines);
+            return await checkoutService.StartCheckoutAsync(businessId, lines, logisticsNote);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or InvalidOperationException)
         {

@@ -9,7 +9,7 @@ public record CheckoutCompletionResult(bool Success, string Message, Order? Orde
 // back, confirms payment, and only then calls IOrderService.PlaceOrderAsync.
 public interface ICheckoutService
 {
-    Task<string> StartCheckoutAsync(Guid businessId, List<OrderLineRequest> lines);
+    Task<string> StartCheckoutAsync(Guid businessId, List<OrderLineRequest> lines, string? logisticsNote = null);
     Task<CheckoutCompletionResult> CompleteCheckoutAsync(Guid pendingCheckoutId, string sessionId);
     // System-triggered — called by the background sweep to clean up checkouts nobody returned to.
     Task<int> ExpireStalePendingCheckoutsAsync();

@@ -10,11 +10,11 @@ namespace Netrom_Eco_Meal.Controllers;
 [Route("/")]
 public class RescueCircleController(IRescueCircleService rescueCircleService) : ControllerBase
 {
-    public async Task<ActionResult<string>> StartCircleAsync(Guid businessId, List<OrderLineRequest> lines, int participantCount)
+    public async Task<ActionResult<string>> StartCircleAsync(Guid businessId, List<OrderLineRequest> lines, int participantCount, string? logisticsNote = null)
     {
         try
         {
-            return await rescueCircleService.StartCircleAsync(businessId, lines, participantCount);
+            return await rescueCircleService.StartCircleAsync(businessId, lines, participantCount, logisticsNote);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or InvalidOperationException)
         {

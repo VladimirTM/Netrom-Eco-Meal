@@ -953,6 +953,8 @@ public static class DbSeeder
         var noShow = MakeOrder(b3, new Guid("55555555-0000-0000-0000-000000000006"), 1, OrderStatuses.NoShow, now.AddDays(-4));
         var confirmed = MakeOrder(b2, new Guid("55555555-0000-0000-0000-000000000004"), 1, OrderStatuses.Confirmed, now.AddDays(-1));
         var pending = MakeOrder(b1, new Guid("55555555-0000-0000-0000-000000000008"), 1, OrderStatuses.Pending, now.AddMinutes(-20));
+        // Demo logistics note, so /orders/manage has one to show on a fresh database.
+        pending.LogisticsNote = "Running about 10 minutes late — please hold my order, thanks!";
 
         // Demos the Phase 1 group-pickup feature on a fresh database: swap this still-Confirmed
         // order's single default pass for three, same as SplitPickupPassesAsync would.

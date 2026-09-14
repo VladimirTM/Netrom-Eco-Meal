@@ -50,6 +50,17 @@
                 </div>
             </div>
 
+            @if (!string.IsNullOrWhiteSpace(Order.LogisticsNote))
+            {
+                <div class="pkg-modal-fact">
+                    <i class="bi bi-chat-left-text"></i>
+                    <div>
+                        <div class="pkg-modal-fact-label">Customer note</div>
+                        <div class="pkg-modal-fact-value">@Order.LogisticsNote</div>
+                    </div>
+                </div>
+            }
+
             <div class="biz-modal-divider"></div>
 
             <div class="biz-modal-section-title"><i class="bi bi-bag"></i> Items</div>

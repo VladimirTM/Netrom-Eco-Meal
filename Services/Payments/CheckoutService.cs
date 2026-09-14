@@ -18,7 +18,7 @@ public class CheckoutService(
     CurrentUserAccessor currentUser,
     IConfiguration configuration) : ICheckoutService
 {
-    public async Task<string> StartCheckoutAsync(Guid businessId, List<OrderLineRequest> lines)
+    public async Task<string> StartCheckoutAsync(Guid businessId, List<OrderLineRequest> lines, string? logisticsNote = null)
     {
         if (!await currentUser.IsInRoleAsync(AppRoles.Customer))
             throw new UnauthorizedAccessException("Only customers can check out.");
@@ -58,12 +58,19 @@ public class CheckoutService(
             checkoutLines.Add(new CheckoutLineItem(package.Name, package.Price, line.Quantity));
         }
 
+        // Mirrors OrderService.PlaceOrderAsync's own clamp — done here too so PendingCheckout
+        // never carries more than PlaceOrderAsync would end up saving anyway.
+        var trimmedNote = logisticsNote?.Trim();
+        if (trimmedNote?.Length > OrderLogistics.MaxNoteLength)
+            trimmedNote = trimmedNote[..OrderLogistics.MaxNoteLength];
+
         var pendingCheckout = new PendingCheckout
         {
             Id = Guid.NewGuid(),
             UserId = userId,
             BusinessId = businessId,
             LinesJson = JsonSerializer.Serialize(lines),
+            LogisticsNote = string.IsNullOrEmpty(trimmedNote) ? null : trimmedNote,
             CreatedAt = DateTime.UtcNow,
         };
         dbContext.PendingCheckouts.Add(pendingCheckout);
@@ -122,7 +129,7 @@ public class CheckoutService(
         Order order;
         try
         {
-            order = await orderService.PlaceOrderAsync(pendingCheckout.BusinessId, lines);
+            order = await orderService.PlaceOrderAsync(pendingCheckout.BusinessId, lines, pendingCheckout.LogisticsNote);
         }
         catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
         {

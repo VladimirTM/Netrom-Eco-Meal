@@ -27,7 +27,7 @@ public class OrderService(
     // for email CTAs, since a relative "/orders" path means nothing outside a browser tab.
     private string BaseUrl => (configuration["App:BaseUrl"] ?? "http://localhost:8080").TrimEnd('/');
 
-    public async Task<Order> PlaceOrderAsync(Guid businessId, List<OrderLineRequest> lines)
+    public async Task<Order> PlaceOrderAsync(Guid businessId, List<OrderLineRequest> lines, string? logisticsNote = null)
     {
         if (!await currentUser.IsInRoleAsync(AppRoles.Customer))
             throw new UnauthorizedAccessException("Only customers can place orders.");
@@ -50,6 +50,10 @@ public class OrderService(
         var pendingStatus = await dbContext.Statuses.FirstOrDefaultAsync(s => s.Name == OrderStatuses.Pending)
             ?? throw new InvalidOperationException("Order status configuration is missing.");
 
+        var trimmedNote = logisticsNote?.Trim();
+        if (trimmedNote?.Length > OrderLogistics.MaxNoteLength)
+            trimmedNote = trimmedNote[..OrderLogistics.MaxNoteLength];
+
         var order = new Order
         {
             Id = Guid.NewGuid(),
@@ -58,6 +62,7 @@ public class OrderService(
             BusinessId = businessId,
             StatusId = pendingStatus.Id,
             CreatedAt = DateTime.UtcNow,
+            LogisticsNote = string.IsNullOrEmpty(trimmedNote) ? null : trimmedNote,
             // OrderNumber comes from the order_numbers DB sequence on insert (see EcoMealDbContext).
         };
 

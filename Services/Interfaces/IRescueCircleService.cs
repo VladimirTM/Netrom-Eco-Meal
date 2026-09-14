@@ -21,7 +21,7 @@ public interface IRescueCircleService
 {
     // Customer-only (becomes the organizer). Reuses IOrderService.PlaceOrderAsync's own auth/stock/
     // rate-limit rules for the underlying Order, then starts the organizer's own share checkout.
-    Task<string> StartCircleAsync(Guid businessId, List<OrderLineRequest> lines, int participantCount);
+    Task<string> StartCircleAsync(Guid businessId, List<OrderLineRequest> lines, int participantCount, string? logisticsNote = null);
     // Customer-only. Joins an Open, not-yet-full circle and starts that participant's own share
     // checkout — or, if they already joined but haven't paid, just restarts their own checkout.
     Task<string> JoinOrPayAsync(Guid circleId);

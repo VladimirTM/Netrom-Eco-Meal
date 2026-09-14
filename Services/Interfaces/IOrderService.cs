@@ -8,7 +8,8 @@ public record OrderLineRequest(Guid PackageId, int Quantity);
 // Order placement is customer-only; management is admin or the order's own business manager.
 public interface IOrderService
 {
-    public Task<Order> PlaceOrderAsync(Guid businessId, List<OrderLineRequest> lines);
+    // logisticsNote is trimmed and clamped to Constants.OrderLogistics.MaxNoteLength.
+    public Task<Order> PlaceOrderAsync(Guid businessId, List<OrderLineRequest> lines, string? logisticsNote = null);
     public Task<List<Order>> GetMyOrdersAsync();
     // businessId is required for managers now that one manager can staff several businesses
     // (validated against BusinessStaff); admins may omit it to see every business.
