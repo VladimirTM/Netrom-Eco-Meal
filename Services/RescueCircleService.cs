@@ -258,7 +258,9 @@ public class RescueCircleService(
         var successUrl = $"{BaseUrl}/circles/return?circle={circle.Id}&participant={participant.Id}&session_id={{CHECKOUT_SESSION_ID}}";
         var cancelUrl = $"{BaseUrl}/circles/{circle.Id}";
 
-        var lineItem = new CheckoutLineItem($"Rescue Circle share — {business.Name}", participant.ShareAmount, 1);
+        // business.Name is passed to CreateCheckoutSessionAsync below and already appears as the
+        // merchant name on Stripe's own checkout page — repeating it here doubled it up.
+        var lineItem = new CheckoutLineItem("Rescue Circle share", participant.ShareAmount, 1);
         var session = await stripeGateway.CreateCheckoutSessionAsync(participant.Id, business.Name, [lineItem], successUrl, cancelUrl);
 
         participant.StripeCheckoutSessionId = session.SessionId;

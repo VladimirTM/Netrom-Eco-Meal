@@ -66,7 +66,7 @@ else
                in-process Blazor circuit call can't provide. data-enhance="false" so the ?pwError=/
                ?pwChanged= redirect below actually renders instead of being dropped by blazor.web.js's
                enhanced navigation (see Login.razor's own comment for the full story). *@
-            <form method="post" action="api/auth/change-password" data-enhance="false">
+            <form method="post" action="api/auth/change-password" data-enhance="false" onsubmit="EcoMeal.forms.preventDoubleSubmit(this)">
                 <AntiforgeryToken/>
                 <div class="mb-3">
                     <label for="currentPassword" class="form-label small text-muted mb-1">Current password</label>

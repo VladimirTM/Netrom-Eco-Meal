@@ -562,12 +562,33 @@ h1:focus {
         border-radius: 8px;
     }
 
-    /* The Authorized icon row (trophy/bell/orders/basket/apply/settings/logout) can run to 7
-       buttons — at 38px+gap each that overflows the viewport well before 420px and pushes
-       Sign out off-screen with no way back short of scrolling the whole page. Shrink the
-       buttons and the gap between them so the full row still fits. */
+    /* 11 icons now (was ~7) outgrew what shrunk buttons alone can fit, so the row scrolls
+       horizontally within itself: `min-width: 0` lets it shrink instead of forcing the whole
+       page wider, `overflow-x: auto` gives it its own scroll. Brand block stays flex-shrink: 0. */
+    .public-header-inner {
+        flex-wrap: nowrap;
+    }
+
+    .public-header-inner .public-brand {
+        flex-shrink: 0;
+    }
+
     .public-header-inner .d-flex.gap-2 {
         gap: 0.3rem !important;
+        flex-wrap: nowrap;
+        min-width: 0;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        /* Fades the trailing edge when there's more to scroll to, as a swipe hint — harmless
+           no-op in browsers without mask-image support. */
+        mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+        -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+        padding-right: 8px;
+    }
+
+    .public-header-inner .d-flex.gap-2::-webkit-scrollbar {
+        display: none;
     }
 
     .public-cart-btn {
@@ -575,11 +596,13 @@ h1:focus {
         height: 32px;
         font-size: 0.85rem;
         border-radius: 8px;
+        flex-shrink: 0;
     }
 
     .public-header-logout {
         width: 30px;
         height: 30px;
+        flex-shrink: 0;
     }
 }
 

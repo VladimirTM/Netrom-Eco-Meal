@@ -1,0 +1,29 @@
+@using Microsoft.AspNetCore.Components.Routing
+@inject IJSRuntime JSRuntime
+
+@* Drop-in replacement for <FocusOnNavigate> — same screen-reader intent, but only focuses
+   the heading if nothing else has focus yet (see EcoMeal.a11y.focusIfIdle in site.js). *@
+@code {
+    [Parameter, EditorRequired] public RouteData? RouteData { get; set; }
+    [Parameter] public string Selector { get; set; } = "h1";
+
+    private Type? _previousPageType;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var pageType = RouteData?.PageType;
+        if (pageType != _previousPageType)
+        {
+            _previousPageType = pageType;
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("EcoMeal.a11y.focusIfIdle", Selector);
+            }
+            catch (InvalidOperationException)
+            {
+                // JS interop isn't available yet during static SSR (e.g. purely static pages like
+                // Login/Register that never become interactive) — nothing to focus yet either way.
+            }
+        }
+    }
+}

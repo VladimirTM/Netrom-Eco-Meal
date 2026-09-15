@@ -185,9 +185,10 @@ it to see how many of the seats are filled and how many shares are paid; a frien
 it yet can join an open seat and pay their share the same way you did. The kitchen won't start
 preparing the order until **every** share is paid — once it is, everyone gets notified and each
 participant gets their own labeled QR pickup pass, so nobody has to be the one holding a single
-code for the whole group. If you paid but the circle isn't full yet, you can back out and get
-refunded from the same page — the organizer instead cancels the whole thing the normal way, from
-`/orders`, which refunds everyone who'd already paid.
+code for the whole group. As long as the circle isn't fully paid yet, any participant but the
+organizer can back out from the same page — refunded if they'd already paid, or simply freeing
+their seat if not. The organizer instead cancels the whole thing the normal way, from `/orders`,
+which refunds everyone who'd already paid.
 
 `/circles` (the people icon in the header) lists every circle you're organizing or have joined.
 

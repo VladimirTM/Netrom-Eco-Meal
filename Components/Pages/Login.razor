@@ -20,7 +20,7 @@
            POST/redirect and drops the ?error=/?info= query string when patching the URL client-side,
            so a failed login silently re-renders a blank form. Opting out forces a real full-page
            navigation for the redirect, which renders the server-computed query params correctly. *@
-        <form method="post" action="api/auth/login" data-enhance="false">
+        <form method="post" action="api/auth/login" data-enhance="false" onsubmit="EcoMeal.forms.preventDoubleSubmit(this)">
             <AntiforgeryToken />
             <input type="hidden" name="returnUrl" value="@ReturnUrl"/>
             <div class="mb-3">

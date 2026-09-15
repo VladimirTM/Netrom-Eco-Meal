@@ -28,6 +28,29 @@ window.EcoMeal = {
         dropdownEl.style.visibility = "visible";
     },
 
+    // Backs SafeFocusOnNavigate.razor — only moves focus if nothing else has it yet, since the
+    // framework's own FocusOnNavigate can steal focus from a field the user's already typing in.
+    a11y: {
+        focusIfIdle: function (selector) {
+            var active = document.activeElement;
+            if (active && active !== document.body && active !== document.documentElement) {
+                return;
+            }
+            var el = document.querySelector(selector);
+            if (el) el.focus();
+        }
+    },
+
+    // Disables a plain form's submit button on submit so a second click can't double-fire the
+    // request — for the data-enhance="false" forms (Login/Register/change-password), which have
+    // no Blazor @code handler to guard this with a busy flag.
+    forms: {
+        preventDoubleSubmit: function (formEl) {
+            var btn = formEl.querySelector("button[type=submit]");
+            if (btn) btn.disabled = true;
+        }
+    },
+
     // Lets the server convert stored UTC pickup windows to the viewer's own local time.
     timeZone: function () {
         try {

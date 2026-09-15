@@ -100,7 +100,20 @@
     {
         if (firstRender && _stops.Count > 1)
         {
-            var position = await JSRuntime.InvokeAsync<GeoPosition?>("EcoMeal.geo.getPosition");
+            // Belt-and-suspenders on top of the JS side's own 8s geolocation timeout — guarantees
+            // this spinner always resolves even if the JS interop call itself never completes.
+            GeoPosition? position = null;
+            try
+            {
+                var positionTask = JSRuntime.InvokeAsync<GeoPosition?>("EcoMeal.geo.getPosition").AsTask();
+                if (await Task.WhenAny(positionTask, Task.Delay(TimeSpan.FromSeconds(10))) == positionTask)
+                    position = await positionTask;
+            }
+            catch (Exception)
+            {
+                position = null;
+            }
+
             _locating = false;
             if (position is not null)
             {
@@ -112,7 +125,7 @@
             {
                 _locationDenied = true;
             }
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
         }
 
         if (_mapNeedsRender)

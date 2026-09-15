@@ -676,7 +676,13 @@ else
         }
 
         if (result.Value is { } created)
+        {
+            // CreateAsync's response has no PackageType nav loaded — patch it from the business's
+            // own package types (already loaded here) so the confirmation shows the real type,
+            // not "Any package".
+            created.PackageType = _businessPackageTypes.FirstOrDefault(t => t.Id == created.PackageTypeId);
             _myStandingOrders.Add(created);
+        }
     }
 
     private async Task ToggleStandingOrderAsync()

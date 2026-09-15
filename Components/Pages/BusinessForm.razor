@@ -143,6 +143,7 @@
                                     <InputNumber class="form-control" placeholder="e.g. 6" @bind-Value="_model.LoyaltyPunchThreshold"/>
                                     <span class="input-group-text">orders/month</span>
                                 </div>
+                                <ValidationMessage For="@(() => _model.LoyaltyPunchThreshold)" class="validation-message small d-block mt-1"/>
                             </div>
                             <div class="col-sm-6">
                                 <div class="input-group">
@@ -150,6 +151,7 @@
                                     <InputNumber class="form-control" placeholder="e.g. 2" @bind-Value="_model.LoyaltyDiscountAmount"/>
                                     <span class="input-group-text">lei off</span>
                                 </div>
+                                <ValidationMessage For="@(() => _model.LoyaltyDiscountAmount)" class="validation-message small d-block mt-1"/>
                             </div>
                         </div>
                         <div class="form-text">Leave both blank to turn the punch card off. Applied automatically at checkout — no code needed.</div>

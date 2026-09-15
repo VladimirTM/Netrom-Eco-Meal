@@ -21,7 +21,7 @@
            so a failed registration (e.g. duplicate email) silently re-renders a blank form. Opting
            out forces a real full-page navigation for the redirect, rendering the server-computed
            error and refilled fields correctly. *@
-        <form method="post" action="api/auth/register" data-enhance="false">
+        <form method="post" action="api/auth/register" data-enhance="false" onsubmit="EcoMeal.forms.preventDoubleSubmit(this)">
             <AntiforgeryToken />
             <input type="hidden" name="returnUrl" value="@ReturnUrl"/>
             <div class="mb-3">

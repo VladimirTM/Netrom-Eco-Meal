@@ -122,6 +122,10 @@
                         @if (_busy) { <span class="spinner-border spinner-border-sm me-2"></span> }
                         Pay my @MyParticipant!.ShareAmount.ToString("C") share
                     </button>
+                    @if (!MyParticipant!.IsOrganizer)
+                    {
+                        <button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2" disabled="@_busy" @onclick="LeaveAsync">Leave this circle</button>
+                    }
                 }
                 else if (_summary.JoinedCount < _summary.ParticipantCount)
                 {
@@ -185,8 +189,10 @@
         }
         else if (detailResult.Result is ConflictObjectResult)
         {
-            // Not the organizer/a participant (or the circle genuinely doesn't exist) — fall back
-            // to the public summary anyone signed in can see.
+            // Not the organizer/a participant (or the circle doesn't exist) — fall back to the
+            // public summary anyone signed in can see, clearing stale detail (e.g. right after
+            // leaving) so its participant list doesn't linger once we can't see it anymore.
+            _detail = null;
             var summaryResult = await RescueCircleController.GetSummaryAsync(CircleId);
             if (summaryResult.Value is not null)
                 _summary = summaryResult.Value;
