@@ -18,7 +18,7 @@ public class ReportServiceTests
     private const string AdminId = "admin-1";
     private const string CustomerId = "customer-1";
 
-    private sealed record Fixture(ReportService Service, Mock<IReportRepository> Repo, Mock<IBusinessService> BusinessService, Mock<IPackageService> PackageService, EcoMealDbContext Db);
+    private sealed record Fixture(ReportService Service, Mock<IReportRepository> Repo, Mock<IBusinessService> BusinessService, Mock<IPackageService> PackageService, Mock<IKitchenTipService> KitchenTipService, EcoMealDbContext Db);
 
     private static Fixture Build(string? userId, params string[] roles)
     {
@@ -26,10 +26,11 @@ public class ReportServiceTests
         var repo = new Mock<IReportRepository>();
         var businessService = new Mock<IBusinessService>();
         var packageService = new Mock<IPackageService>();
+        var kitchenTipService = new Mock<IKitchenTipService>();
         var auditLog = new Mock<IAuditLogService>();
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
-        var service = new ReportService(repo.Object, businessService.Object, packageService.Object, auditLog.Object, db, currentUser);
-        return new Fixture(service, repo, businessService, packageService, db);
+        var service = new ReportService(repo.Object, businessService.Object, packageService.Object, kitchenTipService.Object, auditLog.Object, db, currentUser);
+        return new Fixture(service, repo, businessService, packageService, kitchenTipService, db);
     }
 
     [Fact]
@@ -116,6 +117,21 @@ public class ReportServiceTests
         await f.Service.TakeActionAsync(report.Id, "Mislabeled");
 
         f.PackageService.Verify(p => p.HideAsync(report.TargetId, "Mislabeled", false), Times.Once);
+        Assert.Equal(ReportStatuses.ActionTaken, report.Status);
+    }
+
+    [Fact]
+    public async Task TakeActionAsync_KitchenTipTarget_HidesTip()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var report = new Report { Id = Guid.NewGuid(), ReporterUserId = CustomerId, Reporter = TestData.User(CustomerId), TargetType = AuditTargetTypes.KitchenTip, TargetId = Guid.NewGuid(), Reason = "Misleading", Status = ReportStatuses.Open, CreatedAt = DateTime.UtcNow };
+        f.Repo.Setup(r => r.GetByIdAsync(report.Id)).ReturnsAsync(report);
+        f.KitchenTipService.Setup(t => t.GetSnippetsByIdsAsync(It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync(new Dictionary<Guid, string> { [report.TargetId] = "Use the side door" });
+
+        await f.Service.TakeActionAsync(report.Id, "Misleading");
+
+        f.KitchenTipService.Verify(t => t.HideAsync(report.TargetId, "Misleading", false), Times.Once);
         Assert.Equal(ReportStatuses.ActionTaken, report.Status);
     }
 }

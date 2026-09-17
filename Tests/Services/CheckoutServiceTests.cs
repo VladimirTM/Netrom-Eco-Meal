@@ -27,6 +27,7 @@ public class CheckoutServiceTests
         Mock<IBusinessService> BusinessService,
         Mock<IPackageRepository> PackageRepo,
         Mock<ILoyaltyService> LoyaltyService,
+        Mock<IReferralService> ReferralService,
         EcoMealDbContext Db);
 
     private static Fixture Build(string? userId, params string[] roles)
@@ -40,14 +41,17 @@ public class CheckoutServiceTests
         // LoyaltyServiceTests' job. Individual tests override this when they need to.
         var loyaltyService = new Mock<ILoyaltyService>();
         loyaltyService.Setup(l => l.EvaluateDiscountAsync(It.IsAny<string>(), It.IsAny<Guid>())).ReturnsAsync((decimal?)null);
+        // No store credit by default — same reasoning, ReferralServiceTests owns that math.
+        var referralService = new Mock<IReferralService>();
+        referralService.Setup(r => r.GetAvailableBalanceAsync(It.IsAny<string>())).ReturnsAsync(0m);
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
         var configuration = new ConfigurationBuilder().Build();
 
         var service = new CheckoutService(
-            stripeGateway.Object, orderService.Object, businessService.Object, packageRepo.Object, loyaltyService.Object,
+            stripeGateway.Object, orderService.Object, businessService.Object, packageRepo.Object, loyaltyService.Object, referralService.Object,
             db, currentUser, configuration);
 
-        return new Fixture(service, stripeGateway, orderService, businessService, packageRepo, loyaltyService, db);
+        return new Fixture(service, stripeGateway, orderService, businessService, packageRepo, loyaltyService, referralService, db);
     }
 
     // ---- StartCheckoutAsync -------------------------------------------------
@@ -106,6 +110,29 @@ public class CheckoutServiceTests
         Assert.Equal(businessId, pendingCheckout.BusinessId);
         Assert.Equal("cs_test", pendingCheckout.StripeCheckoutSessionId);
         Assert.Null(pendingCheckout.ConsumedAt);
+    }
+
+    [Fact]
+    public async Task StartCheckoutAsync_AvailableStoreCredit_FoldedIntoStripeDiscountAndRecordedOnPendingCheckout()
+    {
+        var f = Build(CustomerId, AppRoles.Customer);
+        var businessId = Guid.NewGuid();
+        var business = TestData.Business(businessId);
+        var package = TestData.Package(businessId, quantity: 5);
+        f.BusinessService.Setup(b => b.GetByIdAsync(businessId)).ReturnsAsync(business);
+        f.PackageRepo.Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>())).ReturnsAsync([package]);
+        f.ReferralService.Setup(r => r.GetAvailableBalanceAsync(CustomerId)).ReturnsAsync(3m);
+        f.StripeGateway
+            .Setup(s => s.CreateCheckoutSessionAsync(It.IsAny<Guid>(), business.Name, It.IsAny<List<CheckoutLineItem>>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<decimal?>(), It.IsAny<string?>()))
+            .ReturnsAsync(new CheckoutSessionResult("cs_test", "https://checkout.stripe.com/cs_test"));
+
+        // Subtotal is 20 (2 x 10) — the full 3 lei of credit fits comfortably under the clamp.
+        await f.Service.StartCheckoutAsync(businessId, [new OrderLineRequest(package.Id, 2)]);
+
+        f.StripeGateway.Verify(s => s.CreateCheckoutSessionAsync(
+            It.IsAny<Guid>(), business.Name, It.IsAny<List<CheckoutLineItem>>(), It.IsAny<string>(), It.IsAny<string>(), 3m, "Store credit"), Times.Once);
+        var pendingCheckout = await f.Db.PendingCheckouts.SingleAsync();
+        Assert.Equal(3m, pendingCheckout.CreditApplied);
     }
 
     // ---- CompleteCheckoutAsync -----------------------------------------------
@@ -198,6 +225,34 @@ public class CheckoutServiceTests
         var reloadedCheckout = await f.Db.PendingCheckouts.SingleAsync(p => p.Id == pendingCheckout.Id);
         Assert.NotNull(reloadedCheckout.ConsumedAt);
         Assert.Equal(placedOrder.Id, reloadedCheckout.ResultingOrderId);
+    }
+
+    [Fact]
+    public async Task CompleteCheckoutAsync_CreditWasApplied_DebitsExactlyWhatWasOffered()
+    {
+        var f = Build(CustomerId, AppRoles.Customer);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId, quantity: 5);
+        var user = TestData.User(CustomerId);
+        var placedOrder = TestData.Order(user, businessId, OrderStatuses.Pending, (package, 2));
+
+        var pendingCheckout = new PendingCheckout
+        {
+            Id = Guid.NewGuid(), UserId = CustomerId, BusinessId = businessId,
+            LinesJson = $"[{{\"PackageId\":\"{package.Id}\",\"Quantity\":2}}]",
+            StripeCheckoutSessionId = "cs_test", CreatedAt = DateTime.UtcNow, CreditApplied = 3m,
+        };
+        f.Db.PendingCheckouts.Add(pendingCheckout);
+        placedOrder.Status = null!;
+        f.Db.Orders.Add(placedOrder);
+        await f.Db.SaveChangesAsync();
+
+        f.StripeGateway.Setup(s => s.GetSessionStatusAsync("cs_test")).ReturnsAsync(new StripeSessionStatus(true, "pi_test", 17m, "ron"));
+        f.OrderService.Setup(o => o.PlaceOrderAsync(businessId, It.IsAny<List<OrderLineRequest>>())).ReturnsAsync(placedOrder);
+
+        await f.Service.CompleteCheckoutAsync(pendingCheckout.Id, "cs_test");
+
+        f.ReferralService.Verify(r => r.DebitAsync(CustomerId, 3m, placedOrder.Id), Times.Once);
     }
 
     [Fact]

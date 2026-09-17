@@ -9,4 +9,5 @@ public static class AuditTargetTypes
     public const string Order = "Order";
     public const string BusinessType = "BusinessType";
     public const string PackageType = "PackageType";
+    public const string KitchenTip = "KitchenTip";
 }

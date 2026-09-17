@@ -18,6 +18,7 @@
 @inject ReportController ReportController
 @inject LoyaltyController LoyaltyController
 @inject StandingOrderController StandingOrderController
+@inject KitchenTipController KitchenTipController
 @inject CartService CartService
 @inject ClientTimeZoneService ClientTimeZoneService
 @inject PackageStockBroadcaster PackageStockBroadcaster
@@ -52,7 +53,7 @@ else
                                         <i class="bi @(_isFavorite ? "bi-heart-fill" : "bi-heart")"></i>
                                         @(_isFavorite ? "Favorited" : "Favorite")
                                     </button>
-                                    <button type="button" class="biz-modal-fav-btn" title="Report this kitchen" @onclick="() => _reportPromptOpen = true">
+                                    <button type="button" class="biz-modal-fav-btn" title="Report this kitchen" @onclick="() => { _reportTipId = null; _reportPromptOpen = true; }">
                                         <i class="bi bi-flag"></i>
                                     </button>
                                 </Authorized>
@@ -355,6 +356,63 @@ else
                         </div>
                     }
                 </section>
+
+                <div class="biz-modal-divider"></div>
+
+                <section class="biz-modal-section">
+                    <h3 class="biz-modal-section-title"><i class="bi bi-lightbulb"></i> Kitchen tips</h3>
+                    <p class="biz-modal-review-hint mt-0">Practical hints from other rescuers — parking, entrance, best time to show up.</p>
+
+                    <AuthorizeView Roles="@AppRoles.Customer" Context="tipAuth">
+                        <Authorized>
+                            <div class="biz-review-form">
+                                <textarea class="form-control biz-review-textarea" rows="2" maxlength="@KitchenTips.MaxLength"
+                                          placeholder="e.g. Use the side door after 8pm" @bind="_newTipText"></textarea>
+                                @if (_tipError is not null)
+                                {
+                                    <div class="alert alert-danger py-2 small mb-0">@_tipError</div>
+                                }
+                                <button type="button" class="btn btn-primary btn-sm align-self-start" disabled="@(string.IsNullOrWhiteSpace(_newTipText) || _submittingTip)" @onclick="SubmitTipAsync">
+                                    @if (_submittingTip)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                    }
+                                    Share tip
+                                </button>
+                            </div>
+                        </Authorized>
+                    </AuthorizeView>
+
+                    @if (_kitchenTips.Count == 0)
+                    {
+                        <p class="biz-modal-empty">No tips yet — share the first one.</p>
+                    }
+                    else
+                    {
+                        <div class="biz-review-list">
+                            @foreach (var tip in _kitchenTips)
+                            {
+                                <div class="biz-review-card" @key="tip.Id">
+                                    <div class="biz-review-avatar">@TextHelpers.GetInitial(tip.User.Name)</div>
+                                    <div class="biz-review-content">
+                                        <div class="biz-review-top">
+                                            <span class="biz-review-name">@tip.User.Name</span>
+                                            <span class="biz-review-date">@ClientTimeZoneService.ToLocal(tip.CreatedAt).ToString("MMM d, yyyy", CultureInfo.InvariantCulture)</span>
+                                        </div>
+                                        <p class="biz-review-comment mb-0">@tip.Tip</p>
+                                    </div>
+                                    <AuthorizeView>
+                                        <Authorized>
+                                            <button type="button" class="btn btn-link btn-sm text-muted p-0" title="Report this tip" @onclick="() => RequestReportTip(tip.Id)">
+                                                <i class="bi bi-flag"></i>
+                                            </button>
+                                        </Authorized>
+                                    </AuthorizeView>
+                                </div>
+                            }
+                        </div>
+                    }
+                </section>
             </div>
         </div>
     </div>
@@ -370,10 +428,10 @@ else
                      OnAddToCart="AddToCart"/>
 
 <ReportDialog IsOpen="_reportPromptOpen"
-              TargetLabel="@(_business?.Name ?? "")"
+              TargetLabel="@(_reportTipId is null ? (_business?.Name ?? "") : "this tip")"
               Busy="@_reportBusy"
               OnSubmit="SubmitReportAsync"
-              OnCancel="() => _reportPromptOpen = false"/>
+              OnCancel="() => { _reportPromptOpen = false; _reportTipId = null; }"/>
 
 <ConfirmDialog IsOpen="@(_pendingSwitch is not null)"
                Title="Start a new basket?"
@@ -413,6 +471,13 @@ else
     private Dictionary<Guid, int> _reservedByPackage = [];
     private bool _reportPromptOpen;
     private bool _reportBusy;
+    // Non-null while the report dialog targets a specific kitchen tip rather than the business
+    // itself — see RequestReportTip/SubmitReportAsync.
+    private Guid? _reportTipId;
+    private List<KitchenTip> _kitchenTips = [];
+    private string _newTipText = "";
+    private bool _submittingTip;
+    private string? _tipError;
     private LoyaltyProgress? _loyaltyProgress;
     private List<StandingOrder> _myStandingOrders = [];
     private List<PackageType> _businessPackageTypes = [];
@@ -484,6 +549,7 @@ else
 
         await TryAutoReserveAsync();
         await ReloadReviewsAsync(Id);
+        await ReloadKitchenTipsAsync(Id);
     }
 
     // Fired from a "your usual is live" notification link — only steps in when it's safe to,
@@ -613,14 +679,48 @@ else
             return;
 
         _reportBusy = true;
-        var result = await ReportController.SubmitAsync(AuditTargetTypes.Business, Id, reason);
+        var result = _reportTipId is { } tipId
+            ? await ReportController.SubmitAsync(AuditTargetTypes.KitchenTip, tipId, reason)
+            : await ReportController.SubmitAsync(AuditTargetTypes.Business, Id, reason);
         _reportBusy = false;
         _reportPromptOpen = false;
+        _reportTipId = null;
 
         _toastMessage = result is UnauthorizedResult
             ? "You must be signed in to report something."
             : "Thanks — an admin will take a look.";
         _toastToken = Guid.NewGuid();
+    }
+
+    private void RequestReportTip(Guid tipId)
+    {
+        _reportTipId = tipId;
+        _reportPromptOpen = true;
+    }
+
+    private async Task ReloadKitchenTipsAsync(Guid businessId)
+    {
+        _kitchenTips = (await KitchenTipController.GetByBusinessAsync(businessId)).Value ?? [];
+    }
+
+    private async Task SubmitTipAsync()
+    {
+        if (_business is null || string.IsNullOrWhiteSpace(_newTipText) || _submittingTip)
+            return;
+
+        _submittingTip = true;
+        _tipError = null;
+        var result = await KitchenTipController.SubmitAsync(_business.Id, _newTipText);
+        _submittingTip = false;
+
+        if (result is ConflictObjectResult conflict)
+        {
+            _tipError = conflict.Value?.ToString() ?? "We couldn't save your tip. Please try again.";
+            return;
+        }
+
+        _newTipText = "";
+        await ReloadKitchenTipsAsync(_business.Id);
     }
 
     private async Task ConfirmSwitchBasketAsync()

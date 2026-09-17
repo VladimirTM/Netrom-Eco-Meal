@@ -21,6 +21,11 @@ full name, email, and a password of at least 8 characters — every self-registe
 starts as a Customer, there's no signup option for the other two roles; an Admin has to
 promote you later (see [Manage people](#manage-people) below).
 
+There's also an optional **Referral code** field — if a friend sent you an invite link, it's
+already filled in; otherwise type in whatever code they gave you. Getting it wrong or leaving it
+blank never blocks account creation, it just means neither of you gets the sign-up credit — see
+[Invite a friend](#invite-a-friend) below.
+
 If the app has `Identity:RequireConfirmedAccount` turned on (it is by default under Docker),
 you can't sign in until you click the confirmation link — check your inbox, or
 [Mailpit](README.md#email) at `http://localhost:8025` in the Docker setup, which catches every
@@ -267,11 +272,19 @@ your review to it ("Whole kitchen" stays the default if you'd rather not). A tag
 a small package-name pill on the review card, and that package's own detail popup then shows its
 own star rating and review count separately from the kitchen's overall rating.
 
-### Report a kitchen or package
+### Leave a kitchen tip
 
-If something looks wrong with a kitchen or a specific package — inaccurate info, a stale photo,
-a food-safety concern — use the **flag icon** next to the Favorite button on a kitchen's page, or
-**Report this package** at the bottom of a package's detail popup. Both open the same small form:
+Below the reviews on a kitchen's page, share a short practical hint for other rescuers — "use
+the side door after 8pm," "bring your own bag." It's separate from star reviews and doesn't
+require having ordered there first: type up to 200 characters and click **Share tip**. Every
+signed-in customer sees the same list, newest first.
+
+### Report a kitchen, package, or tip
+
+If something looks wrong with a kitchen, a specific package, or someone else's tip — inaccurate
+info, a stale photo, a food-safety concern, a misleading claim — use the **flag icon** next to
+the Favorite button on a kitchen's page, **Report this package** at the bottom of a package's
+detail popup, or the small flag next to any kitchen tip. All three open the same small form:
 type what's wrong and **Submit report**. There's no status to track afterward — an admin reviews
 it and either dismisses it or takes action, and you'll see the effect (the listing disappearing,
 for example) rather than a direct reply.
@@ -314,7 +327,25 @@ opted in yet this month, the page just says so instead of showing an empty table
 board, the page also shows the platform's total kg saved to date, translated into roughly how
 many km of driving and liters of water that's equivalent to — the same equivalency shown on a
 Completed order's own receipt (see [Track and pick up](#track-and-pick-up)), just added up
-across everyone.
+across everyone. A rescuer with a live weekly streak (below) shows a small flame + week count
+next to their name.
+
+### Build a rescue streak
+
+Your `/orders` page shows a **week streak** — consecutive weeks with at least one completed
+pickup — right alongside your lifetime stats. A week still in progress doesn't break it: as long
+as last week had a completed order, the streak keeps counting until this week actually ends
+without one. It appears with a flame icon once it's above zero, and (if you've opted into the
+leaderboard above) shows there too.
+
+### Invite a friend
+
+The **gift icon** in the header opens `/referrals` — your own invite link and code, your current
+store-credit balance, and a list of everyone you've invited so far. Share the link (or just the
+code, for someone to type in at sign-up); once your friend completes their first order, you both
+get a small store credit. It shows up in your balance right away and is applied automatically at
+your next checkout, on top of any loyalty discount, up to your basket's total — nothing is ever
+paid out as real money, and you never have to remember to redeem it yourself.
 
 ---
 
@@ -574,12 +605,14 @@ filter in the status dropdown shows every currently-hidden business. `/packages`
 identical hide/unhide toggle per row, scoped to one package instead of a whole business — a
 hidden package shows a **Hidden** badge (hover for the reason) next to its Daily badge, if any.
 
-Customers can also flag a business or package themselves (see [Report a kitchen or
-package](#report-a-kitchen-or-package)) — open reports land on `/reports`, admin-only. Each row
-shows what was reported, why, who reported it, and when. **Dismiss** closes the report with no
-action taken; **Hide target** hides the business or package using the reporter's own reason (you
-don't have to retype it) and closes the report. Resolved reports drop off this list — their
-outcome is recorded in the audit log instead.
+Customers can also flag a business, package, or kitchen tip themselves (see [Report a kitchen,
+package, or tip](#report-a-kitchen-package-or-tip)) — open reports land on `/reports`,
+admin-only. Each row shows what was reported, why, who reported it, and when. **Dismiss** closes
+the report with no action taken; **Hide target** hides the business, package, or tip using the
+reporter's own reason (you don't have to retype it) and closes the report. A hidden tip simply
+stops showing on the kitchen's page — there's no separate tip-management page, hiding one only
+happens through a report. Resolved reports drop off this list — their outcome is recorded in the
+audit log instead.
 
 ### Audit log
 

@@ -78,6 +78,12 @@
                         {
                             <span class="badge rounded-pill bg-light text-muted border small fw-normal ms-1">You</span>
                         }
+                        @if (entry.StreakWeeks > 0)
+                        {
+                            <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle small fw-normal ms-1" title="Consecutive weeks with a completed rescue">
+                                <i class="bi bi-fire"></i> @entry.StreakWeeks
+                            </span>
+                        }
                     </span>
                     <span class="impact-kg">@entry.KgSaved.ToString("0.#") kg</span>
                 </li>

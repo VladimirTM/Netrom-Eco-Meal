@@ -11,6 +11,7 @@ public class ImpactService(
     IOrderRepository orderRepository,
     IPackageRepository packageRepository,
     IBusinessRepository businessRepository,
+    IStreakService streakService,
     UserManager<ApplicationUser> userManager,
     CurrentUserAccessor currentUser) : IImpactService
 {
@@ -19,7 +20,15 @@ public class ImpactService(
         var now = DateTime.UtcNow;
         var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var monthEndExclusive = monthStart.AddMonths(1);
-        return await orderRepository.GetTopRescuersAsync(monthStart, monthEndExclusive, take);
+        var entries = await orderRepository.GetTopRescuersAsync(monthStart, monthEndExclusive, take);
+
+        // The board is capped at `take` rows, so a per-row streak lookup here stays cheap — no
+        // reason to push this into a bulk repository query for a leaderboard this small.
+        var withStreaks = new List<LeaderboardEntry>(entries.Count);
+        foreach (var entry in entries)
+            withStreaks.Add(entry with { StreakWeeks = await streakService.GetStreakWeeksAsync(entry.UserId) });
+
+        return withStreaks;
     }
 
     public async Task<bool> GetMyOptInStatusAsync()

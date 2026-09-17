@@ -70,7 +70,7 @@ public class OrderServicePickupPassIntegrationTests(PostgresFixture fixture)
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(user.Id, actorRole));
         var service = new OrderService(
             orderRepository, Mock.Of<IPackageRepository>(), Mock.Of<IBusinessService>(), Mock.Of<INotificationService>(),
-            Mock.Of<IAppEmailSender>(), Mock.Of<IStripeGateway>(), Mock.Of<IAuditLogService>(), db, currentUser,
+            Mock.Of<IAppEmailSender>(), Mock.Of<IStripeGateway>(), Mock.Of<IAuditLogService>(), Mock.Of<IReferralService>(), db, currentUser,
             new ConfigurationBuilder().Build(), new PackageStockBroadcaster(), NullLogger<OrderService>.Instance);
 
         return (service, db, order);

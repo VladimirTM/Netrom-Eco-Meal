@@ -17,6 +17,7 @@ public class OrderService(
     IAppEmailSender emailSender,
     IStripeGateway stripeGateway,
     IAuditLogService auditLogService,
+    IReferralService referralService,
     EcoMealDbContext dbContext,
     CurrentUserAccessor currentUser,
     IConfiguration configuration,
@@ -609,6 +610,9 @@ public class OrderService(
             await notificationService.CreateAsync(order.UserId, message, url);
             await SendCustomerEmailAsync(order, emailSubject!, message, url!);
         }
+
+        if (statusName == OrderStatuses.Completed)
+            await referralService.TryRewardFirstCompletionAsync(order.UserId);
 
         return order;
     }

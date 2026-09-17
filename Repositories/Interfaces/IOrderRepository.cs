@@ -43,6 +43,12 @@ public interface IOrderRepository
     // Total spend at a business in range, excluding Cancelled (refunded, so it never really cost
     // anything) — feeds StandingOrderService's weekly budget check.
     public Task<decimal> GetSpendInRangeAsync(string userId, Guid businessId, Guid? packageTypeId, string? dietaryTag, DateTime rangeStart, DateTime rangeEndExclusive);
+    // CreatedAt of every Completed order a user has, across every business — feeds StreakService's
+    // consecutive-weeks calculation.
+    public Task<List<DateTime>> GetCompletedOrderCreatedDatesAsync(string userId);
+    // Platform-wide (not per-business) Completed-order count — feeds ReferralService's "is this
+    // genuinely their first ever completed order" check.
+    public Task<int> GetTotalCompletedOrderCountAsync(string userId);
     public Task AddAsync(Order order);
     public Task DeleteAsync(Guid id);
     public Task SaveChangesAsync();

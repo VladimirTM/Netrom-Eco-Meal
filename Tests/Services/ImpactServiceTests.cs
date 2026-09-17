@@ -4,6 +4,7 @@ using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Repositories.Interfaces;
 using Netrom_Eco_Meal.Services;
+using Netrom_Eco_Meal.Services.Interfaces;
 using Netrom_Eco_Meal.Tests.TestSupport;
 
 namespace Netrom_Eco_Meal.Tests.Services;
@@ -27,9 +28,10 @@ public class ImpactServiceTests
         var packageRepo = new Mock<IPackageRepository>();
         var businessRepo = new Mock<IBusinessRepository>();
         var userManager = MockUserManager();
+        var streakService = new Mock<IStreakService>();
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(null));
 
-        var service = new ImpactService(orderRepo.Object, packageRepo.Object, businessRepo.Object, userManager.Object, currentUser);
+        var service = new ImpactService(orderRepo.Object, packageRepo.Object, businessRepo.Object, streakService.Object, userManager.Object, currentUser);
         return new Fixture(service, orderRepo, packageRepo, businessRepo);
     }
 

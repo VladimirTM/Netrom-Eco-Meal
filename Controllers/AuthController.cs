@@ -40,14 +40,14 @@ public class AuthController(IAuthService authService, SignInManager<ApplicationU
 
     [HttpPost("register")]
     [ManualValidateAntiforgeryToken]
-    public async Task<IActionResult> RegisterAsync([FromForm] RegisterRequest request, [FromForm] string name, [FromForm] string? returnUrl)
+    public async Task<IActionResult> RegisterAsync([FromForm] RegisterRequest request, [FromForm] string name, [FromForm] string? returnUrl, [FromForm] string? referralCode)
     {
         var refill = $"&name={Uri.EscapeDataString(name ?? "")}&email={Uri.EscapeDataString(request.Email ?? "")}";
 
         if (!ModelState.IsValid || string.IsNullOrWhiteSpace(name))
             return LocalRedirect($"/account/register?error={Uri.EscapeDataString("Fill in your name, email, and password.")}{refill}&returnUrl={returnUrl}");
 
-        var outcome = await authService.RegisterAsync(request, name);
+        var outcome = await authService.RegisterAsync(request, name, referralCode);
 
         if (outcome.Error is not null)
             return LocalRedirect($"/account/register?error={Uri.EscapeDataString(outcome.Error)}{refill}&returnUrl={returnUrl}");

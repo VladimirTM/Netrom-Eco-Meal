@@ -15,6 +15,7 @@ public class AuthService(
     IOptions<IdentityOptions> identityOptions,
     IAppEmailSender emailSender,
     IConfiguration configuration,
+    IReferralService referralService,
     CurrentUserAccessor currentUser) : IAuthService
 {
     // Absolute origin needed for email links — a Blazor page has no notion of "the app's public
@@ -26,7 +27,7 @@ public class AuthService(
         return await signInManager.PasswordSignInAsync(request.Email, request.Password, true, false);
     }
 
-    public async Task<RegisterOutcome> RegisterAsync(RegisterRequest request, string name)
+    public async Task<RegisterOutcome> RegisterAsync(RegisterRequest request, string name, string? referralCode = null)
     {
         // ASP.NET Identity's own CreateAsync doesn't validate email *format*, only uniqueness/policy
         // — a syntactically invalid address would otherwise create a real (unconfirmable) user row
@@ -60,6 +61,8 @@ public class AuthService(
 
         // Self-registration always starts as Customer; only an admin can promote from here.
         await userManager.AddToRoleAsync(user, AppRoles.Customer);
+
+        await referralService.RegisterReferralAsync(referralCode, user.Id);
 
         if (requireConfirmed)
         {

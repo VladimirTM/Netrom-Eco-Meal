@@ -44,7 +44,8 @@ public class AuthServiceTests
         var emailSender = new Mock<IAppEmailSender>();
         var configuration = new ConfigurationBuilder().Build();
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(null));
-        return new AuthService(signInManager, userManager.Object, identityOptions, emailSender.Object, configuration, currentUser);
+        var referralService = new Mock<IReferralService>();
+        return new AuthService(signInManager, userManager.Object, identityOptions, emailSender.Object, configuration, referralService.Object, currentUser);
     }
 
     [Fact]

@@ -35,6 +35,9 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<RescueCircle> RescueCircles { get; set; }
     public DbSet<RescueCircleParticipant> RescueCircleParticipants { get; set; }
     public DbSet<StandingOrder> StandingOrders { get; set; }
+    public DbSet<KitchenTip> KitchenTips { get; set; }
+    public DbSet<Referral> Referrals { get; set; }
+    public DbSet<StoreCreditEntry> StoreCreditEntries { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -213,6 +216,56 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
         // A customer's own standing-order list is the only read pattern.
         modelBuilder.Entity<StandingOrder>()
             .HasIndex(s => s.UserId);
+
+        // A business's own tips feed, newest first, is the only read pattern.
+        modelBuilder.Entity<KitchenTip>()
+            .HasIndex(t => new { t.BusinessId, t.CreatedAt });
+
+        modelBuilder.Entity<KitchenTip>()
+            .HasOne(t => t.Business)
+            .WithMany()
+            .HasForeignKey(t => t.BusinessId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<KitchenTip>()
+            .HasOne(t => t.User)
+            .WithMany()
+            .HasForeignKey(t => t.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A referred user can only ever have been invited once — the first registration is the
+        // only one that can still be pending a reward.
+        modelBuilder.Entity<Referral>()
+            .HasIndex(r => r.ReferredUserId)
+            .IsUnique();
+
+        modelBuilder.Entity<Referral>()
+            .HasOne(r => r.Referrer)
+            .WithMany()
+            .HasForeignKey(r => r.ReferrerUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<Referral>()
+            .HasOne(r => r.Referred)
+            .WithMany()
+            .HasForeignKey(r => r.ReferredUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A user's own balance/history, newest first, is the only read pattern.
+        modelBuilder.Entity<StoreCreditEntry>()
+            .HasIndex(e => new { e.UserId, e.CreatedAt });
+
+        modelBuilder.Entity<StoreCreditEntry>()
+            .HasOne(e => e.User)
+            .WithMany()
+            .HasForeignKey(e => e.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Nullable unique — any number of not-yet-generated (null) rows are fine, only an actual
+        // generated code must be unique.
+        modelBuilder.Entity<ApplicationUser>()
+            .HasIndex(u => u.ReferralCode)
+            .IsUnique();
 
         // Optimistic concurrency so two managers confirming the same package can't oversell stock.
         modelBuilder.Entity<Package>()

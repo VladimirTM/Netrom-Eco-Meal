@@ -88,10 +88,12 @@ public static class DbSeeder
 
         if (demoCustomer is not null)
         {
+            await SeedKitchenTipDemoDataAsync(db, demoCustomer, demoCustomer2);
             await SeedReportsAndAuditLogAsync(db, demoCustomer, adminUser, demoManager?.Id, demoManager2?.Id);
             await SeedLeaderboardDemoDataAsync(db, demoCustomer, demoCustomer2, demoCustomer3);
             await SeedRescueCircleDemoDataAsync(db, demoCustomer, demoCustomer2, demoCustomer3);
             await SeedStandingOrderDemoDataAsync(db, demoCustomer, demoCustomer2);
+            await SeedReferralDemoDataAsync(db, demoCustomer, demoCustomer2, demoCustomer3);
         }
     }
 
@@ -598,6 +600,36 @@ public static class DbSeeder
         await db.SaveChangesAsync();
     }
 
+    // Referenced here and by SeedReportsAndAuditLogAsync below — one of the seeded tips is already
+    // hidden, with a matching Report/AuditLog trail, so /reports shows all three moderatable target
+    // types (Business/Package/KitchenTip) on a fresh database instead of just the first two.
+    private static readonly Guid HiddenKitchenTipId = new("99999999-0000-0000-0000-000000000001");
+
+    // Phase 16: a few practical, non-review hints on businesses a customer actually has activity
+    // with — see KitchenTipService. One is pre-hidden so the moderation pipeline (Reports -> hide
+    // target) has a KitchenTip example to show, not just Business/Package.
+    private static async Task SeedKitchenTipDemoDataAsync(EcoMealDbContext db, ApplicationUser demoCustomer, ApplicationUser? demoCustomer2)
+    {
+        if (await db.KitchenTips.AnyAsync()) return;
+
+        var stadionulId = DemoManagedBusinessId;
+        var varBistroId = DemoSecondBusinessId;
+        var now = DateTime.UtcNow;
+
+        var tips = new List<KitchenTip>
+        {
+            new() { Id = Guid.NewGuid(), BusinessId = stadionulId, UserId = demoCustomer.Id, Tip = "Use the side entrance after 8pm — the front gate locks early on match nights.", CreatedAt = now.AddDays(-5) },
+            new() { Id = Guid.NewGuid(), BusinessId = stadionulId, UserId = demoCustomer.Id, Tip = "Bring your own bag — they've been out of spares lately.", CreatedAt = now.AddDays(-2) },
+            new() { Id = HiddenKitchenTipId, BusinessId = varBistroId, UserId = demoCustomer.Id, Tip = "Ignore the posted hours, they never actually close on time.", CreatedAt = now.AddDays(-4), IsHidden = true, HiddenReason = "Unverified/misleading claim about business hours." },
+        };
+
+        if (demoCustomer2 is not null)
+            tips.Add(new KitchenTip { Id = Guid.NewGuid(), BusinessId = varBistroId, UserId = demoCustomer2.Id, Tip = "Ask for extra napkins — the boxes are usually saucy.", CreatedAt = now.AddDays(-1) });
+
+        db.KitchenTips.AddRange(tips);
+        await db.SaveChangesAsync();
+    }
+
     // Populates /reports and /audit-log with a history consistent with everything else this file
     // seeds (the staff assignments, the rejected application, the hidden business/package above).
     // Guarded on Reports so it only ever runs once, same as SeedDemoActivityAsync below.
@@ -625,12 +657,14 @@ public static class DbSeeder
         const string rejectionReason = "Address could not be verified — please resubmit with a valid street address.";
         const string businessHiddenReason = "Awaiting an updated food safety certificate.";
         const string packageHiddenReason = "Reported for inaccurate allergen labeling — under review.";
+        const string tipHiddenReason = "Unverified/misleading claim about business hours.";
 
         db.Reports.AddRange(
             new Report { Id = Guid.NewGuid(), ReporterUserId = demoCustomer.Id, TargetType = AuditTargetTypes.Business, TargetId = fanZoneGrillId, Reason = menuPhotosReason, Status = ReportStatuses.ActionTaken, CreatedAt = now.AddDays(-2).AddHours(-1), ResolvedAt = now.AddDays(-2), ResolvedByUserId = actorId },
             new Report { Id = Guid.NewGuid(), ReporterUserId = demoCustomer.Id, TargetType = AuditTargetTypes.Package, TargetId = redCardPastryBoxId, Reason = nutsReason, Status = ReportStatuses.ActionTaken, CreatedAt = now.AddDays(-3).AddHours(-1), ResolvedAt = now.AddDays(-3), ResolvedByUserId = actorId },
             new Report { Id = Guid.NewGuid(), ReporterUserId = demoCustomer.Id, TargetType = AuditTargetTypes.Package, TargetId = yellowCardSurpriseBagId, Reason = priceReason, Status = ReportStatuses.Dismissed, CreatedAt = now.AddDays(-1).AddHours(-2), ResolvedAt = now.AddDays(-1), ResolvedByUserId = actorId },
-            new Report { Id = Guid.NewGuid(), ReporterUserId = demoCustomer.Id, TargetType = AuditTargetTypes.Business, TargetId = foodTruckMundialId, Reason = truckLocationReason, Status = ReportStatuses.Open, CreatedAt = now.AddHours(-6) }
+            new Report { Id = Guid.NewGuid(), ReporterUserId = demoCustomer.Id, TargetType = AuditTargetTypes.Business, TargetId = foodTruckMundialId, Reason = truckLocationReason, Status = ReportStatuses.Open, CreatedAt = now.AddHours(-6) },
+            new Report { Id = Guid.NewGuid(), ReporterUserId = demoCustomer.Id, TargetType = AuditTargetTypes.KitchenTip, TargetId = HiddenKitchenTipId, Reason = tipHiddenReason, Status = ReportStatuses.ActionTaken, CreatedAt = now.AddDays(-4).AddHours(-1), ResolvedAt = now.AddDays(-4), ResolvedByUserId = actorId }
         );
 
         var entries = new List<AuditLog>
@@ -653,6 +687,8 @@ public static class DbSeeder
         entries.Add(Entry(actorId, actorName, AuditActions.BusinessHidden, AuditTargetTypes.Business, fanZoneGrillId, "Fan Zone Grill", businessHiddenReason, now.AddDays(-2)));
         entries.Add(Entry(actorId, actorName, AuditActions.ReportActionTaken, AuditTargetTypes.Business, fanZoneGrillId, "Fan Zone Grill", menuPhotosReason, now.AddDays(-2)));
         entries.Add(Entry(actorId, actorName, AuditActions.ReportDismissed, AuditTargetTypes.Package, yellowCardSurpriseBagId, "Yellow Card Surprise Bag", priceReason, now.AddDays(-1)));
+        entries.Add(Entry(actorId, actorName, AuditActions.KitchenTipHidden, AuditTargetTypes.KitchenTip, HiddenKitchenTipId, "kitchen tip", tipHiddenReason, now.AddDays(-4)));
+        entries.Add(Entry(actorId, actorName, AuditActions.ReportActionTaken, AuditTargetTypes.KitchenTip, HiddenKitchenTipId, "kitchen tip", tipHiddenReason, now.AddDays(-4)));
 
         db.AuditLogs.AddRange(entries);
 
@@ -864,6 +900,36 @@ public static class DbSeeder
         await db.SaveChangesAsync();
     }
 
+    // Phase 16: demoCustomer invited both other demo customers. demoCustomer2's invite already
+    // paid off (RewardedAt set, plus the matching StoreCreditEntry pair — see
+    // ReferralService.TryRewardFirstCompletionAsync) so /referrals shows a real non-zero balance
+    // and a completed row out of the box; demoCustomer3's is left pending so the page also shows
+    // the "waiting on first order" state.
+    private static async Task SeedReferralDemoDataAsync(EcoMealDbContext db, ApplicationUser demoCustomer, ApplicationUser? demoCustomer2, ApplicationUser? demoCustomer3)
+    {
+        if (await db.Referrals.AnyAsync()) return;
+        if (demoCustomer2 is null && demoCustomer3 is null) return;
+
+        var now = DateTime.UtcNow;
+        var referrals = new List<Referral>();
+        var credits = new List<StoreCreditEntry>();
+
+        if (demoCustomer2 is not null)
+        {
+            var rewardedAt = now.AddDays(-2);
+            referrals.Add(new Referral { Id = Guid.NewGuid(), ReferrerUserId = demoCustomer.Id, ReferredUserId = demoCustomer2.Id, CreatedAt = now.AddDays(-10), RewardedAt = rewardedAt });
+            credits.Add(new StoreCreditEntry { Id = Guid.NewGuid(), UserId = demoCustomer.Id, Amount = ReferralCredit.ReferrerAmount, Reason = "Referral bonus — your friend completed their first order", CreatedAt = rewardedAt });
+            credits.Add(new StoreCreditEntry { Id = Guid.NewGuid(), UserId = demoCustomer2.Id, Amount = ReferralCredit.RefereeAmount, Reason = "Welcome bonus — your first completed order", CreatedAt = rewardedAt });
+        }
+
+        if (demoCustomer3 is not null)
+            referrals.Add(new Referral { Id = Guid.NewGuid(), ReferrerUserId = demoCustomer.Id, ReferredUserId = demoCustomer3.Id, CreatedAt = now.AddDays(-1) });
+
+        db.Referrals.AddRange(referrals);
+        db.StoreCreditEntries.AddRange(credits);
+        await db.SaveChangesAsync();
+    }
+
     private static AuditLog Entry(string actorId, string actorName, string action, string targetType, Guid targetId, string targetName, string? details, DateTime createdAt) =>
         new()
         {
@@ -1013,9 +1079,26 @@ public static class DbSeeder
         var histCompleted8 = MakeOrder(b3, hist8.Id, 4, OrderStatuses.Completed, PastAt(2, 19, 15));
         var histCompleted9 = MakeOrder(b3, hist9.Id, 1, OrderStatuses.Completed, PastAt(1, 20, 30));
 
+        // Phase 16: four calendar weeks in a row, each with exactly one Completed order, so a fresh
+        // database already shows a live "4 week streak" badge (see StreakService) instead of only
+        // whatever the day-of-week happens to make the activity above add up to. Week 0 lands "now"
+        // (this week always counts as in-progress, never broken); weeks 1-3 land on a Wednesday of
+        // their respective week so they're unambiguously in the past.
+        var mondayThisWeek = now.Date.AddDays(-(((int)now.DayOfWeek + 6) % 7));
+        var streakOrders = new List<Order>();
+        for (var weeksAgo = 0; weeksAgo < 4; weeksAgo++)
+        {
+            var day = weeksAgo == 0 ? now.AddHours(-2) : mondayThisWeek.AddDays(-7 * weeksAgo + 2).AddHours(12);
+            var streakPackage = HistoricalPackage(
+                new Guid($"77777777-0000-0000-0000-{10 + weeksAgo:D12}"), b1, mealBox,
+                $"Streak Week {weeksAgo} Box", "Part of a steady weekly rescue habit.", 8.50m, 3, 1.1m, day.AddHours(-1), day);
+            streakOrders.Add(MakeOrder(b1, streakPackage.Id, 1, OrderStatuses.Completed, day));
+        }
+
         db.Packages.AddRange(newPackages);
         db.Orders.AddRange(oldCompleted, midCompleted, recentCompleted, cancelled, noShow, confirmed, pending,
             histCompleted1, histCompleted2, histCompleted3, histCompleted4, histCompleted5, histCompleted6, histCompleted7, histCompleted8, histCompleted9);
+        db.Orders.AddRange(streakOrders);
         db.Payments.AddRange(payments);
         db.OrderPickupPasses.AddRange(pickupPasses);
 

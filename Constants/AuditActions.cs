@@ -20,6 +20,7 @@ public static class AuditActions
     public const string PackageHidden = "PackageHidden";
     public const string PackageUnhidden = "PackageUnhidden";
     public const string PackageDonated = "PackageDonated";
+    public const string KitchenTipHidden = "KitchenTipHidden";
     public const string BusinessTypeCreated = "BusinessTypeCreated";
     public const string BusinessTypeUpdated = "BusinessTypeUpdated";
     public const string BusinessTypeDeleted = "BusinessTypeDeleted";

@@ -9,6 +9,7 @@
 @rendermode InteractiveServer
 @implements IDisposable
 @inject OrderController OrderController
+@inject StreakController StreakController
 @inject ClientTimeZoneService ClientTimeZoneService
 @inject CartService CartService
 @attribute [Authorize(Roles = AppRoles.Customer)]
@@ -37,6 +38,16 @@
             <div class="orders-stat">
                 <span class="orders-stat-value">@(_orders is null ? "—" : _orders.Where(o => o.Status.Name == OrderStatuses.Completed).Sum(o => o.OrderPackages.Sum(op => op.Quantity * op.Package.WeightKg)).ToString("0.#"))</span>
                 <span class="orders-stat-label">kg saved</span>
+            </div>
+            <div class="orders-stat">
+                <span class="orders-stat-value">
+                    @(_streakWeeks is null ? "—" : _streakWeeks.ToString())
+                    @if (_streakWeeks is > 0)
+                    {
+                        <i class="bi bi-fire text-warning"></i>
+                    }
+                </span>
+                <span class="orders-stat-label">week streak</span>
             </div>
         </div>
     </div>
@@ -214,6 +225,7 @@
     // ticket list itself comes from the paginated/filtered server query below.
     private List<Order>? _orders;
     private PaginatedList<Order>? _paged;
+    private int? _streakWeeks;
     private string _statusFilter = "";
     private int _pageIndex = 1;
     private const int PageSize = 10;
@@ -238,6 +250,7 @@
     {
         _orders = (await OrderController.GetMyOrdersAsync()).Value ?? [];
         await LoadPageAsync();
+        _streakWeeks = (await StreakController.GetMyStreakWeeksAsync()).Value;
 
         ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
     }

@@ -15,6 +15,10 @@ public class PendingCheckout
     // Carries Order.LogisticsNote across the round trip to Stripe and back, so
     // CompleteCheckoutAsync can set it on the Order it places.
     public string? LogisticsNote { get; set; }
+    // How much store credit StartCheckoutAsync folded into the Stripe discount, if any — carried
+    // across the round trip so CompleteCheckoutAsync debits exactly what was actually offered,
+    // not whatever the balance happens to be by the time Stripe redirects back.
+    public decimal? CreditApplied { get; set; }
     public string? StripeCheckoutSessionId { get; set; }
     public DateTime CreatedAt { get; set; }
     // Set once CheckoutService.CompleteCheckoutAsync has resolved this one way or another —

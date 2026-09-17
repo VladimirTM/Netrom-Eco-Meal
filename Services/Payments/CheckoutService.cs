@@ -14,6 +14,7 @@ public class CheckoutService(
     IBusinessService businessService,
     IPackageRepository packageRepository,
     ILoyaltyService loyaltyService,
+    IReferralService referralService,
     EcoMealDbContext dbContext,
     CurrentUserAccessor currentUser,
     IConfiguration configuration) : ICheckoutService
@@ -81,14 +82,32 @@ public class CheckoutService(
         var successUrl = $"{baseUrl}/checkout/return?pc={pendingCheckout.Id}&session_id={{CHECKOUT_SESSION_ID}}";
         var cancelUrl = $"{baseUrl}/checkout/cancel?pc={pendingCheckout.Id}";
 
-        // Punch-card reward, if due — clamped below the subtotal so a coupon can never zero out
-        // (or invert) the Stripe Checkout total.
+        // Punch-card reward, if due, plus any available store credit (see ReferralService), folded
+        // into one Stripe Coupon and clamped below the subtotal — the credit portion is only
+        // debited from the ledger in CompleteCheckoutAsync once Stripe confirms payment, never before.
         var subtotal = checkoutLines.Sum(l => l.UnitPrice * l.Quantity);
-        var rawDiscount = await loyaltyService.EvaluateDiscountAsync(userId, businessId);
-        decimal? discount = rawDiscount is > 0 ? Math.Min(rawDiscount.Value, subtotal - Loyalty.MinDiscountAmount) : null;
-        var discountLabel = discount is > 0 ? "Loyalty reward — thanks for coming back!" : null;
+        var maxDiscount = Math.Max(0m, subtotal - Loyalty.MinDiscountAmount);
 
-        var session = await stripeGateway.CreateCheckoutSessionAsync(pendingCheckout.Id, business.Name, checkoutLines, successUrl, cancelUrl, discount, discountLabel);
+        var rawLoyaltyDiscount = await loyaltyService.EvaluateDiscountAsync(userId, businessId);
+        var loyaltyDiscount = rawLoyaltyDiscount is > 0 ? Math.Min(rawLoyaltyDiscount.Value, maxDiscount) : 0m;
+
+        var availableCredit = await referralService.GetAvailableBalanceAsync(userId);
+        var creditApplied = availableCredit > 0 ? Math.Min(availableCredit, maxDiscount - loyaltyDiscount) : 0m;
+
+        var totalDiscount = loyaltyDiscount + creditApplied;
+        var discountLabel = (loyaltyDiscount > 0, creditApplied > 0) switch
+        {
+            (true, true) => "Loyalty reward + store credit",
+            (true, false) => "Loyalty reward — thanks for coming back!",
+            (false, true) => "Store credit",
+            _ => (string?)null,
+        };
+
+        pendingCheckout.CreditApplied = creditApplied > 0 ? creditApplied : null;
+        await dbContext.SaveChangesAsync();
+
+        var session = await stripeGateway.CreateCheckoutSessionAsync(pendingCheckout.Id, business.Name, checkoutLines, successUrl, cancelUrl,
+            totalDiscount > 0 ? totalDiscount : null, discountLabel);
 
         pendingCheckout.StripeCheckoutSessionId = session.SessionId;
         await dbContext.SaveChangesAsync();
@@ -159,6 +178,9 @@ public class CheckoutService(
         pendingCheckout.ConsumedAt = DateTime.UtcNow;
         pendingCheckout.ResultingOrderId = order.Id;
         await dbContext.SaveChangesAsync();
+
+        if (pendingCheckout.CreditApplied is > 0)
+            await referralService.DebitAsync(userId, pendingCheckout.CreditApplied.Value, order.Id);
 
         var fullOrder = await LoadFullOrderAsync(order.Id);
         return new CheckoutCompletionResult(true, "", fullOrder, fullOrder?.OrderPackages.Sum(op => op.Quantity * op.Package.WeightKg));

@@ -39,6 +39,11 @@
                 <input id="register-password" class="form-control" type="password" name="password" required
                        placeholder="••••••••" autocomplete="new-password"/>
             </div>
+            <div class="mb-4">
+                <label class="form-label fw-semibold" for="register-referral">Referral code <span class="text-muted fw-normal">(optional)</span></label>
+                <input id="register-referral" class="form-control" type="text" name="referralCode"
+                       placeholder="Got a code from a friend?" value="@ReferralCode"/>
+            </div>
             @if (Error is not null)
             {
                 <div class="alert alert-danger py-2 small mb-3" role="alert">@Error</div>
@@ -64,4 +69,9 @@
 
     [SupplyParameterFromQuery]
     public string? Email { get; set; }
+
+    // Prefilled from a friend's /account/register?ref=CODE link (see /referrals) — still editable
+    // by hand for someone who was just told the code out loud.
+    [SupplyParameterFromQuery(Name = "ref")]
+    public string? ReferralCode { get; set; }
 }

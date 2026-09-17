@@ -33,6 +33,7 @@ public class OrderServiceTests
         Mock<IAppEmailSender> EmailSender,
         Mock<IStripeGateway> StripeGateway,
         Mock<IAuditLogService> AuditLogService,
+        Mock<IReferralService> ReferralService,
         EcoMealDbContext Db,
         PackageStockBroadcaster StockBroadcaster);
 
@@ -46,16 +47,17 @@ public class OrderServiceTests
         var emailSender = new Mock<IAppEmailSender>();
         var stripeGateway = new Mock<IStripeGateway>();
         var auditLogService = new Mock<IAuditLogService>();
+        var referralService = new Mock<IReferralService>();
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
         var configuration = new ConfigurationBuilder().Build();
         var stockBroadcaster = new PackageStockBroadcaster();
 
         var service = new OrderService(
             orderRepo.Object, packageRepo.Object, businessService.Object, notificationService.Object,
-            emailSender.Object, stripeGateway.Object, auditLogService.Object, db, currentUser, configuration,
+            emailSender.Object, stripeGateway.Object, auditLogService.Object, referralService.Object, db, currentUser, configuration,
             stockBroadcaster, NullLogger<OrderService>.Instance);
 
-        return new Fixture(service, orderRepo, packageRepo, businessService, notificationService, emailSender, stripeGateway, auditLogService, db, stockBroadcaster);
+        return new Fixture(service, orderRepo, packageRepo, businessService, notificationService, emailSender, stripeGateway, auditLogService, referralService, db, stockBroadcaster);
     }
 
     // ---- PlaceOrderAsync ---------------------------------------------------

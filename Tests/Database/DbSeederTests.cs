@@ -5,6 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Database;
 using Netrom_Eco_Meal.Entities;
+using Netrom_Eco_Meal.Repositories;
+using Netrom_Eco_Meal.Services;
 using Netrom_Eco_Meal.Tests.TestSupport;
 
 namespace Netrom_Eco_Meal.Tests.Database;
@@ -65,8 +67,8 @@ public class DbSeederTests(PostgresFixture fixture)
         // 29 live storefront packages (24 + the Phase 12 low-stock demo package + the Phase 3
         // near-expiry nudge demo package + the Phase 5 markdown-suggestion demo package + the
         // Phase 1 donation-candidate and already-donated demo packages) + 9 historical ones
-        // backing the Phase 8 analytics card.
-        Assert.Equal(38, await db.Packages.CountAsync());
+        // backing the Phase 8 analytics card + 4 historical ones backing the Phase 16 rescue-streak demo.
+        Assert.Equal(42, await db.Packages.CountAsync());
     }
 
     [Fact]
@@ -118,9 +120,10 @@ public class DbSeederTests(PostgresFixture fixture)
 
         var orders = await db.Orders.Include(o => o.Status).Where(o => o.UserId == customer.Id).ToListAsync();
         // 7 original demo orders + 9 historical ones backing the Phase 8 analytics card + 1 Phase 13
-        // Rescue Circle order (still Open/Pending, organized by this customer).
-        Assert.Equal(17, orders.Count);
-        Assert.Equal(12, orders.Count(o => o.Status.Name == OrderStatuses.Completed));
+        // Rescue Circle order (still Open/Pending, organized by this customer) + 4 historical ones
+        // backing the Phase 16 rescue-streak demo.
+        Assert.Equal(21, orders.Count);
+        Assert.Equal(16, orders.Count(o => o.Status.Name == OrderStatuses.Completed));
         Assert.Single(orders, o => o.Status.Name == OrderStatuses.Confirmed);
         Assert.Single(orders, o => o.Status.Name == OrderStatuses.Cancelled);
         Assert.Equal(2, orders.Count(o => o.Status.Name == OrderStatuses.Pending));
@@ -174,21 +177,25 @@ public class DbSeederTests(PostgresFixture fixture)
 
         await using var finalDb = provider.GetRequiredService<EcoMealDbContext>();
         Assert.Equal(14, await finalDb.Businesses.CountAsync());
-        Assert.Equal(38, await finalDb.Packages.CountAsync());
-        // 16 original demo orders + 3 Phase 11 leaderboard-demo orders (2 for demo.customer2, 1 for
-        // demo.customer3) + 2 Phase 13 Rescue Circle orders.
-        Assert.Equal(21, await finalDb.Orders.CountAsync());
+        Assert.Equal(42, await finalDb.Packages.CountAsync());
+        // 16 original demo orders + 4 Phase 16 rescue-streak demo orders + 3 Phase 11 leaderboard-demo
+        // orders (2 for demo.customer2, 1 for demo.customer3) + 2 Phase 13 Rescue Circle orders.
+        Assert.Equal(25, await finalDb.Orders.CountAsync());
         Assert.Equal(3, await finalDb.Favorites.CountAsync());
         Assert.Equal(2, await finalDb.Reviews.CountAsync());
         // Two demo managers each staff one or two of the demo businesses — must not double-insert.
         Assert.Equal(3, await finalDb.BusinessStaff.CountAsync());
-        Assert.Equal(4, await finalDb.Reports.CountAsync());
-        Assert.Equal(11, await finalDb.AuditLogs.CountAsync());
+        Assert.Equal(5, await finalDb.Reports.CountAsync());
+        Assert.Equal(13, await finalDb.AuditLogs.CountAsync());
         // Proves SeedRescueCircleDemoDataAsync's own guard actually held on the second run.
         Assert.Equal(2, await finalDb.RescueCircles.CountAsync());
         Assert.Equal(6, await finalDb.RescueCircleParticipants.CountAsync());
         // Proves SeedStandingOrderDemoDataAsync's own guard actually held on the second run.
         Assert.Equal(2, await finalDb.StandingOrders.CountAsync());
+        // Proves SeedKitchenTipDemoDataAsync/SeedReferralDemoDataAsync's own guards held too.
+        Assert.Equal(4, await finalDb.KitchenTips.CountAsync());
+        Assert.Equal(2, await finalDb.Referrals.CountAsync());
+        Assert.Equal(2, await finalDb.StoreCreditEntries.CountAsync());
     }
 
     [Fact]
@@ -317,10 +324,13 @@ public class DbSeederTests(PostgresFixture fixture)
         await using var db = provider.GetRequiredService<EcoMealDbContext>();
 
         var reports = await db.Reports.ToListAsync();
-        Assert.Equal(4, reports.Count);
+        Assert.Equal(5, reports.Count);
         Assert.Single(reports, r => r.Status == ReportStatuses.Open);
-        Assert.Equal(2, reports.Count(r => r.Status == ReportStatuses.ActionTaken));
+        // Business, Package, and KitchenTip each get one ActionTaken report — see
+        // SeedKitchenTipDemoDataAsync's pre-hidden tip.
+        Assert.Equal(3, reports.Count(r => r.Status == ReportStatuses.ActionTaken));
         Assert.Single(reports, r => r.Status == ReportStatuses.Dismissed);
+        Assert.Contains(reports, r => r.TargetType == AuditTargetTypes.KitchenTip);
 
         var auditLogs = await db.AuditLogs.ToListAsync();
         Assert.NotEmpty(auditLogs);
@@ -328,8 +338,52 @@ public class DbSeederTests(PostgresFixture fixture)
         Assert.Contains(auditLogs, a => a.Action == AuditActions.BusinessRejected);
         Assert.Contains(auditLogs, a => a.Action == AuditActions.BusinessHidden);
         Assert.Contains(auditLogs, a => a.Action == AuditActions.PackageHidden);
+        Assert.Contains(auditLogs, a => a.Action == AuditActions.KitchenTipHidden);
         Assert.Contains(auditLogs, a => a.Action == AuditActions.ReportActionTaken);
         Assert.Contains(auditLogs, a => a.Action == AuditActions.ReportDismissed);
+    }
+
+    [Fact]
+    public async Task SeedAsync_FreshDatabase_SeedsKitchenTipsAndReferrals()
+    {
+        await using var provider = await BuildSeededServicesAsync();
+        using var scope = provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<EcoMealDbContext>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+        var customer = await userManager.FindByEmailAsync("demo.customer@ecomeal.local");
+        var customer2 = await userManager.FindByEmailAsync("demo.customer2@ecomeal.local");
+        Assert.NotNull(customer);
+        Assert.NotNull(customer2);
+
+        var tips = await db.KitchenTips.ToListAsync();
+        Assert.Equal(4, tips.Count);
+        Assert.Single(tips, t => t.IsHidden);
+
+        var referrals = await db.Referrals.Where(r => r.ReferrerUserId == customer.Id).ToListAsync();
+        Assert.Equal(2, referrals.Count);
+        Assert.Single(referrals, r => r.ReferredUserId == customer2.Id && r.RewardedAt != null);
+        Assert.Single(referrals, r => r.RewardedAt == null);
+
+        // The rewarded referral above should have credited both parties.
+        Assert.Equal(ReferralCredit.ReferrerAmount, await db.StoreCreditEntries.Where(e => e.UserId == customer.Id).SumAsync(e => e.Amount));
+        Assert.Equal(ReferralCredit.RefereeAmount, await db.StoreCreditEntries.Where(e => e.UserId == customer2.Id).SumAsync(e => e.Amount));
+    }
+
+    [Fact]
+    public async Task SeedAsync_FreshDatabase_DemoCustomerHasAFourWeekRescueStreak()
+    {
+        await using var provider = await BuildSeededServicesAsync();
+        using var scope = provider.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var streakService = new StreakService(
+            new OrderRepository(scope.ServiceProvider.GetRequiredService<EcoMealDbContext>()),
+            new CurrentUserAccessor(new FakeAuthenticationStateProvider(null)));
+
+        var customer = await userManager.FindByEmailAsync("demo.customer@ecomeal.local");
+        Assert.NotNull(customer);
+
+        Assert.Equal(4, await streakService.GetStreakWeeksAsync(customer!.Id));
     }
 }
 

@@ -44,6 +44,12 @@ is just the capability summary.
 - Earn an automatic discount from a kitchen's loyalty punch card (where one's configured), and
   save a "usual" as a standing order — matched against a kitchen's newly published packages and
   added straight to your basket to confirm, up to a weekly budget you set, on `/standing-orders`
+- Build a rescue streak — consecutive weeks with at least one completed order, shown on `/orders`
+  and as an optional column on the `/impact` leaderboard
+- Leave a short practical tip on a business page ("use the side door after 8pm"), separate from
+  star reviews and moderated the same way a reported business/package is
+- Invite a friend from `/referrals`: once they complete their first order, you both get store
+  credit, applied automatically (alongside any loyalty discount) at your next checkout
 
 **BusinessManager** — staff of one or more businesses (assigned by an Admin), scoped to
 whichever one they pick in the sidebar switcher:
@@ -365,9 +371,10 @@ with none.
 
 It also seeds trust & safety demo data so `/businesses`, `/reports`, and `/audit-log` aren't
 empty on a fresh database: a `PendingApproval` and a `Rejected` business application (both
-submitted by the demo customer), one existing demo business and one existing demo package
-marked hidden with a reason, four `Report`s (open, dismissed, and two actioned), and an
-audit-log history consistent with all of it.
+submitted by the demo customer), one existing demo business, one existing demo package, and one
+kitchen tip marked hidden with a reason, five `Report`s (open, dismissed, and three actioned —
+one against each moderatable target type: business, package, kitchen tip), and an audit-log
+history consistent with all of it.
 
 It also seeds two Rescue Circles on `/circles` at different stages: one still collecting
 payments (organizer and demo.customer2 have paid, demo.customer3 has joined but still owes,
@@ -388,6 +395,19 @@ Bag" closed recently with nothing sold and is still a live "mark as donated" can
 while "Bench Warmer Bread Bag" is seeded already marked donated — so the home hero's kg-saved
 figure, `/impact`'s equivalency stats, and a fresh `/dashboard` "share your impact" snippet all
 have a real, non-zero donated contribution right away.
+
+The demo customer also has a completed order in each of the last four calendar weeks, purely so
+the "week streak" stat on `/orders` (and the matching column on `/impact`) shows a real, non-zero
+streak on a fresh database rather than only whatever the rest of the seeded activity happens to
+add up to.
+
+Stadionul de Gusturi and VAR Bistro have a handful of kitchen tips too, including one already
+hidden (see the trust & safety paragraph above) — practical hints like "use the side entrance
+after 8pm" separate from the star reviews above. And on `/referrals`, the demo customer has
+invited both other demo customers: demo.customer2's invite already paid off (a real
+`StoreCreditEntry` pair, so the demo customer's balance is non-zero and gets applied automatically
+at their next checkout), while demo.customer3's is left pending, so the page shows both a rewarded
+and a waiting invite instead of only one.
 
 ## Running tests
 

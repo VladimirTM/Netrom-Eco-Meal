@@ -11,6 +11,7 @@ public class ReportService(
     IReportRepository reportRepository,
     IBusinessService businessService,
     IPackageService packageService,
+    IKitchenTipService kitchenTipService,
     IAuditLogService auditLogService,
     EcoMealDbContext dbContext,
     CurrentUserAccessor currentUser) : IReportService
@@ -44,17 +45,19 @@ public class ReportService(
         // Dismiss/TakeAction paths below, but looping them here turned every open-reports page
         // load into dozens of full-graph queries.
         var businessIds = reports.Where(r => r.TargetType == AuditTargetTypes.Business).Select(r => r.TargetId).Distinct().ToList();
-        var packageIds = reports.Where(r => r.TargetType != AuditTargetTypes.Business).Select(r => r.TargetId).Distinct().ToList();
+        var packageIds = reports.Where(r => r.TargetType == AuditTargetTypes.Package).Select(r => r.TargetId).Distinct().ToList();
+        var tipIds = reports.Where(r => r.TargetType == AuditTargetTypes.KitchenTip).Select(r => r.TargetId).Distinct().ToList();
 
         var businessNames = businessIds.Count > 0 ? await businessService.GetNamesByIdsAsync(businessIds) : [];
         var packageNames = packageIds.Count > 0 ? await packageService.GetNamesByIdsAsync(packageIds) : [];
+        var tipSnippets = tipIds.Count > 0 ? await kitchenTipService.GetSnippetsByIdsAsync(tipIds) : [];
 
-        return reports.Select(report => new ReportView(
-            report,
-            report.TargetType == AuditTargetTypes.Business
-                ? businessNames.GetValueOrDefault(report.TargetId, "(deleted business)")
-                : packageNames.GetValueOrDefault(report.TargetId, "(deleted package)"),
-            report.Reporter.Name)).ToList();
+        return reports.Select(report => new ReportView(report, report.TargetType switch
+        {
+            AuditTargetTypes.Business => businessNames.GetValueOrDefault(report.TargetId, "(deleted business)"),
+            AuditTargetTypes.KitchenTip => tipSnippets.GetValueOrDefault(report.TargetId, "(deleted tip)"),
+            _ => packageNames.GetValueOrDefault(report.TargetId, "(deleted package)"),
+        }, report.Reporter.Name)).ToList();
     }
 
     public async Task DismissAsync(Guid reportId)
@@ -86,13 +89,22 @@ public class ReportService(
         // synchronous outbound push HTTP call per affected staff member, which must not hold these row locks open.
         Business? hiddenBusiness = null;
         Package? hiddenPackage = null;
+        KitchenTip? hiddenTip = null;
 
         await using (var transaction = await dbContext.Database.BeginTransactionAsync())
         {
-            if (report.TargetType == AuditTargetTypes.Business)
-                hiddenBusiness = await businessService.HideAsync(report.TargetId, actionReason, notify: false);
-            else
-                hiddenPackage = await packageService.HideAsync(report.TargetId, actionReason, notify: false);
+            switch (report.TargetType)
+            {
+                case AuditTargetTypes.Business:
+                    hiddenBusiness = await businessService.HideAsync(report.TargetId, actionReason, notify: false);
+                    break;
+                case AuditTargetTypes.KitchenTip:
+                    hiddenTip = await kitchenTipService.HideAsync(report.TargetId, actionReason, notify: false);
+                    break;
+                default:
+                    hiddenPackage = await packageService.HideAsync(report.TargetId, actionReason, notify: false);
+                    break;
+            }
 
             var targetName = await ResolveTargetNameAsync(report);
 
@@ -106,6 +118,8 @@ public class ReportService(
             await businessService.NotifyHiddenAsync(hiddenBusiness, actionReason);
         else if (hiddenPackage is not null)
             await packageService.NotifyHiddenAsync(hiddenPackage, actionReason);
+        else if (hiddenTip is not null)
+            await kitchenTipService.NotifyHiddenAsync(hiddenTip, actionReason);
     }
 
     private async Task ResolveAsync(Report report, string status)
@@ -120,13 +134,17 @@ public class ReportService(
 
     private async Task<string> ResolveTargetNameAsync(Report report)
     {
-        if (report.TargetType == AuditTargetTypes.Business)
+        switch (report.TargetType)
         {
-            var names = await businessService.GetNamesByIdsAsync([report.TargetId]);
-            return names.GetValueOrDefault(report.TargetId, "(deleted business)");
+            case AuditTargetTypes.Business:
+                var businessNames = await businessService.GetNamesByIdsAsync([report.TargetId]);
+                return businessNames.GetValueOrDefault(report.TargetId, "(deleted business)");
+            case AuditTargetTypes.KitchenTip:
+                var tipSnippets = await kitchenTipService.GetSnippetsByIdsAsync([report.TargetId]);
+                return tipSnippets.GetValueOrDefault(report.TargetId, "(deleted tip)");
+            default:
+                var packageNames = await packageService.GetNamesByIdsAsync([report.TargetId]);
+                return packageNames.GetValueOrDefault(report.TargetId, "(deleted package)");
         }
-
-        var packageNames = await packageService.GetNamesByIdsAsync([report.TargetId]);
-        return packageNames.GetValueOrDefault(report.TargetId, "(deleted package)");
     }
 }

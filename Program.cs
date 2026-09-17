@@ -135,6 +135,12 @@ builder.Services.AddScoped<IRescueCircleService, RescueCircleService>();
 builder.Services.AddScoped<ILoyaltyService, LoyaltyService>();
 builder.Services.AddScoped<IStandingOrderRepository, StandingOrderRepository>();
 builder.Services.AddScoped<IStandingOrderService, StandingOrderService>();
+builder.Services.AddScoped<IKitchenTipRepository, KitchenTipRepository>();
+builder.Services.AddScoped<IKitchenTipService, KitchenTipService>();
+builder.Services.AddScoped<IReferralRepository, ReferralRepository>();
+builder.Services.AddScoped<IStoreCreditRepository, StoreCreditRepository>();
+builder.Services.AddScoped<IReferralService, ReferralService>();
+builder.Services.AddScoped<IStreakService, StreakService>();
 builder.Services.AddScoped<CurrentUserAccessor>();
 // Singleton, not Scoped — see PackageStockBroadcaster's own comment for why one instance needs to
 // be shared across every circuit instead of living per-circuit like CartService below.
@@ -163,6 +169,9 @@ builder.Services.AddScoped<ReportController>();
 builder.Services.AddScoped<PushSubscriptionController>();
 builder.Services.AddScoped<ImpactController>();
 builder.Services.AddScoped<BasketPlannerController>();
+builder.Services.AddScoped<KitchenTipController>();
+builder.Services.AddScoped<ReferralController>();
+builder.Services.AddScoped<StreakController>();
 // Real HTTP endpoint for Login/Register/Logout (see AuthController), but also registered here so
 // ConfirmEmail/ForgotPassword/ResetPassword can inject it in-process like every other controller.
 builder.Services.AddScoped<AuthController>();

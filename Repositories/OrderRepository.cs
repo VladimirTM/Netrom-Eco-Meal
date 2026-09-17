@@ -209,6 +209,19 @@ public class OrderRepository(EcoMealDbContext context) : IOrderRepository
         return await query.SumAsync(op => (decimal?)(op.Quantity * op.Package.Price)) ?? 0m;
     }
 
+    public async Task<List<DateTime>> GetCompletedOrderCreatedDatesAsync(string userId)
+    {
+        return await context.Orders
+            .Where(o => o.UserId == userId && o.Status.Name == OrderStatuses.Completed)
+            .Select(o => o.CreatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<int> GetTotalCompletedOrderCountAsync(string userId)
+    {
+        return await context.Orders.CountAsync(o => o.UserId == userId && o.Status.Name == OrderStatuses.Completed);
+    }
+
     public async Task AddAsync(Order order)
     {
         await context.Orders.AddAsync(order);
