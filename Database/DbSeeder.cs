@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Netrom_Eco_Meal.Constants;
 using Netrom_Eco_Meal.Entities;
+using Netrom_Eco_Meal.Services;
 
 namespace Netrom_Eco_Meal.Database;
 
@@ -76,6 +77,8 @@ public static class DbSeeder
         await SeedBusinessHoursAsync(db);
         await SeedBusinessClosuresAsync(db);
         await SeedBusinessStaffAsync(db, demoManager?.Id, demoManager2?.Id);
+        await SeedBrandsAsync(db);
+        await SeedWebhookApiKeyAsync(db);
 
         if (demoCustomer is not null)
             await SeedApprovalDemoBusinessesAsync(db, demoCustomer.Id);
@@ -531,6 +534,76 @@ public static class DbSeeder
 
         if (added)
             await db.SaveChangesAsync();
+    }
+
+    // Phase 1: groups three bakeries and two cafes into two chains, so /brands has real
+    // multi-location demo data. Backfill-only (BrandId set only where still null), same
+    // reconcile-don't-clobber rule as SeedBusinessesAsync above.
+    private static readonly Guid BakeryBrandId = new("77777777-0000-0000-0000-000000000001");
+    private static readonly Guid CafeBrandId = new("77777777-0000-0000-0000-000000000002");
+
+    private static async Task SeedBrandsAsync(EcoMealDbContext db)
+    {
+        if (!await db.Brands.AnyAsync(b => b.Id == BakeryBrandId))
+            db.Brands.Add(new Brand { Id = BakeryBrandId, Name = "Golden Boot Bakeries", Description = "Three branches of the same World Cup–themed bakery, sharing one loyal following." });
+
+        if (!await db.Brands.AnyAsync(b => b.Id == CafeBrandId))
+            db.Brands.Add(new Brand { Id = CafeBrandId, Name = "Full-Time Coffee Co.", Description = "A two-location coffee chain serving the after-match crowd." });
+
+        await db.SaveChangesAsync();
+
+        var bakeryLocationIds = new[]
+        {
+            new Guid("44444444-0000-0000-0000-000000000004"), // Poarta de Aur Bakery
+            new Guid("44444444-0000-0000-0000-000000000005"), // Hat-Trick Bakery
+            new Guid("44444444-0000-0000-0000-000000000006"), // Fotbal & Focaccia
+        };
+        var cafeLocationIds = new[]
+        {
+            new Guid("44444444-0000-0000-0000-000000000007"), // Extra Time Café
+            new Guid("44444444-0000-0000-0000-000000000008"), // Cartonaș Galben Café
+        };
+
+        var locations = await db.Businesses
+            .Where(b => bakeryLocationIds.Contains(b.Id) || cafeLocationIds.Contains(b.Id))
+            .ToListAsync();
+
+        foreach (var business in locations.Where(b => b.BrandId is null))
+            business.BrandId = bakeryLocationIds.Contains(business.Id) ? BakeryBrandId : CafeBrandId;
+
+        // A couple of business-level reviews across two different bakery branches, so the brand's
+        // aggregate rating on /brands/{id} shows more than one location contributing to it —
+        // SeedDemoActivityAsync's own reviews are both at b1/b3, neither of which is in this brand.
+        var poartaDeAurId = bakeryLocationIds[0];
+        var hatTrickId = bakeryLocationIds[1];
+        if (!await db.Reviews.AnyAsync(r => r.BusinessId == poartaDeAurId || r.BusinessId == hatTrickId))
+        {
+            var demoCustomer = await db.Users.FirstOrDefaultAsync(u => u.Email == DemoCustomerEmail);
+            var demoCustomer2 = await db.Users.FirstOrDefaultAsync(u => u.Email == DemoCustomerEmail2);
+            var now = DateTime.UtcNow;
+
+            if (demoCustomer is not null)
+                db.Reviews.Add(new Review { Id = Guid.NewGuid(), BusinessId = poartaDeAurId, UserId = demoCustomer.Id, Rating = 5, Comment = "Bread's always fresh, even at closing time.", CreatedAt = now.AddDays(-7) });
+            if (demoCustomer2 is not null)
+                db.Reviews.Add(new Review { Id = Guid.NewGuid(), BusinessId = hatTrickId, UserId = demoCustomer2.Id, Rating = 4, Comment = "Good pastries, line moves fast.", CreatedAt = now.AddDays(-5) });
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    // A well-known demo plaintext — only its hash is stored (Business.WebhookApiKeyHash) — so the
+    // webhook endpoint has something real to POST against without generating a key first; see
+    // USER_GUIDE.md. Backfill-only — never overwrites a key a manager has since rotated.
+    public const string DemoWebhookApiKey = "eco_demo_stadionul_webhook_key";
+
+    private static async Task SeedWebhookApiKeyAsync(EcoMealDbContext db)
+    {
+        var business = await db.Businesses.FindAsync(DemoManagedBusinessId);
+        if (business is null || business.WebhookApiKeyHash is not null)
+            return;
+
+        business.WebhookApiKeyHash = ApiKeyHasher.Hash(DemoWebhookApiKey);
+        await db.SaveChangesAsync();
     }
 
     // Demonstrates the Phase 9 self-service application flow — a pending application and a

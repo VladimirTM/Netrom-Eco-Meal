@@ -7,6 +7,7 @@
 @rendermode InteractiveServer
 @inject BusinessTypeController BusinessTypeController
 @inject PackageTypeController PackageTypeController
+@inject BrandController BrandController
 @attribute [Authorize(Roles = AppRoles.Admin)]
 
 <PageTitle>Kitchen &amp; Package Types — Eco Meal</PageTitle>
@@ -17,7 +18,7 @@
 </div>
 
 <div class="row g-4">
-    <div class="col-lg-6">
+    <div class="col-lg-4">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
                 <h2 class="h6 fw-bold mb-3"><i class="bi bi-shop me-2"></i>Kitchen types</h2>
@@ -81,7 +82,7 @@
         </div>
     </div>
 
-    <div class="col-lg-6">
+    <div class="col-lg-4">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
                 <h2 class="h6 fw-bold mb-3"><i class="bi bi-box-seam me-2"></i>Package types</h2>
@@ -144,11 +145,76 @@
             </div>
         </div>
     </div>
+
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h6 fw-bold mb-3"><i class="bi bi-diagram-3 me-2"></i>Brands</h2>
+                <p class="text-muted small">Groups several locations (e.g. three branches of the same bakery) under one shared public page — see the "Brand" field on a business's edit form.</p>
+
+                @if (_brandError is not null)
+                {
+                    <div class="alert alert-danger py-2 small">@_brandError</div>
+                }
+
+                @if (_brands is null)
+                {
+                    <div class="d-flex justify-content-center py-4">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+                    </div>
+                }
+                else if (_brands.Count == 0)
+                {
+                    <p class="text-muted small">No brands yet.</p>
+                }
+                else
+                {
+                    <ul class="list-group list-group-flush mb-3">
+                        @foreach (var brand in _brands)
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0" @key="brand.Id">
+                                @if (_editingBrandId == brand.Id)
+                                {
+                                    <input type="text" class="form-control form-control-sm me-2" @bind="_editingBrandName" @bind:event="oninput"/>
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" title="Save" @onclick="() => SaveBrandAsync(brand)"><i class="bi bi-check-lg"></i></button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" title="Cancel" @onclick="CancelEditBrand"><i class="bi bi-x-lg"></i></button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <a href="@($"/brands/{brand.Id}")" class="text-decoration-none">@brand.Name <span class="text-muted small">(@brand.Businesses.Count)</span></a>
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" title="Rename" @onclick="() => StartEditBrand(brand)"><i class="bi bi-pencil"></i></button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" title="Delete" @onclick="() => RequestDeleteBrand(brand)"><i class="bi bi-trash"></i></button>
+                                    </div>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+
+                <div class="input-group input-group-sm">
+                    <input type="text" class="form-control" placeholder="e.g. Hat-Trick Bakeries" @bind="_newBrandName" @bind:event="oninput" @onkeyup="@(e => HandleNewTypeKeyUpAsync(e, AddBrandAsync))"/>
+                    <button type="button" class="btn btn-outline-primary" disabled="@_addingBrand" @onclick="AddBrandAsync">
+                        @if (_addingBrand)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-plus-lg"></i>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <ConfirmDialog IsOpen="@(_pendingDelete is not null)"
                Title="@($"Delete \"{_pendingDelete?.Name}\"?")"
-               Message="This can't be undone. It's blocked if anything still uses this type."
+               Message="This can't be undone. It's blocked if anything still depends on it."
                ConfirmLabel="Delete"
                Busy="_deleteBusy"
                OnConfirm="ConfirmDeleteAsync"
@@ -157,18 +223,24 @@
 @code {
     private List<BusinessType>? _businessTypes;
     private List<PackageType>? _packageTypes;
+    private List<Brand>? _brands;
 
     private string _newBusinessTypeName = "";
     private string _newPackageTypeName = "";
+    private string _newBrandName = "";
     private bool _addingBusinessType;
     private bool _addingPackageType;
+    private bool _addingBrand;
     private string? _businessTypeError;
     private string? _packageTypeError;
+    private string? _brandError;
 
     private Guid? _editingBusinessTypeId;
     private string _editingBusinessTypeName = "";
     private Guid? _editingPackageTypeId;
     private string _editingPackageTypeName = "";
+    private Guid? _editingBrandId;
+    private string _editingBrandName = "";
 
     private (string Kind, Guid Id, string Name)? _pendingDelete;
     private bool _deleteBusy;
@@ -177,10 +249,12 @@
     {
         await ReloadBusinessTypesAsync();
         await ReloadPackageTypesAsync();
+        await ReloadBrandsAsync();
     }
 
     private async Task ReloadBusinessTypesAsync() => _businessTypes = (await BusinessTypeController.GetAllAsync()).Value ?? [];
     private async Task ReloadPackageTypesAsync() => _packageTypes = (await PackageTypeController.GetAllAsync()).Value ?? [];
+    private async Task ReloadBrandsAsync() => _brands = (await BrandController.GetAllAsync()).Value ?? [];
 
     // Shared Enter-to-submit handler for both "add" inputs.
     private static Task HandleNewTypeKeyUpAsync(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e, Func<Task> submit) =>
@@ -288,30 +362,89 @@
         _pendingDelete = ("package", type.Id, type.Name);
     }
 
+    private async Task AddBrandAsync()
+    {
+        _brandError = null;
+        if (string.IsNullOrWhiteSpace(_newBrandName))
+            return;
+
+        _addingBrand = true;
+        var result = await BrandController.AddAsync(new Brand { Name = _newBrandName.Trim() });
+        _addingBrand = false;
+
+        if (result is UnauthorizedObjectResult unauthorized)
+        {
+            _brandError = unauthorized.Value?.ToString() ?? "You can't do that.";
+            return;
+        }
+
+        _newBrandName = "";
+        await ReloadBrandsAsync();
+    }
+
+    private void StartEditBrand(Brand brand)
+    {
+        _editingBrandId = brand.Id;
+        _editingBrandName = brand.Name;
+    }
+
+    private void CancelEditBrand() => _editingBrandId = null;
+
+    private async Task SaveBrandAsync(Brand brand)
+    {
+        _brandError = null;
+        if (string.IsNullOrWhiteSpace(_editingBrandName))
+            return;
+
+        var result = await BrandController.UpdateAsync(new Brand { Id = brand.Id, Name = _editingBrandName.Trim() });
+        if (result is UnauthorizedObjectResult unauthorized)
+        {
+            _brandError = unauthorized.Value?.ToString() ?? "You can't do that.";
+            return;
+        }
+
+        _editingBrandId = null;
+        await ReloadBrandsAsync();
+    }
+
+    private void RequestDeleteBrand(Brand brand)
+    {
+        _brandError = null;
+        _pendingDelete = ("brand", brand.Id, brand.Name);
+    }
+
     private async Task ConfirmDeleteAsync()
     {
         if (_pendingDelete is not { } pending)
             return;
 
         _deleteBusy = true;
-        var result = pending.Kind == "business"
-            ? await BusinessTypeController.DeleteAsync(pending.Id)
-            : await PackageTypeController.DeleteAsync(pending.Id);
+        var result = pending.Kind switch
+        {
+            "business" => await BusinessTypeController.DeleteAsync(pending.Id),
+            "package" => await PackageTypeController.DeleteAsync(pending.Id),
+            _ => await BrandController.DeleteAsync(pending.Id),
+        };
         _deleteBusy = false;
         _pendingDelete = null;
 
         if (result is ConflictObjectResult conflict)
         {
-            if (pending.Kind == "business")
-                _businessTypeError = conflict.Value?.ToString() ?? "That type is still in use.";
-            else
-                _packageTypeError = conflict.Value?.ToString() ?? "That type is still in use.";
+            var message = conflict.Value?.ToString() ?? "That's still in use.";
+            switch (pending.Kind)
+            {
+                case "business": _businessTypeError = message; break;
+                case "package": _packageTypeError = message; break;
+                default: _brandError = message; break;
+            }
             return;
         }
 
-        if (pending.Kind == "business")
-            await ReloadBusinessTypesAsync();
-        else
-            await ReloadPackageTypesAsync();
+        switch (pending.Kind)
+        {
+            case "business": await ReloadBusinessTypesAsync(); break;
+            case "package": await ReloadPackageTypesAsync(); break;
+            default: await ReloadBrandsAsync(); break;
+        }
     }
 }

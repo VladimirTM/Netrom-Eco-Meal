@@ -36,4 +36,9 @@ public interface IBusinessService
     public Task SetHoursAsync(Guid businessId, List<BusinessHours> hours);
     public Task<BusinessClosure> AddClosureAsync(Guid businessId, DateOnly startDate, DateOnly endDate, string? reason);
     public Task<bool> RemoveClosureAsync(Guid businessId, Guid closureId);
+
+    // Admin or one of the business's own staff, same as UpdateAsync. Returns the plaintext key —
+    // the only time it's ever visible — or null if the business doesn't exist.
+    public Task<string?> GenerateApiKeyAsync(Guid businessId);
+    public Task RevokeApiKeyAsync(Guid businessId);
 }

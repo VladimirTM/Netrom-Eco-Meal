@@ -347,6 +347,16 @@ get a small store credit. It shows up in your balance right away and is applied 
 your next checkout, on top of any loyalty discount, up to your basket's total — nothing is ever
 paid out as real money, and you never have to remember to redeem it yourself.
 
+### Browse by brand
+
+Some kitchens are one of several branches of the same chain — the **diagram icon** in the header
+opens `/brands`, a list of every chain with more than one location on Eco Meal. Open one to see
+its combined rating across every branch, each location's live open/closed status, and a
+**Favorite this brand** button that follows the whole chain at once rather than a single address.
+If you allow location access, the page also highlights whichever branch is nearest to you and
+currently open, with a one-click link straight to it. A kitchen that belongs to a chain shows a
+small "Part of {Brand}" pill on its own page, linking back to the brand.
+
 ---
 
 ## Business Manager
@@ -370,6 +380,12 @@ and it's live immediately, applied as a real discount the moment a returning cus
 checkout would be their Nth completed order at your kitchen that month. Leave either field blank
 (or clear both) to turn it off. There's nothing else to configure — no coupon codes to generate,
 no manual tracking; it's counted straight from real completed orders and never double-applies.
+
+If you run more than one branch of the same kitchen, the **Brand** dropdown right below Type
+groups this business with your other locations under one shared public page (`/brands/{id}`) —
+one combined rating, one favorite button for a customer to follow the whole chain. An admin
+manages the list of brands themselves from the Kitchen &amp; Package Types page; picking
+"— Standalone business —" here just leaves this location ungrouped.
 
 ### Set your hours and closures
 
@@ -538,6 +554,16 @@ kitchen's total kg saved plus the same km-driven/water-saved equivalency custome
 live from Eco Meal every time your page loads. No account or setup needed on your end beyond
 pasting the snippet — hit **Copy** and drop it wherever you'd like it to show up.
 
+A **POS / inventory webhook** card below that lets your own point-of-sale or inventory system
+create a live package directly instead of you retyping it into Add Package by hand. **Generate
+API key** shows you a key exactly once — copy it somewhere safe, since it can't be shown again —
+and **Regenerate key**/**Revoke key** replace or disable it at any time. Have your system send a
+`POST` to the endpoint and header shown on the card (`X-Api-Key: <your key>`) with a small JSON
+body: name, description, price, quantity, weightKg, packageTypeId, dietaryTags, pickupStart, and
+pickupEnd. Valid `packageTypeId` values come from `GET /api/package-types`, which needs no key at
+all. A demo key is already seeded on Stadionul de Gusturi for trying this out without generating
+your own first — see `DbSeeder.DemoWebhookApiKey` in the source, or ask an admin.
+
 `/payments` is the money version, scoped the same way: every order for your business with its
 payment status (Unpaid/Paid/Refunded/Refund failed), amount, and paid/refunded timestamps, plus
 two totals — "Collected" and "Refunded" — for whatever page of results you're currently looking
@@ -651,11 +677,15 @@ with the same chip-and-dropdown UI, shown only for BusinessManager accounts.
 
 `/types` lets an Admin add, rename, or delete the categories businesses and packages pick from
 (Restaurant/Bakery/Cafe/... for kitchens, Surprise Bag/Meal Box/... for packages) without
-needing a code change or a database migration for a single new row. Each of the two lists (side
+needing a code change or a database migration for a single new row. Each of the three lists (side
 by side) supports an inline rename (pencil icon → edit the name in place → check to save) and a
 delete (trash icon, confirmed before it happens). Deleting a type that's still used by at least
 one business or package is blocked with an explanation instead of silently breaking those rows —
-reassign or remove them first.
+reassign or remove them first. The third list, **Brands**, works the same way and shows each
+brand's current location count next to its name (also linking to its public `/brands/{id}` page);
+deleting one is blocked the same way while any business is still assigned to it. A manager assigns
+their own business to a brand from that business's edit form — see
+[Set up a loyalty punch card](#set-up-a-loyalty-punch-card).
 
 ### Platform-wide visibility
 

@@ -14,6 +14,8 @@ public interface IPackageService
     // budget planner's search tool (BasketPlannerAgent).
     public Task<List<Package>> GetLiveCandidatesAsync(string? dietaryTag);
     public Task AddAsync(Package package);
+    // Skips AddAsync's staff/admin check — WebhookIntakeService authenticates via API key instead.
+    public Task AddFromWebhookAsync(Package package);
     public Task UpdateAsync(Package package);
     public Task DeleteAsync(Package package);
 

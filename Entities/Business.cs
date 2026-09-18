@@ -28,9 +28,16 @@ public class Business
     // their next checkout — see LoyaltyService.
     public int? LoyaltyPunchThreshold { get; set; }
     public decimal? LoyaltyDiscountAmount { get; set; }
+    // Groups this location under a shared chain profile — null means a standalone business.
+    public Guid? BrandId { get; set; }
+    // SHA-256 hex hash of a webhook API key — never the plaintext. Null blocks the webhook endpoint.
+    public string? WebhookApiKeyHash { get; set; }
+    public DateTime? WebhookApiKeyLastUsedAt { get; set; }
     public Guid BusinessTypeId { get; set; }
     [ForeignKey(nameof(BusinessTypeId))]
     public BusinessType BusinessType { get; set; } = null!;
+    [ForeignKey(nameof(BrandId))]
+    public Brand? Brand { get; set; }
     public ICollection<BusinessStaff> Staff { get; set; } = [];
     public ICollection<Package> Packages { get; set; } = [];
     public ICollection<Order> Orders { get; set; } = [];

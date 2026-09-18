@@ -33,4 +33,9 @@ public static class AuditActions
     public const string OrderCompleted = "OrderCompleted";
     public const string OrderCancelled = "OrderCancelled";
     public const string OrderNoShow = "OrderNoShow";
+    public const string BrandCreated = "BrandCreated";
+    public const string BrandUpdated = "BrandUpdated";
+    public const string BrandDeleted = "BrandDeleted";
+    public const string BusinessWebhookKeyGenerated = "BusinessWebhookKeyGenerated";
+    public const string BusinessWebhookKeyRevoked = "BusinessWebhookKeyRevoked";
 }

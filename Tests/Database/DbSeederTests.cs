@@ -133,7 +133,8 @@ public class DbSeederTests(PostgresFixture fixture)
         Assert.All(orders, o => Assert.True(o.OrderNumber > 0));
 
         Assert.Equal(3, await db.Favorites.CountAsync(f => f.UserId == customer.Id));
-        Assert.Equal(2, await db.Reviews.CountAsync(r => r.UserId == customer.Id));
+        // 2 original demo reviews + 1 Phase 1 brand-demo review (Poarta de Aur Bakery).
+        Assert.Equal(3, await db.Reviews.CountAsync(r => r.UserId == customer.Id));
         Assert.True(await db.Notifications.AnyAsync(n => n.UserId == customer.Id));
         Assert.True(await db.Notifications.AnyAsync(n => n.UserId == manager.Id));
     }
@@ -182,7 +183,11 @@ public class DbSeederTests(PostgresFixture fixture)
         // orders (2 for demo.customer2, 1 for demo.customer3) + 2 Phase 13 Rescue Circle orders.
         Assert.Equal(25, await finalDb.Orders.CountAsync());
         Assert.Equal(3, await finalDb.Favorites.CountAsync());
-        Assert.Equal(2, await finalDb.Reviews.CountAsync());
+        // 2 original demo reviews + 2 Phase 1 brand-demo reviews (one per bakery branch).
+        Assert.Equal(4, await finalDb.Reviews.CountAsync());
+        // Proves SeedBrandsAsync's own guards held on the second run.
+        Assert.Equal(2, await finalDb.Brands.CountAsync());
+        Assert.Equal(5, await finalDb.Businesses.CountAsync(b => b.BrandId != null));
         // Two demo managers each staff one or two of the demo businesses — must not double-insert.
         Assert.Equal(3, await finalDb.BusinessStaff.CountAsync());
         Assert.Equal(5, await finalDb.Reports.CountAsync());
@@ -368,6 +373,33 @@ public class DbSeederTests(PostgresFixture fixture)
         // The rewarded referral above should have credited both parties.
         Assert.Equal(ReferralCredit.ReferrerAmount, await db.StoreCreditEntries.Where(e => e.UserId == customer.Id).SumAsync(e => e.Amount));
         Assert.Equal(ReferralCredit.RefereeAmount, await db.StoreCreditEntries.Where(e => e.UserId == customer2.Id).SumAsync(e => e.Amount));
+    }
+
+    [Fact]
+    public async Task SeedAsync_FreshDatabase_SeedsBrandsAndWebhookApiKey()
+    {
+        await using var provider = await BuildSeededServicesAsync();
+        using var scope = provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<EcoMealDbContext>();
+
+        var brands = await db.Brands.Include(b => b.Businesses).ToListAsync();
+        Assert.Equal(2, brands.Count);
+
+        var bakeryBrand = Assert.Single(brands, b => b.Name == "Golden Boot Bakeries");
+        Assert.Equal(3, bakeryBrand.Businesses.Count);
+
+        var cafeBrand = Assert.Single(brands, b => b.Name == "Full-Time Coffee Co.");
+        Assert.Equal(2, cafeBrand.Businesses.Count);
+
+        // One review per bakery branch, feeding /brands/{id}'s aggregate rating.
+        var bakeryBusinessIds = bakeryBrand.Businesses.Select(b => b.Id).ToList();
+        Assert.Equal(2, await db.Reviews.CountAsync(r => bakeryBusinessIds.Contains(r.BusinessId)));
+
+        // The seeded demo webhook key's hash, not the plaintext, is what's actually stored.
+        var stadionul = await db.Businesses.FindAsync(new Guid("44444444-0000-0000-0000-000000000001"));
+        Assert.NotNull(stadionul!.WebhookApiKeyHash);
+        Assert.Equal(ApiKeyHasher.Hash(DbSeeder.DemoWebhookApiKey), stadionul.WebhookApiKeyHash);
+        Assert.Null(stadionul.WebhookApiKeyLastUsedAt);
     }
 
     [Fact]

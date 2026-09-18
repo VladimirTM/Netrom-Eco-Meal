@@ -147,4 +147,31 @@ public class BusinessController(IBusinessService businessService, ISearchIntentP
             return Unauthorized();
         }
     }
+
+    // Returns the plaintext key — the caller (Dashboard.razor) is expected to show it exactly once.
+    public async Task<ActionResult<string>> GenerateApiKeyAsync(Guid businessId)
+    {
+        try
+        {
+            var key = await businessService.GenerateApiKeyAsync(businessId);
+            return key is null ? NotFound() : key;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized();
+        }
+    }
+
+    public async Task<ActionResult> RevokeApiKeyAsync(Guid businessId)
+    {
+        try
+        {
+            await businessService.RevokeApiKeyAsync(businessId);
+            return NoContent();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized();
+        }
+    }
 }

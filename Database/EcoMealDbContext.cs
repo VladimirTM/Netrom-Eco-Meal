@@ -38,6 +38,8 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<KitchenTip> KitchenTips { get; set; }
     public DbSet<Referral> Referrals { get; set; }
     public DbSet<StoreCreditEntry> StoreCreditEntries { get; set; }
+    public DbSet<Brand> Brands { get; set; }
+    public DbSet<BrandFavorite> BrandFavorites { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -266,6 +268,37 @@ public class EcoMealDbContext : IdentityDbContext<ApplicationUser>
         modelBuilder.Entity<ApplicationUser>()
             .HasIndex(u => u.ReferralCode)
             .IsUnique();
+
+        // A brand can be deleted (or never assigned) without taking its locations down —
+        // unlike BusinessType's required FK, this one just leaves the business standalone.
+        modelBuilder.Entity<Business>()
+            .HasOne(b => b.Brand)
+            .WithMany(br => br.Businesses)
+            .HasForeignKey(b => b.BrandId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Nullable unique — same convention as WebhookApiKeyHash's column comment: only an actual
+        // generated key needs to resolve back to exactly one business.
+        modelBuilder.Entity<Business>()
+            .HasIndex(b => b.WebhookApiKeyHash)
+            .IsUnique();
+
+        // One favorite per customer per brand — same toggle-not-duplicate rule as Favorite.
+        modelBuilder.Entity<BrandFavorite>()
+            .HasIndex(f => new { f.UserId, f.BrandId })
+            .IsUnique();
+
+        modelBuilder.Entity<BrandFavorite>()
+            .HasOne(f => f.Brand)
+            .WithMany()
+            .HasForeignKey(f => f.BrandId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<BrandFavorite>()
+            .HasOne(f => f.User)
+            .WithMany()
+            .HasForeignKey(f => f.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // Optimistic concurrency so two managers confirming the same package can't oversell stock.
         modelBuilder.Entity<Package>()

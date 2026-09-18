@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Services.Interfaces;
@@ -10,6 +11,15 @@ namespace Netrom_Eco_Meal.Controllers;
 public class PackageTypeController(IPackageTypeService packageTypeService) : ControllerBase
 {
     public async Task<ActionResult<List<PackageType>>> GetAllAsync()
+    {
+        return await packageTypeService.GetAllAsync();
+    }
+
+    // Same as GetAllAsync, but a real anonymous HTTP route — lets a POS/inventory system
+    // discover valid PackageTypeIds without a login (see WebhookController).
+    [HttpGet("/api/package-types")]
+    [AllowAnonymous]
+    public async Task<ActionResult<List<PackageType>>> GetPublicAllAsync()
     {
         return await packageTypeService.GetAllAsync();
     }

@@ -52,7 +52,16 @@ public class PackageService(
     public async Task AddAsync(Package package)
     {
         await EnsureCanManageBusinessAsync(package.BusinessId);
+        await PersistNewPackageAsync(package);
+    }
 
+    public async Task AddFromWebhookAsync(Package package)
+    {
+        await PersistNewPackageAsync(package);
+    }
+
+    private async Task PersistNewPackageAsync(Package package)
+    {
         await packageRepository.AddAsync(package);
         await packageRepository.SaveChangesAsync();
         stockBroadcaster.NotifyBusinessChanged(package.BusinessId);

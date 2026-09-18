@@ -301,6 +301,51 @@
             <p class="text-muted small mt-2 mb-0">Paste this anywhere in your site's HTML — it renders your kitchen's total kg saved plus a CO2e/water equivalency.</p>
         </div>
     </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-transparent border-0 pt-4 px-4 pb-0">
+            <h6 class="fw-semibold mb-0">POS / inventory webhook</h6>
+            <p class="text-muted small mb-0">Let your own POS or inventory system create a live package the moment it's marked as end-of-day surplus — no need to type it into Add Package by hand.</p>
+        </div>
+        <div class="card-body px-4 pb-4">
+            @if (_apiKeyError is not null)
+            {
+                <div class="alert alert-danger py-2 small">@_apiKeyError</div>
+            }
+            @if (_generatedApiKey is not null)
+            {
+                <div class="alert alert-warning py-2 small">
+                    <strong>Copy this key now — it won't be shown again.</strong>
+                    <div class="input-group mt-2">
+                        <input type="text" class="form-control font-monospace small" readonly value="@_generatedApiKey" onclick="this.select();" id="webhook-api-key"/>
+                        <button type="button" class="btn btn-outline-secondary" onclick="const el = document.getElementById('webhook-api-key'); el.select(); navigator.clipboard.writeText(el.value); this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy', 1500);">
+                            Copy
+                        </button>
+                    </div>
+                </div>
+            }
+
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <button type="button" class="btn btn-outline-primary btn-sm" disabled="@_generatingKey" @onclick="GenerateApiKeyAsync">
+                    @if (_generatingKey)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                    }
+                    @(_hasApiKey ? "Regenerate key" : "Generate API key")
+                </button>
+                @if (_hasApiKey)
+                {
+                    <button type="button" class="btn btn-outline-danger btn-sm" @onclick="RevokeApiKeyAsync">Revoke key</button>
+                    <span class="text-muted small">@(_apiKeyLastUsedAt is { } lastUsed ? $"Last used {lastUsed:MMM d, yyyy HH:mm} UTC" : "Never used yet")</span>
+                }
+            </div>
+
+            <p class="text-muted small mb-1">Endpoint: <code>POST @WebhookEndpointUrl</code></p>
+            <p class="text-muted small mb-2">Header: <code>X-Api-Key: &lt;your key&gt;</code></p>
+            <pre class="bg-body-secondary p-2 small rounded"><code>@WebhookPayloadExample</code></pre>
+            <p class="text-muted small mb-0">Valid <code>packageTypeId</code> values come from <code>GET /api/package-types</code> — no auth needed.</p>
+        </div>
+    </div>
 }
 
 <div class="card border-0 shadow-sm">
@@ -374,6 +419,67 @@
     private string ImpactWidgetSnippet =>
         $"""<script src="{NavigationManager.BaseUri.TrimEnd('/')}/js/impact-widget.js" data-business-id="{_myBusinessId}"></script>""";
 
+    private bool _hasApiKey;
+    private DateTime? _apiKeyLastUsedAt;
+    private string? _generatedApiKey;
+    private bool _generatingKey;
+    private string? _apiKeyError;
+
+    private string WebhookEndpointUrl => $"{NavigationManager.BaseUri.TrimEnd('/')}/api/webhooks/packages";
+
+    private string WebhookPayloadExample => $$"""
+        {
+          "name": "Surprise Bag",
+          "description": "Today's leftover pastries",
+          "price": 9.99,
+          "quantity": 5,
+          "weightKg": 1.2,
+          "packageTypeId": "<see GET /api/package-types>",
+          "dietaryTags": ["Vegetarian"],
+          "pickupStart": "{{DateTime.UtcNow:yyyy-MM-dd}}T17:00:00Z",
+          "pickupEnd": "{{DateTime.UtcNow:yyyy-MM-dd}}T20:00:00Z"
+        }
+        """;
+
+    private async Task GenerateApiKeyAsync()
+    {
+        if (_myBusinessId is not { } businessId)
+            return;
+
+        _apiKeyError = null;
+        _generatingKey = true;
+        var result = await BusinessController.GenerateApiKeyAsync(businessId);
+        _generatingKey = false;
+
+        if (result.Result is UnauthorizedResult)
+        {
+            _apiKeyError = "You don't have permission to manage this business's webhook key.";
+            return;
+        }
+
+        _generatedApiKey = result.Value;
+        _hasApiKey = true;
+        _apiKeyLastUsedAt = null;
+    }
+
+    private async Task RevokeApiKeyAsync()
+    {
+        if (_myBusinessId is not { } businessId)
+            return;
+
+        _apiKeyError = null;
+        var result = await BusinessController.RevokeApiKeyAsync(businessId);
+        if (result is UnauthorizedResult)
+        {
+            _apiKeyError = "You don't have permission to manage this business's webhook key.";
+            return;
+        }
+
+        _hasApiKey = false;
+        _apiKeyLastUsedAt = null;
+        _generatedApiKey = null;
+    }
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -412,6 +518,14 @@
 
         // Backs the "Share your impact" snippet below — admins manage no single business, so they get none.
         _myBusinessId = myBusinessId;
+        _generatedApiKey = null;
+        _apiKeyError = null;
+        if (myBusinessId is { } businessId)
+        {
+            var business = (await BusinessController.GetByIdAsync(businessId)).Value;
+            _hasApiKey = business?.WebhookApiKeyHash is not null;
+            _apiKeyLastUsedAt = business?.WebhookApiKeyLastUsedAt;
+        }
 
         var orders = await OrderController.GetOrdersForManagementAsync(myBusinessId);
         if (orders.Result is UnauthorizedResult)

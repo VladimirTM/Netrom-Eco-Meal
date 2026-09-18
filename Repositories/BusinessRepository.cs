@@ -86,7 +86,12 @@ public class BusinessRepository(EcoMealDbContext context) : IBusinessRepository
     public async Task<Business?> GetByIdAsync(Guid id)
     {
         return await context.Businesses.Include(b => b.Staff).ThenInclude(s => s.User).Include(b => b.BusinessType)
-            .Include(b => b.Hours).Include(b => b.Closures).AsSplitQuery().FirstOrDefaultAsync(o => o.Id == id);
+            .Include(b => b.Hours).Include(b => b.Closures).Include(b => b.Brand).AsSplitQuery().FirstOrDefaultAsync(o => o.Id == id);
+    }
+
+    public async Task<Business?> GetByApiKeyHashAsync(string apiKeyHash)
+    {
+        return await context.Businesses.FirstOrDefaultAsync(b => b.WebhookApiKeyHash == apiKeyHash);
     }
 
     public async Task<Dictionary<Guid, string>> GetNamesByIdsAsync(IEnumerable<Guid> ids)

@@ -325,7 +325,41 @@ public class BusinessService(
         businessToUpdate.Latitude = business.Latitude;
         businessToUpdate.Longitude = business.Longitude;
         businessToUpdate.BusinessTypeId = business.BusinessTypeId;
+        businessToUpdate.BrandId = business.BrandId;
         (businessToUpdate.LoyaltyPunchThreshold, businessToUpdate.LoyaltyDiscountAmount) = NormalizeLoyalty(business.LoyaltyPunchThreshold, business.LoyaltyDiscountAmount);
+    }
+
+    public async Task<string?> GenerateApiKeyAsync(Guid businessId)
+    {
+        var business = await businessRepository.GetByIdAsync(businessId);
+        if (business is null)
+            return null;
+
+        await EnsureStaffOrAdminAsync(businessId);
+
+        var plaintext = ApiKeyHasher.Generate();
+        business.WebhookApiKeyHash = ApiKeyHasher.Hash(plaintext);
+        business.WebhookApiKeyLastUsedAt = null;
+        await businessRepository.SaveChangesAsync();
+
+        await auditLogService.LogAsync(AuditActions.BusinessWebhookKeyGenerated, AuditTargetTypes.Business, business.Id.ToString(), business.Name);
+
+        return plaintext;
+    }
+
+    public async Task RevokeApiKeyAsync(Guid businessId)
+    {
+        var business = await businessRepository.GetByIdAsync(businessId);
+        if (business is null)
+            return;
+
+        await EnsureStaffOrAdminAsync(businessId);
+
+        business.WebhookApiKeyHash = null;
+        business.WebhookApiKeyLastUsedAt = null;
+        await businessRepository.SaveChangesAsync();
+
+        await auditLogService.LogAsync(AuditActions.BusinessWebhookKeyRevoked, AuditTargetTypes.Business, business.Id.ToString(), business.Name);
     }
 
     // Both-or-neither: an incomplete pair (e.g. a stale threshold after the discount field was

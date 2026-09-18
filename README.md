@@ -50,6 +50,9 @@ is just the capability summary.
   star reviews and moderated the same way a reported business/package is
 - Invite a friend from `/referrals`: once they complete their first order, you both get store
   credit, applied automatically (alongside any loyalty discount) at your next checkout
+- Browse chains with more than one location on `/brands` — a combined rating across every
+  branch, and a favorite button that follows the whole chain rather than one address, with a
+  "nearest location open now" shortcut if you share your location
 
 **BusinessManager** — staff of one or more businesses (assigned by an Admin), scoped to
 whichever one they pick in the sidebar switcher:
@@ -74,6 +77,10 @@ whichever one they pick in the sidebar switcher:
 - Grab a public, read-only "share your impact" embed snippet from `/dashboard` — a small script
   your own website can drop in to show your kitchen's live kg-saved/CO2e/water numbers, no login
   needed on the visitor's end
+- Generate an API key from `/dashboard` and let your own POS/inventory system create live
+  packages directly via a webhook, instead of typing each one into Add Package by hand
+- Group your business with its other locations under one shared brand page (assigned from the
+  business edit form; an admin manages the list of brands)
 - Staffing more than one business surfaces a switcher in the sidebar to pick which one is
   "current" for every page above — staffing just one skips the switcher entirely
 
@@ -87,8 +94,9 @@ whichever one they pick in the sidebar switcher:
 - See store-wide stats on `/dashboard` and every payment across every business on `/payments`
 - Approve or reject self-service business applications on `/businesses`, hide/unhide a
   business or package without deleting it, and review customer reports on `/reports`
-- Add, rename or remove kitchen and package types on `/types` — no code change or
-  migration needed for a new category, and a type still in use can't be deleted
+- Add, rename or remove kitchen and package types, and group businesses into brands, on
+  `/types` — no code change or migration needed for a new category, and a type or brand still in
+  use can't be deleted
 - See who did what — role changes, business create/edit/delete/staffing, approvals,
   moderation — on `/audit-log`
 
@@ -408,6 +416,15 @@ invited both other demo customers: demo.customer2's invite already paid off (a r
 `StoreCreditEntry` pair, so the demo customer's balance is non-zero and gets applied automatically
 at their next checkout), while demo.customer3's is left pending, so the page shows both a rewarded
 and a waiting invite instead of only one.
+
+Three of the bakery businesses (Poarta de Aur Bakery, Hat-Trick Bakery, Fotbal & Focaccia) are
+grouped into a "Golden Boot Bakeries" brand, and the two cafes into "Full-Time Coffee Co.", so
+`/brands` has real multi-location demo data — including two extra reviews across the bakery
+branches, so its combined rating isn't empty. Stadionul de Gusturi also comes with a pre-generated
+webhook API key (`DbSeeder.DemoWebhookApiKey` in the source) already set, so `POST
+/api/webhooks/packages` can be tried immediately without generating a key from `/dashboard`
+first — see [Business Manager → POS/inventory webhook](USER_GUIDE.md#keep-an-eye-on-things) in
+the user guide for the request shape.
 
 ## Running tests
 

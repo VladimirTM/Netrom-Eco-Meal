@@ -20,6 +20,9 @@
                         <a href="/impact" class="public-cart-btn" title="Community impact leaderboard" aria-label="Community impact leaderboard">
                             <i class="bi bi-trophy"></i>
                         </a>
+                        <a href="/brands" class="public-cart-btn" title="Browse brands" aria-label="Browse brands">
+                            <i class="bi bi-diagram-3"></i>
+                        </a>
                         <NotificationBell TriggerClass="public-cart-btn"/>
                         @if (context.User.IsInRole(AppRoles.Customer))
                         {
@@ -78,6 +81,9 @@
                     <div class="d-flex align-items-center gap-2">
                         <a href="/impact" class="public-cart-btn" title="Community impact leaderboard" aria-label="Community impact leaderboard">
                             <i class="bi bi-trophy"></i>
+                        </a>
+                        <a href="/brands" class="public-cart-btn" title="Browse brands" aria-label="Browse brands">
+                            <i class="bi bi-diagram-3"></i>
                         </a>
                         <a href="/account/login" class="public-header-btn public-header-btn-ghost">Sign in</a>
                         <a href="/account/register" class="public-header-btn public-header-btn-primary">Create account</a>

@@ -13,6 +13,7 @@
 @inject BusinessController BusinessController
 @inject IBusinessService BusinessService
 @inject IBusinessTypeService BusinessTypeService
+@inject IBrandService BrandService
 @inject IImageUploadService ImageUploadService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
@@ -76,6 +77,19 @@
                                 }
                             </InputSelect>
                         </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="brand" class="form-label fw-semibold">
+                            Brand <span class="text-muted fw-normal">(optional — groups this as one location of a chain)</span>
+                        </label>
+                        <InputSelect id="brand" class="form-select" @bind-Value="_model.BrandId">
+                            <option value="">— Standalone business —</option>
+                            @foreach (var brand in _brands)
+                            {
+                                <option value="@brand.Id">@brand.Name</option>
+                            }
+                        </InputSelect>
+                        <div class="form-text">Manage the list of brands from the <a href="/types">Kitchen &amp; Package Types</a> page.</div>
                     </div>
                     <div class="mb-4">
                         <label for="imageFile" class="form-label fw-semibold">
@@ -293,6 +307,7 @@
 
     private BusinessFormModel _model = new();
     private List<BusinessType> _businessTypes = [];
+    private List<Brand> _brands = [];
     private bool _forbidden;
     private bool _notFound;
     private bool _locating;
@@ -333,6 +348,7 @@
         }
 
         _businessTypes = await BusinessTypeService.GetAllAsync();
+        _brands = await BrandService.GetAllAsync();
 
         if (IsEdit)
         {
@@ -356,6 +372,7 @@
             _model.Latitude = existing.Latitude;
             _model.Longitude = existing.Longitude;
             _model.BusinessTypeId = existing.BusinessTypeId;
+            _model.BrandId = existing.BrandId;
             _model.LoyaltyPunchThreshold = existing.LoyaltyPunchThreshold;
             _model.LoyaltyDiscountAmount = existing.LoyaltyDiscountAmount;
 
@@ -497,6 +514,7 @@
                 Latitude = _model.Latitude,
                 Longitude = _model.Longitude,
                 BusinessTypeId = _model.BusinessTypeId,
+                BrandId = _model.BrandId,
                 LoyaltyPunchThreshold = _model.LoyaltyPunchThreshold,
                 LoyaltyDiscountAmount = _model.LoyaltyDiscountAmount
             };
@@ -513,6 +531,7 @@
                 Latitude = _model.Latitude,
                 Longitude = _model.Longitude,
                 BusinessTypeId = _model.BusinessTypeId,
+                BrandId = _model.BrandId,
                 LoyaltyPunchThreshold = _model.LoyaltyPunchThreshold,
                 LoyaltyDiscountAmount = _model.LoyaltyDiscountAmount
             };
@@ -574,6 +593,8 @@
         public double? Longitude { get; set; }
 
         public Guid BusinessTypeId { get; set; }
+
+        public Guid? BrandId { get; set; }
 
         [Range(2, 50, ErrorMessage = "Threshold must be between 2 and 50 orders.")]
         public int? LoyaltyPunchThreshold { get; set; }

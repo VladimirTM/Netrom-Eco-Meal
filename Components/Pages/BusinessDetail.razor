@@ -61,6 +61,12 @@ else
                         </div>
                     </div>
                     <div class="biz-modal-meta">
+                        @if (_business.Brand is not null)
+                        {
+                            <a href="@($"/brands/{_business.Brand.Id}")" class="biz-modal-open-badge biz-modal-open-badge-open text-decoration-none">
+                                <i class="bi bi-diagram-3"></i> Part of @_business.Brand.Name
+                            </a>
+                        }
                         <span class="biz-modal-address"><i class="bi bi-geo-alt-fill"></i>@_business.Address</span>
                         @if (OpenNow is { } openNow)
                         {
