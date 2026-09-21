@@ -5,6 +5,9 @@ namespace Netrom_Eco_Meal.Services;
 // same OnChange + InvokeAsync(StateHasChanged) idiom CartService/ClientTimeZoneService use.
 // Carries only BusinessId, not a precomputed quantity: "available stock" also depends on each
 // viewer's own cart (CartService.AvailableQuantity), so subscribers re-fetch and recompute locally.
+// Invoked synchronously and inline on the caller's thread — see BusinessDetail.razor's
+// HandleStockChanged for why a same-circuit subscriber needs to treat that reentrant call
+// differently from a normal cross-circuit one.
 public class PackageStockBroadcaster
 {
     public event Action<Guid>? BusinessStockChanged;

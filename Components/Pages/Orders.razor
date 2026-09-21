@@ -143,9 +143,21 @@
                             <div class="order-ticket-pickup">
                                 <i class="bi bi-clock"></i>Pickup @PickupWindow(order)
                             </div>
+                            @{
+                                // Payment.Amount is what Stripe actually charged post-discount — the raw
+                                // subtotal alone would mislead a customer reconciling their card statement.
+                                var subtotal = order.OrderPackages.Sum(op => op.Quantity * op.Package.Price);
+                                var charged = order.Payment?.Amount ?? subtotal;
+                            }
                             <div class="order-ticket-total">
                                 <span>Total</span>
-                                <span class="order-ticket-total-value">@order.OrderPackages.Sum(op => op.Quantity * op.Package.Price).ToString("C")</span>
+                                <span class="order-ticket-total-value">
+                                    @charged.ToString("C")
+                                    @if (order.Payment is not null && charged < subtotal)
+                                    {
+                                        <span class="text-muted small fw-normal">(@subtotal.ToString("C") before discount)</span>
+                                    }
+                                </span>
                             </div>
                         </div>
 

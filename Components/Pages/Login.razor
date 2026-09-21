@@ -40,7 +40,13 @@
             }
             @if (Error is not null)
             {
-                <div class="alert alert-danger py-2 small mb-3" role="alert">@Error</div>
+                <div class="alert alert-danger py-2 small mb-3" role="alert">
+                    @Error
+                    @if (Unconfirmed)
+                    {
+                        <span> <a href="/account/resend-confirmation">Resend confirmation email</a></span>
+                    }
+                </div>
             }
             <button class="btn btn-primary w-100 py-2 fw-semibold" type="submit">Sign in</button>
         </form>
@@ -60,4 +66,7 @@
 
     [SupplyParameterFromQuery]
     public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery]
+    public bool Unconfirmed { get; set; }
 }

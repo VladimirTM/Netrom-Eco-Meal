@@ -540,6 +540,47 @@ h1:focus {
     white-space: nowrap;
 }
 
+/* The icon row keeps growing as features ship (broke again at 768px after the 11-icon fix only
+   covered <=576px), so this scroll-within-itself behavior is unconditional — a no-op wherever
+   the row already fits. Only cosmetic shrinking below stays size-tier-specific. */
+.public-header-inner {
+    flex-wrap: nowrap;
+}
+
+.public-header-inner .public-brand {
+    flex-shrink: 0;
+}
+
+.public-header-inner .d-flex.gap-2 {
+    flex-wrap: nowrap;
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    /* Fades the trailing edge as a swipe hint; harmless no-op without mask-image support.
+       JS toggles .at-scroll-end (see site.js) once fully scrolled, clearing the fade. */
+    mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+    padding-right: 8px;
+}
+
+.public-header-inner .d-flex.gap-2.at-scroll-end {
+    mask-image: none;
+    -webkit-mask-image: none;
+}
+
+.public-header-inner .d-flex.gap-2::-webkit-scrollbar {
+    display: none;
+}
+
+.public-cart-btn {
+    flex-shrink: 0;
+}
+
+.public-header-logout {
+    flex-shrink: 0;
+}
+
 @media (max-width: 576px) {
     .public-header-inner {
         padding: 0.7rem 1rem;
@@ -562,33 +603,8 @@ h1:focus {
         border-radius: 8px;
     }
 
-    /* 11 icons now (was ~7) outgrew what shrunk buttons alone can fit, so the row scrolls
-       horizontally within itself: `min-width: 0` lets it shrink instead of forcing the whole
-       page wider, `overflow-x: auto` gives it its own scroll. Brand block stays flex-shrink: 0. */
-    .public-header-inner {
-        flex-wrap: nowrap;
-    }
-
-    .public-header-inner .public-brand {
-        flex-shrink: 0;
-    }
-
     .public-header-inner .d-flex.gap-2 {
         gap: 0.3rem !important;
-        flex-wrap: nowrap;
-        min-width: 0;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-        /* Fades the trailing edge when there's more to scroll to, as a swipe hint — harmless
-           no-op in browsers without mask-image support. */
-        mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
-        -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
-        padding-right: 8px;
-    }
-
-    .public-header-inner .d-flex.gap-2::-webkit-scrollbar {
-        display: none;
     }
 
     .public-cart-btn {
@@ -596,7 +612,6 @@ h1:focus {
         height: 32px;
         font-size: 0.85rem;
         border-radius: 8px;
-        flex-shrink: 0;
     }
 
     .public-header-logout {
@@ -2561,6 +2576,23 @@ h1:focus {
     background-position: center;
     background-repeat: no-repeat;
     flex-shrink: 0;
+}
+
+/* Hidden by default — site.js's EcoMeal.media.checkPlaceholders reveals it once there's
+   genuinely nothing to show (unset or unreachable Business.ImageUrl). */
+.biz-card-media-placeholder-icon {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.5rem;
+    color: rgba(255, 255, 255, 0.3);
+    pointer-events: none;
+}
+
+.biz-card-media.biz-image-failed .biz-card-media-placeholder-icon {
+    display: flex;
 }
 
 .biz-card-live-badge {

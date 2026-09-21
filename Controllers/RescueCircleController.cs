@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Services.Interfaces;
+using Stripe;
 
 namespace Netrom_Eco_Meal.Controllers;
 
@@ -20,6 +21,12 @@ public class RescueCircleController(IRescueCircleService rescueCircleService) : 
         {
             return Conflict(ex.Message);
         }
+        catch (StripeException)
+        {
+            // Belt-and-suspenders alongside RescueCircleService's own upfront share-size check —
+            // same crash risk as PaymentController's checkout for any other Stripe failure.
+            return Conflict("This order can't be split that many ways — try fewer participants or a larger basket.");
+        }
     }
 
     public async Task<ActionResult<string>> JoinOrPayAsync(Guid circleId)
@@ -31,6 +38,10 @@ public class RescueCircleController(IRescueCircleService rescueCircleService) : 
         catch (Exception ex) when (ex is UnauthorizedAccessException or InvalidOperationException)
         {
             return Conflict(ex.Message);
+        }
+        catch (StripeException)
+        {
+            return Conflict("We couldn't start payment for your share — please contact the organizer.");
         }
     }
 

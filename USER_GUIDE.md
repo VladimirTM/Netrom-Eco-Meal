@@ -32,7 +32,9 @@ you can't sign in until you click the confirmation link — check your inbox, or
 outgoing email locally instead of sending it. The confirmation and password-reset emails share
 one branded template with a single call-to-action button ("Confirm my account" /
 "Reset my password"); the reset link doesn't reveal whether the email address exists, so it's
-safe against account enumeration.
+safe against account enumeration. Lost the email or let the link expire? Trying to sign in shows
+a **Resend confirmation email** link right next to the error — it goes to
+`/account/resend-confirmation`, which sends a fresh link the same enumeration-safe way.
 
 Once signed in, the gear icon in the header (every role has one) — or, for Admin/BusinessManager,
 **Account Settings** in the dashboard sidebar — opens the same form: update your display name, or
@@ -183,7 +185,9 @@ In the basket panel, **Split this with friends instead** (below **Pay & place or
 the pay button for a people-count stepper (2–6) showing roughly how much each person's share
 will be. Clicking **Start & pay my share** places the order right away and takes you to Stripe
 to pay just your own portion — the order stays open for the rest of the group to join and pay
-theirs.
+theirs. Splitting a small enough basket too many ways is refused up front ("try fewer
+participants or a larger basket") rather than letting you place an order nobody could ever
+finish paying off.
 
 You get a link (your circle's `/circles/{id}` page) to send around. Anyone signed in can open
 it to see how many of the seats are filled and how many shares are paid; a friend who isn't in
@@ -205,6 +209,8 @@ Confirmed, Completed, NoShow, Cancelled. Each order renders as a ticket card —
 on it to open the full detail view, including a payment badge ("Paid", "Refunded", or — if the
 automatic refund itself failed — "Refund failed") when applicable, and the pickup window
 formatted as e.g. "Aug 8 · 14:00–16:00" (or spanning two dates if the window crosses midnight).
+The total shown is what you actually paid — if a loyalty reward or store credit knocked money
+off at checkout, a small "(X before discount)" note next to it shows the original price too.
 A **Completed** order's receipt also shows what that pickup actually meant — roughly how many
 km of driving and liters of water it's equivalent to, right under the total.
 
@@ -557,7 +563,8 @@ pasting the snippet — hit **Copy** and drop it wherever you'd like it to show 
 A **POS / inventory webhook** card below that lets your own point-of-sale or inventory system
 create a live package directly instead of you retyping it into Add Package by hand. **Generate
 API key** shows you a key exactly once — copy it somewhere safe, since it can't be shown again —
-and **Regenerate key**/**Revoke key** replace or disable it at any time. Have your system send a
+and **Regenerate key**/**Revoke key** replace or disable it at any time — revoking asks you to
+confirm first, since your POS system stops working the moment you do. Have your system send a
 `POST` to the endpoint and header shown on the card (`X-Api-Key: <your key>`) with a small JSON
 body: name, description, price, quantity, weightKg, packageTypeId, dietaryTags, pickupStart, and
 pickupEnd. Valid `packageTypeId` values come from `GET /api/package-types`, which needs no key at

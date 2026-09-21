@@ -221,7 +221,10 @@
                 var live = LivePackagesFor(business.Id);
                 var reviews = ReviewsFor(business.Id);
                 <button type="button" class="biz-card" @key="business.Id" @onclick="() => OpenBusiness(business.Id)">
-                    <div class="biz-card-media" style="@MediaStyle(business.ImageUrl)">
+                    @* data-image-url drives site.js's EcoMeal.media.checkPlaceholders — CSS background-image
+                       has no failure event, so a broken/unset URL needs JS to reveal the icon below. *@
+                    <div class="biz-card-media" style="@MediaStyle(business.ImageUrl)" data-image-url="@(business.ImageUrl ?? "")">
+                        <i class="bi bi-shop biz-card-media-placeholder-icon" aria-hidden="true"></i>
                         @if (live.Count > 0)
                         {
                             <span class="biz-card-live-badge"><span class="biz-card-live-dot"></span>@live.Count live</span>

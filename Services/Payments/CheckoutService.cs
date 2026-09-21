@@ -86,7 +86,7 @@ public class CheckoutService(
         // into one Stripe Coupon and clamped below the subtotal — the credit portion is only
         // debited from the ledger in CompleteCheckoutAsync once Stripe confirms payment, never before.
         var subtotal = checkoutLines.Sum(l => l.UnitPrice * l.Quantity);
-        var maxDiscount = Math.Max(0m, subtotal - Loyalty.MinDiscountAmount);
+        var maxDiscount = Math.Max(0m, subtotal - Checkout.MinChargeableAmount);
 
         var rawLoyaltyDiscount = await loyaltyService.EvaluateDiscountAsync(userId, businessId);
         var loyaltyDiscount = rawLoyaltyDiscount is > 0 ? Math.Min(rawLoyaltyDiscount.Value, maxDiscount) : 0m;

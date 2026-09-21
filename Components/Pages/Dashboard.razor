@@ -335,7 +335,7 @@
                 </button>
                 @if (_hasApiKey)
                 {
-                    <button type="button" class="btn btn-outline-danger btn-sm" @onclick="RevokeApiKeyAsync">Revoke key</button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => _confirmingRevoke = true">Revoke key</button>
                     <span class="text-muted small">@(_apiKeyLastUsedAt is { } lastUsed ? $"Last used {lastUsed:MMM d, yyyy HH:mm} UTC" : "Never used yet")</span>
                 }
             </div>
@@ -346,6 +346,14 @@
             <p class="text-muted small mb-0">Valid <code>packageTypeId</code> values come from <code>GET /api/package-types</code> — no auth needed.</p>
         </div>
     </div>
+
+    <ConfirmDialog IsOpen="_confirmingRevoke"
+                   Title="Revoke this webhook key?"
+                   Message="Your POS/inventory system will immediately stop being able to create packages until you generate a new one."
+                   ConfirmLabel="Revoke key"
+                   Busy="_revokingKey"
+                   OnConfirm="RevokeApiKeyAsync"
+                   OnCancel="() => _confirmingRevoke = false"/>
 }
 
 <div class="card border-0 shadow-sm">
@@ -424,6 +432,8 @@
     private string? _generatedApiKey;
     private bool _generatingKey;
     private string? _apiKeyError;
+    private bool _confirmingRevoke;
+    private bool _revokingKey;
 
     private string WebhookEndpointUrl => $"{NavigationManager.BaseUri.TrimEnd('/')}/api/webhooks/packages";
 
@@ -465,10 +475,17 @@
     private async Task RevokeApiKeyAsync()
     {
         if (_myBusinessId is not { } businessId)
+        {
+            _confirmingRevoke = false;
             return;
+        }
 
         _apiKeyError = null;
+        _revokingKey = true;
         var result = await BusinessController.RevokeApiKeyAsync(businessId);
+        _revokingKey = false;
+        _confirmingRevoke = false;
+
         if (result is UnauthorizedResult)
         {
             _apiKeyError = "You don't have permission to manage this business's webhook key.";

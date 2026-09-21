@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Netrom_Eco_Meal.Entities;
 using Netrom_Eco_Meal.Services.Interfaces;
+using Stripe;
 
 namespace Netrom_Eco_Meal.Controllers;
 
@@ -18,6 +19,12 @@ public class PaymentController(ICheckoutService checkoutService) : ControllerBas
         catch (Exception ex) when (ex is UnauthorizedAccessException or InvalidOperationException)
         {
             return Conflict(ex.Message);
+        }
+        catch (StripeException)
+        {
+            // Belt-and-suspenders alongside Checkout.MinChargeableAmount — a raw Stripe error here
+            // would otherwise crash the whole Blazor circuit instead of showing CartPanel's inline error.
+            return Conflict("We couldn't start checkout for this order — please try a different basket total.");
         }
     }
 

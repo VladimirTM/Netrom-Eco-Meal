@@ -373,7 +373,7 @@ else
                         <Authorized>
                             <div class="biz-review-form">
                                 <textarea class="form-control biz-review-textarea" rows="2" maxlength="@KitchenTips.MaxLength"
-                                          placeholder="e.g. Use the side door after 8pm" @bind="_newTipText"></textarea>
+                                          placeholder="e.g. Use the side door after 8pm" @bind="_newTipText" @bind:event="oninput"></textarea>
                                 @if (_tipError is not null)
                                 {
                                     <div class="alert alert-danger py-2 small mb-0">@_tipError</div>
@@ -601,16 +601,20 @@ else
         if (businessId != Id)
             return;
 
-        // InvokeAsync hands off to this component's own renderer — the broadcaster called us
-        // synchronously from whatever circuit's request actually caused the change. Swallow
-        // failures the same way NotificationPanelState's poll timer does: a circuit tearing down
-        // mid-reload isn't worth surfacing, and the next real change will just try again.
-        _ = InvokeAsync(async () =>
+        // The broadcaster calls us synchronously and can be THIS circuit (the cart panel starting
+        // a Rescue Circle is an overlay on this very page) — InvokeAsync would then run inline,
+        // reentrantly, racing LoadPackagesAsync's DbContext use against the order-placing code
+        // still further up this same call stack. Task.Run first guarantees we're never still on
+        // the caller's thread, so InvokeAsync always genuinely queues instead.
+        _ = Task.Run(async () =>
         {
             try
             {
-                await LoadPackagesAsync();
-                StateHasChanged();
+                await InvokeAsync(async () =>
+                {
+                    await LoadPackagesAsync();
+                    StateHasChanged();
+                });
             }
             catch (Exception)
             {

@@ -111,6 +111,17 @@ public class AuthService(
         await emailSender.SendEmailAsync(email, "Eco Meal — Reset your password", html);
     }
 
+    public async Task ResendConfirmationEmailAsync(string email)
+    {
+        var user = await userManager.FindByEmailAsync(email);
+        // Don't reveal whether an account exists for this email, or whether it's already
+        // confirmed — either would let this form be used to probe accounts.
+        if (user is null || user.EmailConfirmed)
+            return;
+
+        await SendConfirmationEmailAsync(user);
+    }
+
     public async Task<string?> ResetPasswordAsync(string email, string token, string newPassword)
     {
         var user = await userManager.FindByEmailAsync(email);

@@ -75,9 +75,21 @@
                 }
             </div>
 
+            @{
+                // Payment.Amount (already in the badge above) is what Stripe actually charged —
+                // the raw subtotal alone would show two different totals on the same modal.
+                var subtotal = Order.OrderPackages.Sum(op => op.Quantity * op.Package.Price);
+                var charged = Order.Payment?.Amount ?? subtotal;
+            }
             <div class="order-modal-total">
                 <span>Total</span>
-                <span class="order-ticket-total-value">@Order.OrderPackages.Sum(op => op.Quantity * op.Package.Price).ToString("C")</span>
+                <span class="order-ticket-total-value">
+                    @charged.ToString("C")
+                    @if (Order.Payment is not null && charged < subtotal)
+                    {
+                        <span class="text-muted small fw-normal">(@subtotal.ToString("C") before discount)</span>
+                    }
+                </span>
             </div>
 
             @if (Order.Status.Name == OrderStatuses.Completed)

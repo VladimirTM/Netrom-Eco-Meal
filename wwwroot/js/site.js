@@ -241,7 +241,46 @@ window.EcoMeal = {
             await subscription.unsubscribe();
             return endpoint;
         }
+    },
+
+    // Backs the business-card placeholder icon (Home.razor's .biz-card-media). CSS background-image
+    // has no failure event, so a set-but-unreachable ImageUrl can only be caught by trying to load
+    // it here; an unset one is marked failed immediately, no network round-trip needed.
+    media: {
+        checkPlaceholders: function () {
+            document.querySelectorAll(".biz-card-media[data-image-url]").forEach(function (el) {
+                if (el.dataset.placeholderChecked) return;
+                el.dataset.placeholderChecked = "1";
+
+                var url = el.dataset.imageUrl;
+                if (!url) {
+                    el.classList.add("biz-image-failed");
+                    return;
+                }
+
+                var probe = new Image();
+                probe.onerror = function () { el.classList.add("biz-image-failed"); };
+                probe.src = url;
+            });
+        }
     }
 };
 
 EcoMeal.push.registerAsync();
+
+// Toggles the header icon row's scroll-end fade (app.css .at-scroll-end). Delegated at the
+// document level, capture phase, since scroll doesn't bubble — keeps working across re-renders.
+document.addEventListener("scroll", function (e) {
+    var row = e.target;
+    if (row && row.classList && row.classList.contains("gap-2") && row.closest && row.closest(".public-header-inner")) {
+        var atEnd = row.scrollLeft + row.clientWidth >= row.scrollWidth - 1;
+        row.classList.toggle("at-scroll-end", atEnd);
+    }
+}, { capture: true, passive: true });
+
+// Business cards get re-rendered wholesale on pagination/filtering, so a one-time DOMContentLoaded
+// scan would miss every page after the first — the observer catches new cards as they appear.
+EcoMeal.media.checkPlaceholders();
+new MutationObserver(function () {
+    EcoMeal.media.checkPlaceholders();
+}).observe(document.body, { childList: true, subtree: true });

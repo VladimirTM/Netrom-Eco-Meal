@@ -24,13 +24,21 @@ public class RescueCircleService(
         if (participantCount is < RescueCircles.MinParticipants or > RescueCircles.MaxParticipants)
             throw new InvalidOperationException($"A Rescue Circle needs between {RescueCircles.MinParticipants} and {RescueCircles.MaxParticipants} people.");
 
+        // Priced and validated before PlaceOrderAsync commits anything — a share this small used
+        // to only fail once StartShareCheckoutAsync hit Stripe, leaving a real order and an Open
+        // circle nobody could ever pay off.
+        var packageIds = lines.Select(l => l.PackageId).Distinct().ToList();
+        var packages = (await packageRepository.GetByIdsAsync(packageIds)).ToDictionary(p => p.Id);
+        var totalAmount = lines.Sum(l => packages.TryGetValue(l.PackageId, out var pkg) ? pkg.Price * l.Quantity : 0);
+
+        var otherShare = BaseShare(totalAmount, participantCount);
+        var organizerShare = totalAmount - otherShare * (participantCount - 1);
+        if (otherShare < Checkout.MinChargeableAmount || organizerShare < Checkout.MinChargeableAmount)
+            throw new InvalidOperationException("This order can't be split that many ways — try fewer participants or a larger basket.");
+
         // Reuses every existing rule PlaceOrderAsync already enforces (customer-only, rate limit,
         // stock availability) — the only difference from a solo order is that nobody's paid yet.
         var order = await orderService.PlaceOrderAsync(businessId, lines, logisticsNote);
-
-        var packageIds = lines.Select(l => l.PackageId).Distinct().ToList();
-        var packages = (await packageRepository.GetByIdsAsync(packageIds)).ToDictionary(p => p.Id);
-        var totalAmount = lines.Sum(l => packages[l.PackageId].Price * l.Quantity);
 
         var (_, organizerId) = await currentUser.GetCurrentUserAsync();
 
@@ -46,15 +54,14 @@ public class RescueCircleService(
         };
         dbContext.RescueCircles.Add(circle);
 
-        // The organizer's own slot absorbs the rounding remainder, so every other participant's
-        // share is a clean, round-cent amount and the sum still adds up to TotalAmount exactly.
-        var otherShare = BaseShare(totalAmount, participantCount);
+        // otherShare/organizerShare priced above — the organizer's slot absorbs the rounding
+        // remainder, so every other share is a clean, round-cent amount.
         var organizerParticipant = new RescueCircleParticipant
         {
             Id = Guid.NewGuid(),
             RescueCircleId = circle.Id,
             UserId = organizerId!,
-            ShareAmount = totalAmount - otherShare * (participantCount - 1),
+            ShareAmount = organizerShare,
             JoinedAt = DateTime.UtcNow,
         };
         dbContext.RescueCircleParticipants.Add(organizerParticipant);

@@ -91,6 +91,24 @@ public class RescueCircleServiceTests
     }
 
     [Fact]
+    public async Task StartCircleAsync_ShareBelowMinChargeableAmount_ThrowsWithoutPlacingOrder()
+    {
+        var f = Build(OrganizerId, AppRoles.Customer);
+        var businessId = Guid.NewGuid();
+        var package = TestData.Package(businessId);
+        package.Price = 5.00m; // split 6 ways -> 0.83/share, under Checkout.MinChargeableAmount (2.00)
+        f.PackageRepo.Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>())).ReturnsAsync([package]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            f.Service.StartCircleAsync(businessId, [new OrderLineRequest(package.Id, 1)], 6));
+
+        // The whole point of pricing the split before placing anything: a rejected split must
+        // leave no Order or RescueCircle behind for the organizer to be stuck with.
+        f.OrderService.Verify(o => o.PlaceOrderAsync(It.IsAny<Guid>(), It.IsAny<List<OrderLineRequest>>(), It.IsAny<string?>()), Times.Never);
+        Assert.False(await f.Db.RescueCircles.AnyAsync());
+    }
+
+    [Fact]
     public async Task StartCircleAsync_Success_CreatesCircleWithOrganizerAbsorbingRounding()
     {
         var f = Build(OrganizerId, AppRoles.Customer);

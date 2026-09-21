@@ -19,6 +19,9 @@ public interface IAuthService
     public Task<string?> ConfirmEmailAsync(string userId, string token);
     // Always succeeds silently — never reveals whether an account exists for the given email.
     public Task RequestPasswordResetAsync(string email);
+    // Always succeeds silently — same non-disclosure as RequestPasswordResetAsync, and also a
+    // silent no-op for an already-confirmed account (no reason to leak confirmation status either).
+    public Task ResendConfirmationEmailAsync(string email);
     public Task<string?> ResetPasswordAsync(string email, string token, string newPassword);
     // Return null on success, or a user-facing error message on failure.
     // Resolves the caller's own account via CurrentUserAccessor — only safe to call in-process

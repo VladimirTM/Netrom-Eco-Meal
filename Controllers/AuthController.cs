@@ -30,12 +30,15 @@ public class AuthController(IAuthService authService, SignInManager<ApplicationU
         }
 
         // IsNotAllowed covers RequireConfirmedAccount rejecting an unconfirmed email — worth telling
-        // apart from a plain wrong password, since the fix ("check your inbox") is completely different.
+        // apart from a plain wrong password, since the fix ("check your inbox") is completely
+        // different. A distinct query flag (rather than Login.razor string-matching the message
+        // below) is what lets it show a "resend confirmation email" link only for this case.
         var message = result.IsNotAllowed
             ? "Confirm your email before signing in — check your inbox for the confirmation link."
             : "Invalid login";
+        var unconfirmedFlag = result.IsNotAllowed ? "&unconfirmed=true" : "";
 
-        return LocalRedirect($"/account/login?error={Uri.EscapeDataString(message)}&returnUrl={returnUrl}");
+        return LocalRedirect($"/account/login?error={Uri.EscapeDataString(message)}&returnUrl={returnUrl}{unconfirmedFlag}");
     }
 
     [HttpPost("register")]
@@ -106,6 +109,9 @@ public class AuthController(IAuthService authService, SignInManager<ApplicationU
 
     public async Task RequestPasswordResetAsync(string email) =>
         await authService.RequestPasswordResetAsync(email);
+
+    public async Task ResendConfirmationEmailAsync(string email) =>
+        await authService.ResendConfirmationEmailAsync(email);
 
     public async Task<string?> ResetPasswordAsync(string email, string token, string newPassword) =>
         await authService.ResetPasswordAsync(email, token, newPassword);

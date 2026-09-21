@@ -89,7 +89,14 @@
                                 <option value="@brand.Id">@brand.Name</option>
                             }
                         </InputSelect>
-                        <div class="form-text">Manage the list of brands from the <a href="/types">Kitchen &amp; Package Types</a> page.</div>
+                        @if (_isAdmin)
+                        {
+                            <div class="form-text">Manage the list of brands from the <a href="/types">Kitchen &amp; Package Types</a> page.</div>
+                        }
+                        else
+                        {
+                            <div class="form-text">Don't see the chain you're looking for? Ask an admin to add it.</div>
+                        }
                     </div>
                     <div class="mb-4">
                         <label for="imageFile" class="form-label fw-semibold">
@@ -332,10 +339,12 @@
     private BusinessClosure? _pendingRemoveClosure;
     private bool _removingClosure;
 
+    private bool _isAdmin;
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var isAdmin = authState.User.IsInRole(AppRoles.Admin);
+        var isAdmin = _isAdmin = authState.User.IsInRole(AppRoles.Admin);
         var currentUserId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
         if (!IsEdit)

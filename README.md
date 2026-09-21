@@ -182,7 +182,9 @@ By default, self-registered accounts sign in immediately (no confirmation requir
 same as before this feature existed. Set `Identity:RequireConfirmedAccount` to `true` to
 require clicking an emailed confirmation link before sign-in works — this needs
 `Email:Smtp:Host` configured to actually deliver that link. Password reset
-(`/account/forgot-password`) works either way, regardless of that flag.
+(`/account/forgot-password`) works either way, regardless of that flag. Lost or expired the
+confirmation email? `/account/resend-confirmation` sends a fresh one — also linked directly
+from the login error when that's why sign-in failed.
 
 ## Payments
 
@@ -206,7 +208,10 @@ Stripe-side error), the order still cancels but the payment is flagged `RefundFa
 of silently staying `Paid` — surfaced as a distinct badge everywhere payment status shows up,
 plus a note in the customer's cancellation email. A Rescue Circle order (above) uses the same
 Stripe setup, just split into one Checkout session per participant instead of one for the whole
-order — cancelling it refunds whichever participants had actually paid, individually.
+order — cancelling it refunds whichever participants had actually paid, individually. Splitting
+too many ways for too little (any share landing under Stripe's own minimum chargeable amount)
+is rejected upfront with a plain "try fewer participants" message, same as a loyalty/store-credit
+discount can never shrink a solo checkout below that same floor.
 
 ## Web Push Notifications
 
