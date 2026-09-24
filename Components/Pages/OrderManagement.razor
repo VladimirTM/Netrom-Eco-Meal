@@ -46,7 +46,7 @@
 {
     <div class="d-flex gap-3 mb-3 flex-wrap">
         <div class="input-group" style="max-width: 320px;">
-            <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+            <span class="input-group-text border-end-0"><i class="bi bi-search text-muted"></i></span>
             <input type="text" class="form-control border-start-0 ps-0" placeholder="Search order # or customer…"
                    @bind="_search" @bind:event="oninput" @bind:after="OnSearchInputAsync" />
         </div>
@@ -73,21 +73,42 @@
                 <i class="bi bi-x-lg me-1"></i> Clear
             </button>
         }
+        <button type="button" class="btn btn-outline-secondary" @onclick="() => _exportOpen = true">
+            <i class="bi bi-download me-1"></i> Export CSV
+        </button>
         <span class="align-self-center text-muted small ms-auto">@_paged.TotalCount result@(_paged.TotalCount == 1 ? "" : "s")</span>
     </div>
+}
 
-    <div class="d-flex align-items-end gap-2 mb-3 flex-wrap">
-        <div>
-            <label class="form-label small text-muted mb-1">Export from</label>
-            <input type="date" class="form-control" @bind="_exportFrom"/>
+@if (_exportOpen)
+{
+    <div class="em-popover-backdrop" @onclick="() => _exportOpen = false"></div>
+    <div class="em-popover orders-export-panel">
+        <div class="em-popover-header">
+            <span>Export CSV</span>
+            <button type="button" class="em-popover-close" aria-label="Close export" @onclick="() => _exportOpen = false">
+                <i class="bi bi-x-lg"></i>
+            </button>
         </div>
-        <div>
-            <label class="form-label small text-muted mb-1">Export to</label>
-            <input type="date" class="form-control" @bind="_exportTo"/>
+        <div class="em-popover-body">
+            <div class="em-popover-field">
+                <label class="form-label small text-muted mb-1">From</label>
+                <input type="date" class="form-control" @bind="_exportFrom"/>
+            </div>
+            <div class="em-popover-field">
+                <label class="form-label small text-muted mb-1">To</label>
+                <input type="date" class="form-control" @bind="_exportTo"/>
+            </div>
+            @if (_isAdmin && Guid.TryParse(_businessFilter, out _))
+            {
+                <p class="text-muted small mb-0">Scoped to the business selected in the filters above.</p>
+            }
         </div>
-        <a class="btn btn-outline-secondary" href="@ExportHref" target="_blank">
-            <i class="bi bi-download me-1"></i> Export CSV
-        </a>
+        <div class="em-popover-footer">
+            <a class="btn btn-primary btn-sm ms-auto" href="@ExportHref" target="_blank" @onclick="() => _exportOpen = false">
+                <i class="bi bi-download me-1"></i> Download CSV
+            </a>
+        </div>
     </div>
 }
 
@@ -103,7 +124,7 @@
     else if (_paged.Items.Count == 0)
     {
         <div class="text-center py-5">
-            <i class="bi bi-receipt fs-1 text-muted d-block mb-3"></i>
+            <div class="em-empty-icon"><i class="bi bi-receipt"></i></div>
             <p class="text-muted mb-0">@(_paged.TotalCount == 0 && string.IsNullOrEmpty(_search) && _businessFilter == "" && _statusFilter == "" ? "No orders have been placed yet." : "No orders match your filters.")</p>
         </div>
     }
@@ -247,6 +268,7 @@
 
     private DateOnly? _exportFrom;
     private DateOnly? _exportTo;
+    private bool _exportOpen;
 
     // Hits OrderExportController (a real HTTP endpoint), not the DI-only OrderController.
     private string ExportHref

@@ -38,7 +38,7 @@
 {
     <div class="d-flex gap-3 mb-3 flex-wrap">
         <div class="input-group" style="max-width: 320px;">
-            <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+            <span class="input-group-text border-end-0"><i class="bi bi-search text-muted"></i></span>
             <input type="text" class="form-control border-start-0 ps-0" placeholder="Search name, description, address…"
                    @bind="_search" @bind:event="oninput" @bind:after="OnSearchInputAsync" />
         </div>
@@ -81,7 +81,7 @@
     else if (_paged.Items.Count == 0)
     {
         <div class="text-center py-5">
-            <i class="bi bi-building fs-1 text-muted d-block mb-3"></i>
+            <div class="em-empty-icon"><i class="bi bi-building"></i></div>
             <p class="text-muted mb-3">@((businesses?.Count ?? 0) == 0 ? "No businesses registered yet." : "No businesses match your filters.")</p>
             @if ((businesses?.Count ?? 0) == 0 && _isAdmin)
             {
@@ -120,7 +120,7 @@
                         <td class="text-muted">@business.Description</td>
                         <td>@business.Address</td>
                         <td>
-                            <span class="badge rounded-pill px-3 py-2 business-type-badge">
+                            <span class="business-type-badge">
                                 @business.BusinessType.Name
                             </span>
                         </td>
@@ -135,7 +135,7 @@
                                 <div class="d-flex flex-wrap align-items-center gap-1">
                                     @foreach (var staff in business.Staff.OrderBy(s => s.User.Name))
                                     {
-                                        <span class="badge rounded-pill px-2 py-1 role-badge role-badge-businessmanager d-inline-flex align-items-center gap-1">
+                                        <span class="role-badge role-badge-businessmanager">
                                             @staff.User.Name
                                             <button type="button" class="btn-close" style="font-size:0.55rem;" title="Remove staff"
                                                     @onclick="() => RemoveStaffAsync(business, staff.UserId, staff.User.Name)"></button>

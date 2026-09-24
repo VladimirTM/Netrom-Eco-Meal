@@ -40,11 +40,7 @@
     }
     else if (_notFound)
     {
-        <div class="orders-empty">
-            <i class="bi bi-x-circle"></i>
-            <p class="mb-1">This Rescue Circle no longer exists.</p>
-            <a href="/" class="btn btn-primary px-4 mt-2">Back to browsing</a>
-        </div>
+        <NotFoundPanel Title="Rescue Circle not found" Message="This Rescue Circle no longer exists." BackHref="/" BackLabel="Back to browsing"/>
     }
     else if (_summary is not null)
     {

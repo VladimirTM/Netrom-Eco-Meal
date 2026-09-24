@@ -13,7 +13,7 @@
 
 main {
     flex: 1;
-    background-color: #f4f9f5;
+    background-color: var(--em-bg);
     /* Without this, a flex item won't shrink below its content's intrinsic width — a wide table
        inside would push main (and the whole page) wider than the viewport instead of letting
        .table-responsive's own overflow-x:auto handle it. Applies in both the stacked (mobile)
@@ -22,7 +22,7 @@ main {
 }
 
 .sidebar {
-    background-color: #0b1f13;
+    background-color: var(--em-forest);
 }
 
 @media (min-width: 641px) {

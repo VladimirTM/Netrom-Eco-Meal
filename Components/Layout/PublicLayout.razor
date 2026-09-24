@@ -67,6 +67,7 @@
                         <a href="/account/settings" class="public-cart-btn" title="Account settings" aria-label="Account settings">
                             <i class="bi bi-person-gear"></i>
                         </a>
+                        <ThemeToggle TriggerClass="public-cart-btn"/>
                         @* Clears the localStorage cart so it doesn't leak into the next session. *@
                         <form method="post" action="api/auth/logout">
                             <AntiforgeryToken />
@@ -85,6 +86,7 @@
                         <a href="/brands" class="public-cart-btn" title="Browse brands" aria-label="Browse brands">
                             <i class="bi bi-diagram-3"></i>
                         </a>
+                        <ThemeToggle TriggerClass="public-cart-btn"/>
                         <a href="/account/login" class="public-header-btn public-header-btn-ghost">Sign in</a>
                         <a href="/account/register" class="public-header-btn public-header-btn-primary">Create account</a>
                     </div>

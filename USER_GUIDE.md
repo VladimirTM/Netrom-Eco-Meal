@@ -41,6 +41,9 @@ Once signed in, the gear icon in the header (every role has one) — or, for Adm
 change your password by entering the current one plus a new one twice. Both are separate forms,
 saved independently.
 
+A sun/moon icon next to it toggles dark mode — the choice is remembered and applied before the
+page paints, so there's no flash on reload. It's available even signed out.
+
 ### Browse and find something to rescue
 
 The home page (`/`) is a live browse of every kitchen with something available right now. The
@@ -57,29 +60,32 @@ and total kg of food saved to date.
   saying so instead of any filters changing.
 - **Search** (debounced 300ms as you type) matches kitchen name/description *and* what's
   actually in their live packages — searching "bread" surfaces a bakery even if the word
-  "bread" is nowhere on its profile.
-- **Filter** by kitchen type via a dropdown ("All kitchen types" plus one option per type:
-  Restaurant, Bakery, Cafe, Grocery Store, Food Truck).
-- **Filter** by dietary preference or allergen via a second dropdown ("Any diet/allergen" plus
-  every tag from the same list managers pick from when tagging a package — Vegetarian, Vegan,
-  Gluten-Free, Dairy-Free, Halal in one group, the "Contains X" allergen warnings in another).
-  Only kitchens with at least one live package carrying that tag show up.
-- **Sort** by "Name (A–Z)", "Closing soon" (nearest pickup window first), or "Nearest" — the
-  last option only appears in the dropdown once you've used **Near me**.
-- **Near me** button asks your browser for location permission, then sorts by real distance
-  and switches every card to show a distance badge ("123 m away" under 1 km, otherwise
-  "2.3 km away"). If permission is denied or location can't be resolved, you'll see: *"Couldn't
-  get your location — check your browser's location permission."* Clicking it again while
-  already sorted by distance toggles back to Name (A–Z).
-- **Map view** (toggle next to List view) swaps the grid for a Leaflet map with a pin per
+  "bread" is nowhere on its profile. It's the only filter control that stays on the page by
+  default — everything else below lives behind the **Filters** button next to it, which shows a
+  small count badge once anything inside is non-default.
+- Opening **Filters** shows:
+  - **Kitchen type** dropdown ("All kitchen types" plus one option per type: Restaurant,
+    Bakery, Cafe, Grocery Store, Food Truck).
+  - **Sort by** — "Name (A–Z)", "Closing soon" (nearest pickup window first), or "Nearest" — the
+    last option only appears in the dropdown once you've used **Near me**.
+  - **Diet / allergen** dropdown ("Any diet/allergen" plus every tag from the same list managers
+    pick from when tagging a package — Vegetarian, Vegan, Gluten-Free, Dairy-Free, Halal in one
+    group, the "Contains X" allergen warnings in another). Only kitchens with at least one live
+    package carrying that tag show up.
+  - **Near me** button asks your browser for location permission, then sorts by real distance
+    and switches every card to show a distance badge ("123 m away" under 1 km, otherwise
+    "2.3 km away"). If permission is denied or location can't be resolved, you'll see:
+    *"Couldn't get your location — check your browser's location permission."* Clicking it again
+    while already sorted by distance toggles back to Name (A–Z).
+  - **Favorites** toggle (Customers only) filters the list down to just the kitchens you've
+    hearted. A heart icon also sits on every business card and on the kitchen's own detail
+    page — clicking it toggles instantly, no confirmation needed.
+  - A **Clear all** button at the bottom resets every filter (including the search box) in one
+    click; **Done** just closes the panel, keeping whatever you picked.
+- **Map view** (toggle next to Filters) swaps the grid for a Leaflet map with a pin per
   kitchen that has a saved location — click a pin's popup to go straight to that kitchen. If no
   kitchen has a saved location yet, the map shows: *"No kitchens have a saved location yet."*
-- **Favorites** toggle (Customers only) filters the list down to just the kitchens you've
-  hearted. A heart icon also sits on every business card and on the kitchen's own detail page —
-  clicking it toggles instantly, no confirmation needed.
-- A **Clear** button appears next to the controls whenever any search/filter/sort/favorites
-  setting is non-default, to reset everything in one click.
-- Below the controls, a result count reads "N kitchen(s) found". If there are genuinely no
+- Below the toolbar, a result count reads "N kitchen(s) found". If there are genuinely no
   kitchens on the platform yet you'll see *"No kitchens have joined yet — check back soon."*;
   if your filters just happen to match nothing, it's *"Nothing matches your filters yet."*
   instead. Results are paginated, 9 kitchens per page.
@@ -336,6 +342,11 @@ Completed order's own receipt (see [Track and pick up](#track-and-pick-up)), jus
 across everyone. A rescuer with a live weekly streak (below) shows a small flame + week count
 next to their name.
 
+### Dark mode toggle
+
+The **moon/sun icon** in the header (every role has one, signed in or not) switches between
+light and dark themes and remembers your choice for next time.
+
 ### Build a rescue streak
 
 Your `/orders` page shows a **week streak** — consecutive weeks with at least one completed
@@ -509,9 +520,9 @@ Action buttons follow the same state machine customers see from the other side:
 customer-side cancel) before actually refunding — a misclick here would otherwise refund a
 paying customer with no way to undo it.
 
-Export a date range as CSV with the **Export CSV** button next to the filters (pick "Export
-from"/"Export to" dates first) — handy for your own bookkeeping outside the app. The queue is
-paginated, 10 per page.
+**Export CSV** next to the filters opens a small panel to pick "From"/"To" dates before
+**Download CSV** — handy for your own bookkeeping outside the app. The queue is paginated, 10
+per page.
 
 ### Confirm pickup with a QR scan
 
@@ -536,13 +547,13 @@ pass if that order was split across a group.
 
 ### Keep an eye on things
 
-`/dashboard` shows package and order counts for your currently selected business, plus a
-"Last 14 days" trend chart with two rows — daily order count and daily kg saved — each bar
-carrying a hover/focus tooltip with the exact date and value, and today's bar visually
-highlighted. If you don't currently manage a business, it explains that instead of showing an
-empty chart.
+`/dashboard` shows package and order counts for your currently selected business, then an
+**Analytics** section with two cards. First, a "Last 14 days" trend chart with two rows — daily
+order count and daily kg saved — each bar carrying a hover/focus tooltip with the exact date and
+value, and today's bar visually highlighted. If you don't currently manage a business, it
+explains that instead of showing an empty chart.
 
-Below that, a **Business Analytics** card covers packages with a pickup window in the last 14
+Next to it, a **Business Analytics** card covers packages with a pickup window in the last 14
 days:
 
 - **Sell-through rate** — the share of listed stock that actually got picked up, counting only
@@ -554,22 +565,26 @@ days:
   *your* local time), so you can see when foot traffic actually peaks. Hover or focus a bar for
   the exact hour range and count.
 
-A **Share your impact** card below that gives you a snippet to paste into your own website —
-`<script src="..." data-business-id="...">`. It renders a small, self-updating card showing your
-kitchen's total kg saved plus the same km-driven/water-saved equivalency customers see, pulled
-live from Eco Meal every time your page loads. No account or setup needed on your end beyond
-pasting the snippet — hit **Copy** and drop it wherever you'd like it to show up.
+Below Analytics, a **Business tools** section holds two collapsed panels — click either header
+(or its chevron) to expand it; they start closed so the page opens on the analytics you check
+daily, not the setup you touch occasionally.
 
-A **POS / inventory webhook** card below that lets your own point-of-sale or inventory system
-create a live package directly instead of you retyping it into Add Package by hand. **Generate
-API key** shows you a key exactly once — copy it somewhere safe, since it can't be shown again —
-and **Regenerate key**/**Revoke key** replace or disable it at any time — revoking asks you to
-confirm first, since your POS system stops working the moment you do. Have your system send a
-`POST` to the endpoint and header shown on the card (`X-Api-Key: <your key>`) with a small JSON
-body: name, description, price, quantity, weightKg, packageTypeId, dietaryTags, pickupStart, and
-pickupEnd. Valid `packageTypeId` values come from `GET /api/package-types`, which needs no key at
-all. A demo key is already seeded on Stadionul de Gusturi for trying this out without generating
-your own first — see `DbSeeder.DemoWebhookApiKey` in the source, or ask an admin.
+- **Share your impact** expands to a snippet to paste into your own website —
+  `<script src="..." data-business-id="...">`. It renders a small, self-updating card showing
+  your kitchen's total kg saved plus the same km-driven/water-saved equivalency customers see,
+  pulled live from Eco Meal every time your page loads. No account or setup needed on your end
+  beyond pasting the snippet — hit **Copy** and drop it wherever you'd like it to show up.
+- **POS / inventory webhook** expands to let your own point-of-sale or inventory system create a
+  live package directly instead of you retyping it into Add Package by hand. **Generate API key**
+  shows you a key exactly once — copy it somewhere safe, since it can't be shown again — and
+  **Regenerate key**/**Revoke key** replace or disable it at any time — revoking asks you to
+  confirm first, since your POS system stops working the moment you do. Have your system send a
+  `POST` to the endpoint and header shown on the card (`X-Api-Key: <your key>`) with a small JSON
+  body: name, description, price, quantity, weightKg, packageTypeId, dietaryTags, pickupStart,
+  pickupEnd, and an optional imageUrl. Valid `packageTypeId` values come from
+  `GET /api/package-types`, which needs no key at all. A demo key is already seeded on Stadionul
+  de Gusturi for trying this out without generating your own first — see
+  `DbSeeder.DemoWebhookApiKey` in the source, or ask an admin.
 
 `/payments` is the money version, scoped the same way: every order for your business with its
 payment status (Unpaid/Paid/Refunded/Refund failed), amount, and paid/refunded timestamps, plus

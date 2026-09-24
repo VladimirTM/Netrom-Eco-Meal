@@ -14,6 +14,47 @@
     --em-ink:        #1b2a1f;
     --em-text:       var(--em-ink);
     --em-muted:      #6f6656;
+    --em-muted-soft: rgba(111, 102, 86, 0.1);
+    --em-leaf-darker: #166534;
+    --em-cream:      #fffaf2;
+
+    /* Semantic layer — reach for these instead of a hardcoded hex, so dark mode only redefines tokens here. */
+    --em-bg:             var(--em-paper);
+    --em-surface-raised: #ffffff;
+    --em-border:         #e3ddd0;
+    --em-border-strong:  #cbc2ac;
+    --em-text-muted:     var(--em-muted);
+    --em-text-inverse:   #ffffff;
+
+    /* Theme-invariant "solid" pairs, for solid-fill buttons/badges with white text on top —
+       dark mode brightens the on-surface accents, so solid fills use these instead. */
+    --em-leaf-solid:      #2f9e5c;
+    --em-leaf-mid-solid:  #1f8a4c;
+    --em-leaf-dark-solid: #1b7a44;
+    --em-rescue-solid:    #d9702f;
+    --em-info-solid:      #3f6d99;
+    --em-danger-solid:    #c9503f;
+    --em-muted-solid:     #6f6656;
+
+    /* Gold — reserved for "you earned this" moments (loyalty, streaks, rank #1); darkened off
+       the sampled logo pixel to clear 4.5:1 on --em-paper. */
+    --em-gold:      #a3811a;
+    --em-gold-dark: #7a5f12;
+    --em-gold-soft: rgba(163, 129, 26, 0.16);
+    --em-bronze:    #92400e;
+
+    /* Status accents — distinct hues for multi-state badges/stat cards, hand-warmed off the
+       raw Tailwind defaults they replaced. */
+    --em-info:         #3f6d99;
+    --em-info-soft:    rgba(63, 109, 153, 0.1);
+    --em-violet:       #7d5fb0;
+    --em-violet-soft:  rgba(125, 95, 176, 0.1);
+    --em-danger:       #c9503f;
+    --em-danger-dark:  #9c3a2c;
+    --em-danger-soft:  #fbe9e6;
+    --em-warning:      #f59e0b;
+    --em-warning-dark: #b45309;
+    --em-warning-soft: #fef3c7;
 
     --bs-primary: #1f8a4c;
     --bs-primary-rgb: 31, 138, 76;
@@ -35,6 +76,49 @@
     --em-shadow-sm: 0 1px 2px rgba(14, 33, 23, 0.05);
     --em-shadow-md: 0 1px 2px rgba(14, 33, 23, 0.05), 0 10px 26px rgba(14, 33, 23, 0.07);
     --em-shadow-lg: 0 4px 10px rgba(14, 33, 23, 0.06), 0 20px 40px rgba(14, 33, 23, 0.12);
+}
+
+/* ── Dark palette (UI revamp Phase 3) ── */
+/* Every accent is WCAG-contrast-checked against both dark surfaces, not inverted — the
+   --em-*-solid tokens above still cover the solid-fill role. */
+:root[data-theme="dark"] {
+    --em-ink:   #f0ece0;
+    --em-muted: #a8a399;
+    --em-muted-soft: rgba(168, 163, 153, 0.14);
+
+    --em-bg:             #0e2117;
+    --em-surface:        #0e2117;
+    --em-surface-raised: #1c3f28;
+    --em-border:         rgba(255, 255, 255, 0.10);
+    --em-border-strong:  rgba(255, 255, 255, 0.18);
+
+    --em-leaf:      #63b684;
+    --em-leaf-mid:  #6db28a;
+    --em-leaf-dark: #76af8e;
+    --em-rescue:      #e08c58;
+    --em-rescue-dark: #d7a485;
+
+    /* The logo's own light gold reads better here than Phase 1's darkened derivative, once
+       the surface is dark instead of paper. */
+    --em-gold:      #d8d028;
+    --em-gold-dark: #d8d028;
+    --em-bronze:    #c89f86;
+
+    --em-info:         #8ba7c1;
+    --em-violet:       #b19fcf;
+    --em-danger:       #db8d82;
+    --em-danger-dark:  #d7b0aa;
+    --em-danger-soft:  rgba(219, 141, 130, 0.18);
+    --em-warning-dark: #e1ba9c;
+    --em-warning-soft: rgba(245, 158, 11, 0.18);
+
+    /* A flat black shadow reads as no shadow at all this dark — a hairline light border
+       carries elevation instead. */
+    --em-shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.06);
+    --em-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 8px 20px rgba(0, 0, 0, 0.45);
+    --em-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.10), 0 16px 34px rgba(0, 0, 0, 0.55);
+
+    color-scheme: dark;
 }
 
 html, body {
@@ -64,6 +148,139 @@ h1, h2, h3, h4, h5, h6,
     }
 }
 
+/* ── Shared card shell (UI revamp Phase 5) ── */
+/* One surface/radius/shadow/hover-lift definition instead of `.order-ticket`, `.biz-card`,
+   `.impact-row`, and `.impact-optin-card` each hand-tuning their own near-duplicate (14px vs
+   16px radius, a token shadow vs a bespoke rgba one). Grouped onto the existing selectors below
+   rather than renaming them in every .razor file — the payoff (one place to restyle for both
+   themes) doesn't require a markup churn. */
+.order-ticket,
+.biz-card,
+.impact-row,
+.impact-optin-card {
+    background: var(--em-surface-raised);
+    border-radius: 16px;
+    box-shadow: var(--em-shadow-md);
+}
+
+.impact-row,
+.impact-optin-card {
+    border-radius: 12px;
+    box-shadow: var(--em-shadow-sm);
+}
+
+.order-ticket,
+.biz-card,
+.order-ticket-clickable {
+    animation: card-rise 0.35s ease-out both;
+}
+
+.biz-card:hover,
+.order-ticket-clickable:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--em-shadow-lg);
+}
+
+@keyframes card-rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .order-ticket, .biz-card, .order-ticket-clickable { animation: none; }
+    .biz-card:hover, .order-ticket-clickable:hover { transform: none; }
+}
+
+/* ── Shared pill shape (UI revamp Phase 5) ── */
+/* One shape for every label/status/tag badge — a new one only ever needs a 2-line color rule
+   now, not another hand-rolled padding/radius/font-size. `.em-pill` is for a genuinely new badge;
+   the existing named classes below (`.role-badge`, `.diet-tag`, ...) are grouped into the same
+   shape rule so today's 100+ call sites didn't need touching one by one. */
+.em-pill,
+.role-badge,
+.business-type-badge,
+.package-type-badge,
+.order-status-badge,
+.biz-card-live-badge,
+.biz-card-rating-badge,
+.biz-card-closed-badge,
+.biz-modal-open-badge,
+.diet-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.em-pill--sm,
+.biz-card-closed-badge,
+.diet-tag {
+    padding: 0.18rem 0.55rem;
+    font-size: 0.66rem;
+}
+
+.em-pill--uppercase,
+.order-status-badge,
+.biz-card-closed-badge {
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.em-pill--interactive,
+.role-badge {
+    border: none;
+    cursor: pointer;
+    transition: filter 0.15s;
+}
+
+.em-pill--interactive:hover:not(:disabled),
+.role-badge:hover:not(:disabled) {
+    filter: brightness(0.95);
+}
+
+.em-pill--interactive:disabled,
+.role-badge:disabled {
+    cursor: default;
+    opacity: 0.65;
+}
+
+.em-pill--leaf    { background: rgba(31, 138, 76, 0.1);    color: var(--em-leaf-dark); }
+.em-pill--info    { background: var(--em-info-soft);       color: var(--em-info); }
+.em-pill--violet  { background: var(--em-violet-soft);     color: var(--em-violet); }
+.em-pill--rescue  { background: var(--em-rescue-soft);     color: var(--em-rescue); }
+.em-pill--danger  { background: var(--em-danger-soft);     color: var(--em-danger-dark); }
+.em-pill--warning { background: var(--em-warning-soft);    color: var(--em-warning-dark); }
+.em-pill--muted   { background: var(--em-muted-soft);      color: var(--em-text-muted); }
+.em-pill--dark    { background: rgba(14, 33, 23, 0.72);    color: var(--em-text-inverse); }
+.em-pill--surface { background: rgba(255, 255, 255, 0.92); color: var(--em-text); }
+.em-pill--glass   { background: rgba(255, 255, 255, 0.15); }
+
+/* ── Empty-state icon (UI revamp Phase 6) ── */
+/* One "nothing here yet" treatment — a soft warm-tinted circle instead of a bare grey glyph.
+   Shared by every `home-empty`/`orders-empty`/`cart-empty`/`NotFoundPanel` call site. */
+.em-empty-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 1rem;
+    border-radius: 50%;
+    background: var(--em-muted-soft);
+    color: var(--em-muted);
+    font-size: 1.6rem;
+    animation: card-rise 0.35s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .em-empty-icon { animation: none; }
+}
+
 /* ── Buttons ── */
 .btn {
     font-weight: 600;
@@ -76,27 +293,27 @@ h1, h2, h3, h4, h5, h6,
 }
 
 .btn-primary {
-    --bs-btn-bg: #1f8a4c;
-    --bs-btn-border-color: #1f8a4c;
-    --bs-btn-hover-bg: #1b7a44;
-    --bs-btn-hover-border-color: #1b7a44;
-    --bs-btn-active-bg: #166534;
-    --bs-btn-active-border-color: #166534;
+    --bs-btn-bg: var(--em-leaf-mid);
+    --bs-btn-border-color: var(--em-leaf-mid);
+    --bs-btn-hover-bg: var(--em-leaf-dark);
+    --bs-btn-hover-border-color: var(--em-leaf-dark);
+    --bs-btn-active-bg: var(--em-leaf-darker);
+    --bs-btn-active-border-color: var(--em-leaf-darker);
     --bs-btn-focus-shadow-rgb: 31, 138, 76;
-    --bs-btn-disabled-bg: #1f8a4c;
-    --bs-btn-disabled-border-color: #1f8a4c;
-    color: #fff;
+    --bs-btn-disabled-bg: var(--em-leaf-mid);
+    --bs-btn-disabled-border-color: var(--em-leaf-mid);
+    color: var(--em-text-inverse);
 }
 
 .btn-outline-primary {
-    --bs-btn-color: #1f8a4c;
-    --bs-btn-border-color: #1f8a4c;
-    --bs-btn-hover-color: #fff;
-    --bs-btn-hover-bg: #1f8a4c;
-    --bs-btn-hover-border-color: #1f8a4c;
-    --bs-btn-active-color: #fff;
-    --bs-btn-active-bg: #1f8a4c;
-    --bs-btn-active-border-color: #1f8a4c;
+    --bs-btn-color: var(--em-leaf-mid);
+    --bs-btn-border-color: var(--em-leaf-mid);
+    --bs-btn-hover-color: var(--em-text-inverse);
+    --bs-btn-hover-bg: var(--em-leaf-mid);
+    --bs-btn-hover-border-color: var(--em-leaf-mid);
+    --bs-btn-active-color: var(--em-text-inverse);
+    --bs-btn-active-bg: var(--em-leaf-mid);
+    --bs-btn-active-border-color: var(--em-leaf-mid);
     --bs-btn-focus-shadow-rgb: 31, 138, 76;
 }
 
@@ -140,12 +357,12 @@ h1, h2, h3, h4, h5, h6,
 }
 
 .sidebar .nav-link:hover {
-    color: #fff;
+    color: var(--em-text-inverse);
     background-color: rgba(255, 255, 255, 0.07);
 }
 
 .sidebar .nav-link.active {
-    color: #fff;
+    color: var(--em-text-inverse);
     background-color: rgba(47, 158, 92, 0.18);
     box-shadow: inset 3px 0 0 var(--em-leaf);
     font-weight: 700;
@@ -157,66 +374,33 @@ h1, h2, h3, h4, h5, h6,
 }
 
 /* ── Stat card accents ── */
-.card-accent-green  { border-top: 3px solid #1f8a4c; }
-.card-accent-blue   { border-top: 3px solid #0ea5e9; }
-.card-accent-amber  { border-top: 3px solid #f59e0b; }
-.card-accent-purple { border-top: 3px solid #8b5cf6; }
-.card-accent-red    { border-top: 3px solid #dc3545; }
+.card-accent-green  { border-top: 3px solid var(--em-leaf-mid); }
+.card-accent-blue   { border-top: 3px solid var(--em-info); }
+.card-accent-amber  { border-top: 3px solid var(--em-warning); }
+.card-accent-purple { border-top: 3px solid var(--em-violet); }
+.card-accent-red    { border-top: 3px solid var(--em-danger); }
 
 .bg-sky-subtle    { background-color: rgba(14, 165, 233, 0.1); }
-.text-sky         { color: #0ea5e9; }
+.text-sky         { color: var(--em-info); }
 .bg-purple-subtle { background-color: rgba(139, 92, 246, 0.1); }
-.text-purple      { color: #8b5cf6; }
+.text-purple      { color: var(--em-violet); }
 
 /* ── Table ── */
 .table > thead > tr > th {
-    background-color: #fff;
+    background-color: var(--em-surface-raised);
     font-size: 0.72rem;
     letter-spacing: 0.04em;
 }
 
-/* ── Badges ── */
-.business-type-badge {
-    background-color: rgba(59, 130, 246, 0.1);
-    color: #2563eb;
-    font-weight: 500;
-    font-size: 0.75rem;
-}
-
-.package-type-badge {
-    background-color: rgba(31, 138, 76, 0.1);
-    color: #1f8a4c;
-    font-weight: 500;
-    font-size: 0.75rem;
-}
+/* ── Badges — shape lives in the shared .em-pill rule above; each class here is just a color. ── */
+.business-type-badge { background-color: var(--em-info-soft); color: var(--em-info); }
+.package-type-badge  { background-color: rgba(31, 138, 76, 0.1); color: var(--em-leaf-dark); }
 
 /* ── Role badges ── */
-.role-badge {
-    border: none;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    padding: 0.35rem 0.75rem;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    transition: filter 0.15s;
-}
-
-.role-badge:hover:not(:disabled) {
-    filter: brightness(0.95);
-}
-
-.role-badge:disabled {
-    cursor: default;
-    opacity: 0.65;
-}
-
-.role-badge-admin           { background-color: rgba(139, 92, 246, 0.1); color: #7c3aed; }
-.role-badge-businessmanager { background-color: rgba(59, 130, 246, 0.1); color: #2563eb; }
-.role-badge-customer        { background-color: rgba(31, 138, 76, 0.1);  color: #1f8a4c; }
-.role-badge-unassigned      { background-color: rgba(107, 114, 128, 0.1); color: #6b7280; }
+.role-badge-admin           { background-color: var(--em-violet-soft); color: var(--em-violet); }
+.role-badge-businessmanager { background-color: var(--em-info-soft);   color: var(--em-info); }
+.role-badge-customer        { background-color: rgba(31, 138, 76, 0.1); color: var(--em-leaf-dark); }
+.role-badge-unassigned      { background-color: rgba(107, 114, 128, 0.1); color: var(--em-text-muted); }
 
 .role-option-dot {
     width: 7px;
@@ -235,7 +419,7 @@ h1, h2, h3, h4, h5, h6,
     /* fixed, not absolute, so it escapes ancestor clipping; top/left set by positionDropdown() in site.js */
     position: fixed;
     z-index: 21;
-    background: #fff;
+    background: var(--em-surface-raised);
     border-radius: 10px;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 28px rgba(0, 0, 0, 0.14);
     padding: 0.4rem;
@@ -278,7 +462,7 @@ h1, h2, h3, h4, h5, h6,
 /* ── Form focus ── */
 .form-control:focus,
 .form-select:focus {
-    border-color: #1f8a4c;
+    border-color: var(--em-leaf-mid);
     box-shadow: 0 0 0 0.2rem rgba(31, 138, 76, 0.15);
 }
 
@@ -296,7 +480,7 @@ h1, h2, h3, h4, h5, h6,
 }
 
 .login-card {
-    background: #fff;
+    background: var(--em-surface-raised);
     border-radius: 18px;
     box-shadow: var(--em-shadow-lg);
     padding: 2.5rem 2.25rem;
@@ -392,7 +576,7 @@ h1, h2, h3, h4, h5, h6,
 }
 
 .sidebar-user-email {
-    color: #fff;
+    color: var(--em-text-inverse);
     font-size: 0.8rem;
     font-weight: 600;
     line-height: 1.3;
@@ -423,14 +607,14 @@ h1, h2, h3, h4, h5, h6,
 
 .sidebar-logout-btn:hover {
     background-color: rgba(248, 113, 113, 0.12);
-    color: #f87171;
+    color: var(--em-danger);
 }
 
 /* ── Blazor error banner (shared across layouts, must not be CSS-isolation-scoped) ── */
 #blazor-error-ui {
-    color-scheme: light only;
-    background: #fef3c7;
-    border-top: 1px solid #f59e0b;
+    color-scheme: light;
+    background: var(--em-warning-soft);
+    border-top: 1px solid var(--em-warning);
     bottom: 0;
     box-sizing: border-box;
     display: none;
@@ -439,6 +623,10 @@ h1, h2, h3, h4, h5, h6,
     position: fixed;
     width: 100%;
     z-index: 1000;
+}
+
+:root[data-theme="dark"] #blazor-error-ui {
+    color-scheme: dark;
 }
 
 #blazor-error-ui .dismiss {
@@ -454,21 +642,21 @@ h1:focus {
 }
 
 .valid.modified:not([type=checkbox]) {
-    outline: 1px solid #1f8a4c;
+    outline: 1px solid var(--em-leaf-mid);
 }
 
 .invalid {
-    outline: 1px solid #dc2626;
+    outline: 1px solid var(--em-danger);
 }
 
 .validation-message {
-    color: #dc2626;
+    color: var(--em-danger);
 }
 
 .blazor-error-boundary {
-    background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNDkiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIG92ZXJmbG93PSJoaWRkZW4iPjxkZWZzPjxjbGlwUGF0aCBpZD0iY2xpcDAiPjxyZWN0IHg9IjIzNSIgeT0iNTEiIHdpZHRoPSI1NiIgaGVpZ2h0PSI0OSIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMCkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0yMzUgLTUxKSI+PHBhdGggZD0iTTI2My41MDYgNTFDMjY0LjcxNyA1MSAyNjUuODEzIDUxLjQ4MzcgMjY2LjYwNiA1Mi4yNjU4TDI2Ny4wNTIgNTIuNzk4NyAyNjcuNTM5IDUzLjYyODMgMjkwLjE4NSA5Mi4xODMxIDI5MC41NDUgOTIuNzk1IDI5MC42NTYgOTIuOTk2QzI5MC44NzcgOTMuNTEzIDI5MSA5NC4wODE1IDI5MSA5NC42NzgyIDI5MSA5Ny4wNjUxIDI4OS4wMzggOTkgMjg2LjYxNyA5OUwyNDAuMzgzIDk5QzIzNy45NjMgOTkgMjM2IDk3LjA2NTEgMjM2IDk0LjY3ODIgMjM2IDk0LjM3OTkgMjM2LjAzMSA5NC4wODg2IDIzNi4wODkgOTMuODA3MkwyMzYuMzM4IDkzLjAxNjIgMjM2Ljg1OCA5Mi4xMzE0IDI1OS40NzMgNTMuNjI5NCAyNTkuOTYxIDUyLjc5ODUgMjYwLjQwNyA1Mi4yNjU4QzI2MS4yIDUxLjQ4MzcgMjYyLjI5NiA1MSAyNjMuNTA2IDUxWk0yNjMuNTg2IDY2LjAxODNDMjYwLjczNyA2Ni4wMTgzIDI1OS4zMTMgNjcuMTI0NSAyNTkuMzEzIDY5LjMzNyAyNTkuMzEzIDY5LjYxMDIgMjU5LjMzMiA2OS44NjA4IDI1OS4zNzEgNzAuMDg4N0wyNjEuNzk1IDg0LjAxNjEgMjY1LjM4IDg0LjAxNjEgMjY3LjgyMSA2OS43NDc1QzI2Ny44NiA2OS43MzA5IDI2Ny44NzkgNjkuNTg3NyAyNjcuODc5IDY5LjMxNzkgMjY3Ljg3OSA2Ny4xMTgyIDI2Ni40NDggNjYuMDE4MyAyNjMuNTg2IDY2LjAxODNaTTI2My41NzYgODYuMDU0N0MyNjEuMDQ5IDg2LjA1NDcgMjU5Ljc4NiA4Ny4zMDA1IDI1OS43ODYgODkuNzkyMSAyNTkuNzg2IDkyLjI4MzcgMjYxLjA0OSA5My41Mjk1IDI2My41NzYgOTMuNTI5NSAyNjYuMTE2IDkzLjUyOTUgMjY3LjM4NyA5Mi4yODM3IDI2Ny4zODcgODkuNzkyMSAyNjcuMzg3IDg3LjMwMDUgMjY2LjExNiA4Ni4wNTQ3IDI2My41NzYgODYuMDU0N1oiIGZpbGw9IiNGRkU1MDAiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjwvZz48L3N2Zz4=) no-repeat 1rem/1.8rem, #b32121;
+    background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNDkiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIG92ZXJmbG93PSJoaWRkZW4iPjxkZWZzPjxjbGlwUGF0aCBpZD0iY2xpcDAiPjxyZWN0IHg9IjIzNSIgeT0iNTEiIHdpZHRoPSI1NiIgaGVpZ2h0PSI0OSIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMCkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0yMzUgLTUxKSI+PHBhdGggZD0iTTI2My41MDYgNTFDMjY0LjcxNyA1MSAyNjUuODEzIDUxLjQ4MzcgMjY2LjYwNiA1Mi4yNjU4TDI2Ny4wNTIgNTIuNzk4NyAyNjcuNTM5IDUzLjYyODMgMjkwLjE4NSA5Mi4xODMxIDI5MC41NDUgOTIuNzk1IDI5MC42NTYgOTIuOTk2QzI5MC44NzcgOTMuNTEzIDI5MSA5NC4wODE1IDI5MSA5NC42NzgyIDI5MSA5Ny4wNjUxIDI4OS4wMzggOTkgMjg2LjYxNyA5OUwyNDAuMzgzIDk5QzIzNy45NjMgOTkgMjM2IDk3LjA2NTEgMjM2IDk0LjY3ODIgMjM2IDk0LjM3OTkgMjM2LjAzMSA5NC4wODg2IDIzNi4wODkgOTMuODA3MkwyMzYuMzM4IDkzLjAxNjIgMjM2Ljg1OCA5Mi4xMzE0IDI1OS40NzMgNTMuNjI5NCAyNTkuOTYxIDUyLjc5ODUgMjYwLjQwNyA1Mi4yNjU4QzI2MS4yIDUxLjQ4MzcgMjYyLjI5NiA1MSAyNjMuNTA2IDUxWk0yNjMuNTg2IDY2LjAxODNDMjYwLjczNyA2Ni4wMTgzIDI1OS4zMTMgNjcuMTI0NSAyNTkuMzEzIDY5LjMzNyAyNTkuMzEzIDY5LjYxMDIgMjU5LjMzMiA2OS44NjA4IDI1OS4zNzEgNzAuMDg4N0wyNjEuNzk1IDg0LjAxNjEgMjY1LjM4IDg0LjAxNjEgMjY3LjgyMSA2OS43NDc1QzI2Ny44NiA2OS43MzA5IDI2Ny44NzkgNjkuNTg3NyAyNjcuODc5IDY5LjMxNzkgMjY3Ljg3OSA2Ny4xMTgyIDI2Ni40NDggNjYuMDE4MyAyNjMuNTg2IDY2LjAxODNaTTI2My41NzYgODYuMDU0N0MyNjEuMDQ5IDg2LjA1NDcgMjU5Ljc4NiA4Ny4zMDA1IDI1OS43ODYgODkuNzkyMSAyNTkuNzg2IDkyLjI4MzcgMjYxLjA0OSA5My41Mjk1IDI2My41NzYgOTMuNTI5NSAyNjYuMTE2IDkzLjUyOTUgMjY3LjM4NyA5Mi4yODM3IDI2Ny4zODcgODkuNzkyMSAyNjcuMzg3IDg3LjMwMDUgMjY2LjExNiA4Ni4wNTQ3IDI2My41NzYgODYuMDU0N1oiIGZpbGw9IiNGRkU1MDAiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjwvZz48L3N2Zz4=) no-repeat 1rem/1.8rem, var(--em-danger-dark);
     padding: 1rem 1rem 1rem 3.7rem;
-    color: white;
+    color: var(--em-text-inverse);
 }
 
 .blazor-error-boundary::after {
@@ -476,7 +664,7 @@ h1:focus {
 }
 
 .darker-border-checkbox.form-check-input {
-    border-color: #929292;
+    border-color: var(--em-border-strong);
 }
 
 .form-floating > .form-control-plaintext::placeholder,
@@ -533,7 +721,7 @@ h1:focus {
 
 .public-brand-name {
     font-family: var(--em-font-display);
-    color: #fff;
+    color: var(--em-text-inverse);
     font-weight: 700;
     font-size: 1.15rem;
     letter-spacing: -0.01em;
@@ -559,8 +747,8 @@ h1:focus {
     scrollbar-width: none;
     /* Fades the trailing edge as a swipe hint; harmless no-op without mask-image support.
        JS toggles .at-scroll-end (see site.js) once fully scrolled, clearing the fade. */
-    mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+    mask-image: linear-gradient(to right, var(--em-text) calc(100% - 20px), transparent);
+    -webkit-mask-image: linear-gradient(to right, var(--em-text) calc(100% - 20px), transparent);
     padding-right: 8px;
 }
 
@@ -637,7 +825,7 @@ h1:focus {
 
 .public-header-logout:hover {
     background-color: rgba(248, 113, 113, 0.16);
-    color: #f87171;
+    color: var(--em-danger);
 }
 
 .public-main {
@@ -664,7 +852,7 @@ h1:focus {
 
 .public-footer-brand {
     font-family: var(--em-font-display);
-    color: #fff;
+    color: var(--em-text-inverse);
     font-weight: 700;
     font-size: 0.95rem;
 }
@@ -747,7 +935,7 @@ h1:focus {
 .home-hero-highlight {
     position: relative;
     display: inline-block;
-    color: #fffaf2;
+    color: var(--em-cream);
     padding: 0.06em 0.28em 0.1em;
     z-index: 0;
 }
@@ -756,7 +944,7 @@ h1:focus {
     content: "";
     position: absolute;
     inset: 0.1em -0.1em 0em;
-    background: var(--em-rescue);
+    background: var(--em-rescue-solid);
     border-radius: 0.9em 0.3em 0.8em 0.35em / 0.55em 0.85em 0.5em 0.9em;
     transform: rotate(-2.5deg);
     box-shadow: 0 10px 22px -6px rgba(184, 90, 34, 0.45);
@@ -831,9 +1019,12 @@ h1:focus {
     text-overflow: ellipsis;
 }
 
-.home-filter-bar {
+/* Default-visible row: search, Filters trigger, map toggle — everything else moved into
+   .home-filters-panel, an .em-popover instance. */
+.home-toolbar {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 0.75rem;
     margin-bottom: 1rem;
 }
@@ -843,9 +1034,23 @@ h1:focus {
     flex: 1 1 240px;
 }
 
-.home-business-filter {
-    max-width: 220px;
-    flex: 0 1 220px;
+.home-filters-panel {
+    width: 360px;
+}
+
+.home-filters-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--em-leaf-solid);
+    color: var(--em-text-inverse);
+    font-size: 0.68rem;
+    font-weight: 800;
+    line-height: 18px;
 }
 
 .home-chip-row {
@@ -859,8 +1064,8 @@ h1:focus {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    background: #fff;
-    border: 1.5px solid #e5e7eb;
+    background: var(--em-surface-raised);
+    border: 1.5px solid var(--em-border);
     color: var(--em-text);
     font-size: 0.82rem;
     font-weight: 600;
@@ -870,14 +1075,14 @@ h1:focus {
 }
 
 .home-chip:hover {
-    border-color: #6b7280;
+    border-color: var(--em-text-muted);
 }
 
 .home-chip-active,
 .home-chip-active:hover {
-    background: #6b7280;
-    border-color: #6b7280;
-    color: #fff;
+    background: var(--em-muted-solid);
+    border-color: var(--em-muted-solid);
+    color: var(--em-text-inverse);
 }
 
 .home-results-row {
@@ -933,9 +1138,6 @@ h1:focus {
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    background: #fff;
-    border-radius: 14px;
-    box-shadow: 0 1px 3px rgba(16, 24, 32, 0.08);
     padding: 1rem 1.25rem;
     margin-bottom: 1.5rem;
 }
@@ -953,9 +1155,6 @@ h1:focus {
     display: flex;
     align-items: center;
     gap: 0.9rem;
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 1px 3px rgba(16, 24, 32, 0.06);
     padding: 0.75rem 1.1rem;
 }
 
@@ -972,9 +1171,9 @@ h1:focus {
     color: var(--em-muted);
 }
 
-.impact-rank-gold   { color: #b45309; }
-.impact-rank-silver { color: #6b7280; }
-.impact-rank-bronze { color: #92400e; }
+.impact-rank-gold   { color: var(--em-gold-dark); }
+.impact-rank-silver { color: var(--em-text-muted); }
+.impact-rank-bronze { color: var(--em-bronze); }
 
 .impact-avatar {
     flex-shrink: 0;
@@ -1004,167 +1203,11 @@ h1:focus {
     font-variant-numeric: tabular-nums;
 }
 
-/* ── Package grid ── */
-.home-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
-    gap: 1.25rem;
-    padding-bottom: 2rem;
-}
-
-.package-card {
-    background: #fff;
-    border-radius: 14px;
-    box-shadow: var(--em-shadow-md);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    animation: card-rise 0.35s ease-out both;
-    transition: transform 0.15s, box-shadow 0.15s;
-}
-
-.package-card:hover {
-    transform: translateY(-3px);
-    box-shadow: var(--em-shadow-lg);
-}
-
-.package-card-media {
-    height: 108px;
-}
-
-.package-card-image {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-}
-
-.package-card-body {
-    padding: 1.1rem 1.15rem 1.25rem;
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-}
-
-.package-card-type {
-    color: var(--em-leaf-dark);
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-.package-card-qty {
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: var(--em-muted);
-    white-space: nowrap;
-}
-
-.package-card-name {
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: var(--em-text);
-    margin: 0.35rem 0 0.2rem;
-}
-
-.package-card-business {
-    font-size: 0.82rem;
-    color: var(--em-muted);
-    margin-bottom: 0.6rem;
-}
-
-.package-card-business i {
-    margin-right: 0.3rem;
-}
-
-.package-card-business-type {
-    color: #9ca3af;
-}
-
-.package-card-desc {
-    font-size: 0.85rem;
-    color: var(--em-muted);
-    line-height: 1.5;
-    margin-bottom: 1rem;
-    flex: 1;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-.package-card-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-top: 0.85rem;
-    border-top: 1px dashed #e5e7eb;
-}
-
-.package-card-pickup {
-    font-size: 0.78rem;
-    color: var(--em-muted);
-}
-
-.package-card-pickup i {
-    margin-right: 0.3rem;
-}
-
-.package-card-price {
-    font-family: var(--em-font-display);
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--em-leaf-dark);
-}
-
-@keyframes card-rise {
-    from { opacity: 0; transform: translateY(10px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .package-card { animation: none; }
-    .package-card:hover { transform: none; }
-}
-
 @media (max-width: 640px) {
     .home-hero { padding: 3rem 1.25rem 2.5rem; }
     .home-stats { gap: 1.5rem; }
     .home-stat-value { font-size: 1.5rem; }
     .home-browse { padding: 2rem 1.25rem 1rem; }
-}
-
-/* ── Add to basket ── */
-.package-card-add-btn {
-    margin-top: 0.85rem;
-    width: 100%;
-    border: none;
-    border-radius: 10px;
-    background: var(--em-leaf-mid);
-    color: #fff;
-    font-size: 0.84rem;
-    font-weight: 700;
-    padding: 0.55rem 0.75rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.4rem;
-    transition: background-color 0.15s, transform 0.1s;
-}
-
-.package-card-add-btn:hover:not(:disabled) {
-    background: var(--em-leaf-dark);
-}
-
-.package-card-add-btn:active:not(:disabled) {
-    transform: scale(0.98);
-}
-
-.package-card-add-btn:disabled {
-    background: #e5e7eb;
-    color: var(--em-muted);
-    cursor: default;
 }
 
 /* ── Cart button + badge (public header) ── */
@@ -1176,7 +1219,7 @@ h1:focus {
     border-radius: 10px;
     border: none;
     background: rgba(255, 255, 255, 0.08);
-    color: #fff;
+    color: var(--em-text-inverse);
     font-size: 1rem;
     display: flex;
     align-items: center;
@@ -1207,22 +1250,22 @@ h1:focus {
 .public-header-btn-ghost {
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.16);
-    color: #fff;
+    color: var(--em-text-inverse);
 }
 
 .public-header-btn-ghost:hover {
     background: rgba(255, 255, 255, 0.16);
-    color: #fff;
+    color: var(--em-text-inverse);
 }
 
 .public-header-btn-primary {
     background: var(--bs-primary);
-    color: #fff;
+    color: var(--em-text-inverse);
 }
 
 .public-header-btn-primary:hover {
-    background: #1a7540;
-    color: #fff;
+    background: var(--em-leaf-dark-solid);
+    color: var(--em-text-inverse);
 }
 
 .public-cart-badge {
@@ -1258,7 +1301,7 @@ h1:focus {
     bottom: 0;
     width: 100%;
     max-width: 400px;
-    background: #fff;
+    background: var(--em-surface-raised);
     z-index: 46;
     display: flex;
     flex-direction: column;
@@ -1283,7 +1326,7 @@ h1:focus {
 .cart-panel-header {
     background: var(--em-forest);
     background-image: radial-gradient(ellipse 70% 100% at 100% -20%, rgba(47, 158, 92, 0.18) 0%, transparent 70%);
-    color: #fff;
+    color: var(--em-text-inverse);
     padding: 1.5rem 1.5rem 1.25rem;
     display: flex;
     align-items: flex-start;
@@ -1314,7 +1357,7 @@ h1:focus {
     border-radius: 8px;
     border: none;
     background: rgba(255, 255, 255, 0.1);
-    color: #fff;
+    color: var(--em-text-inverse);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1343,16 +1386,16 @@ h1:focus {
     padding: 2rem 1rem;
 }
 
-.cart-empty i {
-    font-size: 2.25rem;
-    margin-bottom: 0.85rem;
-    color: #d1d5db;
-}
-
 .cart-confirmation > i {
     font-size: 2.5rem;
     color: var(--em-leaf-mid);
     margin-bottom: 0.75rem;
+}
+
+/* PaymentCancel.razor's "nothing was charged" icon isn't a success state — needs its own
+   selector to beat the rule above, which every other `.cart-confirmation` caller wants green. */
+.cart-confirmation > i.text-muted {
+    color: var(--em-muted);
 }
 
 .cart-confirmation h3 {
@@ -1390,7 +1433,7 @@ h1:focus {
     align-items: center;
     gap: 0.75rem;
     padding: 0.85rem 0;
-    border-bottom: 1px solid #f0f1f2;
+    border-bottom: 1px solid var(--em-border);
 }
 
 .cart-line:first-child {
@@ -1432,7 +1475,7 @@ h1:focus {
     height: 24px;
     border-radius: 50%;
     border: none;
-    background: #fff;
+    background: var(--em-surface-raised);
     color: var(--em-leaf-dark);
     display: flex;
     align-items: center;
@@ -1460,7 +1503,7 @@ h1:focus {
     height: 28px;
     border: none;
     background: none;
-    color: #d1d5db;
+    color: var(--em-border-strong);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1468,13 +1511,13 @@ h1:focus {
 }
 
 .cart-line-remove:hover {
-    color: #ef4444;
+    color: var(--em-danger);
 }
 
 .cart-panel-footer {
     flex-shrink: 0;
     padding: 1.1rem 1.5rem 1.4rem;
-    border-top: 1px solid #f0f1f2;
+    border-top: 1px solid var(--em-border);
 }
 
 .cart-panel-total {
@@ -1494,8 +1537,8 @@ h1:focus {
 }
 
 .rescue-circle-starter {
-    background: #f8faf8;
-    border: 1px solid #e5e9e5;
+    background: var(--em-surface-raised);
+    border: 1px solid var(--em-border);
     border-radius: 12px;
     padding: 0.85rem 1rem;
 }
@@ -1507,7 +1550,7 @@ h1:focus {
     left: 50%;
     transform: translateX(-50%);
     background: var(--em-forest);
-    color: #fff;
+    color: var(--em-text-inverse);
     padding: 0.65rem 1.25rem;
     border-radius: 999px;
     font-size: 0.82rem;
@@ -1640,8 +1683,8 @@ h1:focus {
 .orders-chip {
     display: inline-flex;
     align-items: center;
-    background: #fff;
-    border: 1.5px solid #e5e7eb;
+    background: var(--em-surface-raised);
+    border: 1.5px solid var(--em-border);
     color: var(--em-text);
     font-size: 0.82rem;
     font-weight: 600;
@@ -1651,27 +1694,20 @@ h1:focus {
 }
 
 .orders-chip:hover {
-    border-color: #6b7280;
+    border-color: var(--em-text-muted);
 }
 
 .orders-chip-active,
 .orders-chip-active:hover {
     background: var(--em-forest);
     border-color: var(--em-forest);
-    color: #fff;
+    color: var(--em-text-inverse);
 }
 
 .orders-empty {
     text-align: center;
     padding: 4rem 1rem;
     color: var(--em-muted);
-}
-
-.orders-empty i {
-    font-size: 2.25rem;
-    color: #d1d5db;
-    display: block;
-    margin-bottom: 0.85rem;
 }
 
 .orders-stack {
@@ -1684,10 +1720,6 @@ h1:focus {
 .order-ticket {
     display: flex;
     align-items: stretch;
-    background: #fff;
-    border-radius: 16px;
-    box-shadow: var(--em-shadow-md);
-    animation: card-rise 0.35s ease-out both;
 }
 
 .order-ticket-main {
@@ -1728,23 +1760,14 @@ h1:focus {
 }
 
 .order-status-badge {
-    display: inline-flex;
-    align-items: center;
     flex-shrink: 0;
-    padding: 0.3rem 0.7rem;
-    border-radius: 999px;
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    white-space: nowrap;
 }
 
-.order-status-pending   { background: rgba(217, 112, 47, 0.16); color: var(--em-rescue); }
-.order-status-confirmed { background: rgba(37, 99, 235, 0.1);  color: #2563eb; }
-.order-status-completed { background: rgba(31, 138, 76, 0.1);  color: #1f8a4c; }
-.order-status-cancelled { background: rgba(239, 68, 68, 0.1);  color: #ef4444; }
-.order-status-noshow    { background: rgba(100, 116, 139, 0.14); color: #64748b; }
+.order-status-pending   { background: var(--em-rescue-soft); color: var(--em-rescue); }
+.order-status-confirmed { background: var(--em-info-soft);   color: var(--em-info); }
+.order-status-completed { background: rgba(31, 138, 76, 0.1); color: var(--em-leaf-dark); }
+.order-status-cancelled { background: var(--em-danger-soft); color: var(--em-danger-dark); }
+.order-status-noshow    { background: rgba(107, 114, 128, 0.1); color: var(--em-text-muted); }
 
 .order-multi-pass-hint {
     display: inline-flex;
@@ -1794,7 +1817,7 @@ h1:focus {
     justify-content: space-between;
     gap: 1rem;
     padding-top: 0.85rem;
-    border-top: 1px dashed #e5e7eb;
+    border-top: 1px dashed var(--em-border);
 }
 
 .order-ticket-pickup {
@@ -1868,6 +1891,13 @@ h1:focus {
     border-left: 2px dashed rgba(14, 33, 23, 0.15);
 }
 
+/* Forest-tinted for light paper reads as dark-on-dark here — both border sides (border-top
+   on the pass/mobile variants) need a light tint instead. */
+:root[data-theme="dark"] .order-ticket-seam {
+    border-left-color: rgba(255, 255, 255, 0.18);
+    border-top-color: rgba(255, 255, 255, 0.18);
+}
+
 .order-ticket-seam::before,
 .order-ticket-seam::after {
     content: "";
@@ -1888,7 +1918,7 @@ h1:focus {
     border-radius: 0 16px 16px 0;
     background: var(--em-forest);
     background-image: radial-gradient(ellipse 100% 80% at 50% 0%, rgba(47, 158, 92, 0.28) 0%, transparent 70%);
-    color: #fff;
+    color: var(--em-text-inverse);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1923,11 +1953,6 @@ h1:focus {
 .order-ticket-clickable {
     cursor: pointer;
     transition: box-shadow 0.15s ease, transform 0.15s ease;
-}
-
-.order-ticket-clickable:hover {
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 28px rgba(0, 0, 0, 0.08);
-    transform: translateY(-1px);
 }
 
 .order-ticket-clickable:focus-visible {
@@ -1984,7 +2009,7 @@ h1:focus {
 }
 
 .order-ticket-stub-qr {
-    background: #fff;
+    background: var(--em-surface-raised);
     border-radius: 14px;
     padding: 0.9rem;
     width: 100%;
@@ -2003,7 +2028,7 @@ h1:focus {
     font-size: 0.72rem;
     font-weight: 700;
     letter-spacing: 0.03em;
-    color: #fff;
+    color: var(--em-text-inverse);
 }
 
 /* ── Multiple pickup passes: switcher tabs above the ticket, split control below it ── */
@@ -2015,8 +2040,8 @@ h1:focus {
 }
 
 .pickup-pass-tab {
-    border: 1px solid #e5e7eb;
-    background: #fff;
+    border: 1px solid var(--em-border);
+    background: var(--em-surface-raised);
     color: var(--em-muted);
     border-radius: 999px;
     padding: 0.35rem 0.9rem;
@@ -2028,7 +2053,7 @@ h1:focus {
 .pickup-pass-tab.active {
     background: var(--em-forest);
     border-color: var(--em-forest);
-    color: #fff;
+    color: var(--em-text-inverse);
 }
 
 .pickup-pass-switcher-hint {
@@ -2137,7 +2162,7 @@ h1:focus {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: #fff;
+    background: var(--em-surface-raised);
     border-radius: 16px;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 20px 50px rgba(0, 0, 0, 0.2);
     padding: 1.75rem;
@@ -2178,6 +2203,99 @@ h1:focus {
     .confirm-backdrop, .confirm-dialog { animation: none; }
 }
 
+/* ── Filter / export popover (UI revamp Phase 4) ── */
+/* Same centered-overlay shell as .confirm-dialog/.notif-panel, generalized for a sheet of form
+   fields — Home's Filters panel and Manage Orders' Export panel both build on this. */
+.em-popover-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(14, 33, 23, 0.45);
+    animation: cart-backdrop-in 0.2s ease-out;
+}
+
+.em-popover {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 56;
+    width: 380px;
+    max-width: calc(100% - 2rem);
+    max-height: calc(100vh - 3rem);
+    background: var(--em-surface-raised);
+    border-radius: 16px;
+    box-shadow: var(--em-shadow-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: confirm-dialog-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .em-popover-backdrop, .em-popover { animation: none; }
+}
+
+.em-popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1.1rem;
+    background: var(--em-forest);
+    color: var(--em-text-inverse);
+    font-family: var(--em-font-display);
+    font-weight: 700;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+}
+
+.em-popover-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.8rem;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.em-popover-close:hover {
+    background: rgba(255, 255, 255, 0.22);
+    color: var(--em-text-inverse);
+}
+
+.em-popover-body {
+    padding: 1.1rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.em-popover-toggle-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.em-popover-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.85rem 1.1rem;
+    border-top: 1px solid var(--em-border);
+    flex-shrink: 0;
+}
+
+.orders-export-panel {
+    width: 320px;
+}
+
 /* ── Manager order actions ── */
 /* Confirm/Complete are tinted to preview the status badge color they'll produce; Cancel stays quiet as the exit branch. */
 .order-action-group {
@@ -2203,25 +2321,25 @@ h1:focus {
 }
 
 .order-action-confirm {
-    color: #2563eb;
+    color: var(--em-info);
     border-color: rgba(37, 99, 235, 0.35);
     background: rgba(37, 99, 235, 0.07);
 }
 .order-action-confirm:hover {
-    background: #2563eb;
-    border-color: #2563eb;
-    color: #fff;
+    background: var(--em-info-solid);
+    border-color: var(--em-info-solid);
+    color: var(--em-text-inverse);
 }
 
 .order-action-complete {
-    color: #1f8a4c;
+    color: var(--em-leaf-mid);
     border-color: rgba(31, 138, 76, 0.35);
     background: rgba(31, 138, 76, 0.07);
 }
 .order-action-complete:hover {
-    background: #1f8a4c;
-    border-color: #1f8a4c;
-    color: #fff;
+    background: var(--em-leaf-mid-solid);
+    border-color: var(--em-leaf-mid-solid);
+    color: var(--em-text-inverse);
 }
 
 .order-action-cancel {
@@ -2232,19 +2350,19 @@ h1:focus {
     padding: 0.35rem 0.5rem;
 }
 .order-action-cancel:hover {
-    color: #ef4444;
+    color: var(--em-danger);
     background: rgba(239, 68, 68, 0.08);
 }
 
 .order-action-noshow {
-    color: #64748b;
+    color: var(--em-text-muted);
     border-color: rgba(100, 116, 139, 0.35);
     background: rgba(100, 116, 139, 0.07);
 }
 .order-action-noshow:hover {
-    background: #64748b;
-    border-color: #64748b;
-    color: #fff;
+    background: var(--em-muted-solid);
+    border-color: var(--em-muted-solid);
+    color: var(--em-text-inverse);
 }
 
 .order-action-empty {
@@ -2263,7 +2381,15 @@ h1:focus {
 .order-action-qr:hover {
     background: var(--em-forest);
     border-color: var(--em-forest);
-    color: #fff;
+    color: var(--em-text-inverse);
+}
+
+/* Forest text on a dark surface is dark-on-dark — this ghost-button needs light tints
+   instead; the solid-fill hover above is unaffected. */
+:root[data-theme="dark"] .order-action-qr {
+    color: var(--em-text);
+    border-color: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.06);
 }
 
 .order-action-reorder {
@@ -2272,9 +2398,9 @@ h1:focus {
     background: rgba(27, 122, 68, 0.07);
 }
 .order-action-reorder:hover:not(:disabled) {
-    background: var(--em-leaf-dark);
-    border-color: var(--em-leaf-dark);
-    color: #fff;
+    background: var(--em-leaf-dark-solid);
+    border-color: var(--em-leaf-dark-solid);
+    color: var(--em-text-inverse);
 }
 .order-action-reorder:disabled {
     opacity: 0.7;
@@ -2353,7 +2479,7 @@ h1:focus {
 }
 
 .dash-trend-bar-hours {
-    background: #8b5cf6;
+    background: var(--em-violet);
 }
 
 .dash-trend-bar-wrap:hover .dash-trend-bar,
@@ -2376,7 +2502,7 @@ h1:focus {
     align-items: center;
     gap: 0.1rem;
     background: var(--em-forest);
-    color: #fff;
+    color: var(--em-text-inverse);
     white-space: nowrap;
     padding: 0.4rem 0.65rem;
     border-radius: 8px;
@@ -2491,7 +2617,7 @@ h1:focus {
 }
 
 .star-rating-track i {
-    color: #e2e5e9;
+    color: var(--em-border);
 }
 
 .star-rating-fill {
@@ -2522,7 +2648,7 @@ h1:focus {
     background: none;
     padding: 0.1rem;
     line-height: 1;
-    color: #d1d5db;
+    color: var(--em-border-strong);
     cursor: pointer;
     transition: transform 0.1s, color 0.15s;
 }
@@ -2548,20 +2674,11 @@ h1:focus {
     flex-direction: column;
     width: 100%;
     border: none;
-    background: #fff;
-    border-radius: 16px;
     overflow: hidden;
     text-align: left;
     padding: 0;
     cursor: pointer;
-    box-shadow: var(--em-shadow-md);
-    animation: card-rise 0.35s ease-out both;
     transition: transform 0.15s, box-shadow 0.15s;
-}
-
-.biz-card:hover {
-    transform: translateY(-3px);
-    box-shadow: var(--em-shadow-lg);
 }
 
 .biz-card:focus-visible {
@@ -2599,15 +2716,8 @@ h1:focus {
     position: absolute;
     top: 0.75rem;
     left: 0.75rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
     background: rgba(14, 33, 23, 0.72);
-    color: #fff;
-    font-size: 0.7rem;
-    font-weight: 700;
-    padding: 0.3rem 0.65rem;
-    border-radius: 999px;
+    color: var(--em-text-inverse);
 }
 
 .biz-card-live-dot {
@@ -2636,15 +2746,9 @@ h1:focus {
     position: absolute;
     top: 0.75rem;
     right: 0.75rem;
-    display: inline-flex;
-    align-items: center;
     gap: 0.3rem;
     background: rgba(255, 255, 255, 0.92);
     color: var(--em-text);
-    font-size: 0.7rem;
-    font-weight: 700;
-    padding: 0.3rem 0.6rem;
-    border-radius: 999px;
 }
 
 .biz-card-body {
@@ -2663,16 +2767,8 @@ h1:focus {
 }
 
 .biz-card-closed-badge {
-    display: inline-flex;
-    align-items: center;
-    font-size: 0.65rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: #b91c1c;
-    background: #fef2f2;
-    padding: 0.15rem 0.5rem;
-    border-radius: 999px;
+    color: var(--em-danger-dark);
+    background: var(--em-danger-soft);
 }
 
 .biz-card-name {
@@ -2719,7 +2815,7 @@ h1:focus {
     justify-content: space-between;
     gap: 0.75rem;
     padding-top: 0.85rem;
-    border-top: 1px dashed #e5e7eb;
+    border-top: 1px dashed var(--em-border);
 }
 
 .biz-card-from {
@@ -2790,7 +2886,7 @@ h1:focus {
 }
 
 .biz-page-card {
-    background: #fff;
+    background: var(--em-surface-raised);
     border-radius: 20px;
     overflow: hidden;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
@@ -2807,7 +2903,7 @@ h1:focus {
     border-radius: 50%;
     border: none;
     background: rgba(14, 33, 23, 0.55);
-    color: #fff;
+    color: var(--em-text-inverse);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2842,7 +2938,7 @@ h1:focus {
 .biz-modal-hero-overlay {
     width: 100%;
     padding: 1.5rem 3rem 1.25rem 1.75rem;
-    color: #fff;
+    color: var(--em-text-inverse);
 }
 
 .biz-modal-eyebrow {
@@ -2874,13 +2970,6 @@ h1:focus {
 }
 
 .biz-modal-open-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.72rem;
-    font-weight: 700;
-    padding: 0.2rem 0.6rem;
-    border-radius: 999px;
     background: rgba(255, 255, 255, 0.15);
 }
 
@@ -2896,7 +2985,7 @@ h1:focus {
 }
 
 .biz-modal-open-badge-closed .biz-modal-open-dot {
-    background: #f87171;
+    background: var(--em-danger);
     box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.35);
 }
 
@@ -2906,8 +2995,8 @@ h1:focus {
     gap: 0.5rem;
     font-size: 0.85rem;
     font-weight: 600;
-    color: #b91c1c;
-    background: #fef2f2;
+    color: var(--em-danger-dark);
+    background: var(--em-danger-soft);
     border-radius: 10px;
     padding: 0.65rem 0.9rem;
     margin-bottom: 1rem;
@@ -2957,7 +3046,7 @@ h1:focus {
     gap: 0.5rem;
     margin-top: 1rem;
     background: var(--em-forest);
-    color: #fff;
+    color: var(--em-text-inverse);
     padding: 0.55rem 1rem;
     border-radius: 10px;
     font-size: 0.82rem;
@@ -2977,7 +3066,7 @@ h1:focus {
 }
 
 .biz-modal-divider {
-    border-top: 1px dashed #e5e7eb;
+    border-top: 1px dashed var(--em-border);
     margin: 1.5rem 0;
 }
 
@@ -3024,7 +3113,7 @@ h1:focus {
     gap: 1rem;
     padding: 0.95rem 0.6rem;
     margin: 0 -0.6rem;
-    border-bottom: 1px dashed #e5e7eb;
+    border-bottom: 1px dashed var(--em-border);
 }
 
 .biz-pkg-row:last-child {
@@ -3070,19 +3159,6 @@ h1:focus {
     letter-spacing: 0.03em;
 }
 
-.biz-pkg-closing-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    color: #b91c1c;
-    background: #fef2f2;
-    padding: 0.15rem 0.55rem;
-    border-radius: 999px;
-}
-
 .biz-pkg-desc {
     font-size: 0.82rem;
     color: var(--em-muted);
@@ -3113,8 +3189,8 @@ h1:focus {
 .biz-pkg-add-btn {
     border: none;
     border-radius: 8px;
-    background: var(--em-leaf-mid);
-    color: #fff;
+    background: var(--em-leaf-mid-solid);
+    color: var(--em-text-inverse);
     font-size: 0.76rem;
     font-weight: 700;
     padding: 0.35rem 0.7rem;
@@ -3125,11 +3201,11 @@ h1:focus {
 }
 
 .biz-pkg-add-btn:hover:not(:disabled) {
-    background: var(--em-leaf-dark);
+    background: var(--em-leaf-dark-solid);
 }
 
 .biz-pkg-add-btn:disabled {
-    background: #e5e7eb;
+    background: var(--em-border);
     color: var(--em-muted);
     cursor: default;
 }
@@ -3161,18 +3237,6 @@ h1:focus {
 .biz-review-package-select {
     width: auto;
     max-width: 100%;
-}
-
-.biz-review-package-tag {
-    display: inline-flex;
-    align-items: center;
-    font-size: 0.66rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    padding: 0.2rem 0.55rem;
-    border-radius: 999px;
-    background: rgba(31, 138, 76, 0.1);
-    color: var(--em-leaf-dark);
 }
 
 .biz-review-list {
@@ -3248,7 +3312,7 @@ h1:focus {
     width: calc(100% - 2rem);
     max-width: 640px;
     max-height: calc(100vh - 3rem);
-    background: #fff;
+    background: var(--em-surface-raised);
     border-radius: 20px;
     overflow: hidden;
     overflow-y: auto;
@@ -3345,7 +3409,7 @@ h1:focus {
     width: calc(100% - 2rem);
     max-width: 560px;
     max-height: calc(100vh - 3rem);
-    background: #fff;
+    background: var(--em-surface-raised);
     border-radius: 20px;
     overflow-y: auto;
     z-index: 52;
@@ -3372,7 +3436,7 @@ h1:focus {
 .order-modal-total {
     padding-top: 0.85rem;
     margin-top: 0.4rem;
-    border-top: 1px dashed #e5e7eb;
+    border-top: 1px dashed var(--em-border);
 }
 
 /* Entrance animation for full-bleed mobile sheets (.pkg-modal/.order-modal below 640px) —
@@ -3518,7 +3582,7 @@ h1:focus {
 }
 
 .scan-manual {
-    border-top: 1px dashed #e5e7eb;
+    border-top: 1px dashed var(--em-border);
     padding-top: 1.25rem;
 }
 
@@ -3575,8 +3639,8 @@ h1:focus {
 .validate-total {
     padding: 0.85rem 0;
     margin: 0.5rem 0 1.25rem;
-    border-top: 1px dashed #e5e7eb;
-    border-bottom: 1px dashed #e5e7eb;
+    border-top: 1px dashed var(--em-border);
+    border-bottom: 1px dashed var(--em-border);
 }
 
 .validate-confirm-btn {
@@ -3635,7 +3699,7 @@ h1:focus {
     border-radius: 10px;
     border: none;
     background: rgba(255, 255, 255, 0.08);
-    color: #fff;
+    color: var(--em-text-inverse);
     font-size: 1rem;
     display: flex;
     align-items: center;
@@ -3655,8 +3719,8 @@ h1:focus {
     height: 18px;
     padding: 0 4px;
     border-radius: 999px;
-    background: #ef4444;
-    color: #fff;
+    background: var(--em-danger-solid);
+    color: var(--em-text-inverse);
     font-size: 0.62rem;
     font-weight: 800;
     line-height: 18px;
@@ -3665,7 +3729,7 @@ h1:focus {
 }
 
 .sidebar-notif-btn .notif-badge {
-    box-shadow: 0 0 0 2px #14532d;
+    box-shadow: 0 0 0 2px var(--em-forest-mid);
 }
 
 /* Transparent click-outside-to-close layer — same role as .role-dropdown-backdrop, its own
@@ -3694,7 +3758,7 @@ h1:focus {
     width: 400px;
     max-width: calc(100% - 2rem);
     max-height: calc(100vh - 3rem);
-    background: #fff;
+    background: var(--em-surface-raised);
     border-radius: 16px;
     box-shadow: var(--em-shadow-lg);
     overflow: hidden;
@@ -3718,7 +3782,7 @@ h1:focus {
     justify-content: space-between;
     padding: 0.85rem 1.1rem;
     background: var(--em-forest);
-    color: #fff;
+    color: var(--em-text-inverse);
     font-family: var(--em-font-display);
     font-weight: 700;
     font-size: 0.95rem;
@@ -3742,7 +3806,7 @@ h1:focus {
 }
 
 .notif-mark-all:hover {
-    color: #fff;
+    color: var(--em-text-inverse);
     text-decoration: underline;
 }
 
@@ -3762,7 +3826,7 @@ h1:focus {
 
 .notif-push-toggle:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.22);
-    color: #fff;
+    color: var(--em-text-inverse);
 }
 
 .notif-push-toggle:disabled {
@@ -3770,8 +3834,8 @@ h1:focus {
 }
 
 .notif-push-toggle-on {
-    background: var(--em-leaf);
-    color: #fff;
+    background: var(--em-leaf-solid);
+    color: var(--em-text-inverse);
 }
 
 .notif-push-error {
@@ -3810,7 +3874,7 @@ h1:focus {
     background: none;
     padding: 0.75rem 1.1rem;
     text-align: left;
-    border-bottom: 1px solid #f1f5f2;
+    border-bottom: 1px solid var(--em-border);
     transition: background-color 0.15s, border-color 0.15s;
 }
 
@@ -3854,7 +3918,7 @@ h1:focus {
     border-radius: 50%;
     border: none;
     background: rgba(14, 33, 23, 0.55);
-    color: #fff;
+    color: var(--em-text-inverse);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3869,7 +3933,7 @@ h1:focus {
 }
 
 .biz-card-fav-btn.biz-card-fav-active {
-    color: #f87171;
+    color: var(--em-danger);
 }
 
 .biz-card-fav-btn.biz-card-fav-active i {
@@ -3887,7 +3951,7 @@ h1:focus {
     gap: 0.4rem;
     border: 1px solid rgba(255, 255, 255, 0.45);
     background: rgba(255, 255, 255, 0.1);
-    color: #fff;
+    color: var(--em-text-inverse);
     border-radius: 999px;
     padding: 0.35rem 0.85rem;
     font-size: 0.78rem;
@@ -3908,8 +3972,8 @@ h1:focus {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    border: 1px solid #e5e7eb;
-    background: #fff;
+    border: 1px solid var(--em-border);
+    background: var(--em-surface-raised);
     color: var(--em-text);
     border-radius: 10px;
     padding: 0.45rem 0.85rem;
@@ -3920,32 +3984,25 @@ h1:focus {
 }
 
 .home-fav-toggle i {
-    color: #f87171;
+    color: var(--em-danger);
 }
 
 .home-fav-toggle.home-fav-toggle-active {
     background: rgba(248, 113, 113, 0.1);
     border-color: rgba(248, 113, 113, 0.35);
-    color: #b91c1c;
+    color: var(--em-danger-dark);
 }
 
-/* ── Dietary tag badges ── */
+/* ── Dietary tag badges — also reused as-is for a review's "which package" pill (BusinessDetail.razor),
+   an identical shape that used to be its own .biz-review-package-tag class. ── */
 .diet-tag {
-    display: inline-flex;
-    align-items: center;
-    font-size: 0.66rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    padding: 0.2rem 0.55rem;
-    border-radius: 999px;
     background: rgba(31, 138, 76, 0.1);
     color: var(--em-leaf-dark);
-    white-space: nowrap;
 }
 
 .diet-tag-allergen {
-    background: rgba(217, 119, 6, 0.12);
-    color: #b45309;
+    background: var(--em-warning-soft);
+    color: var(--em-warning-dark);
 }
 
 .diet-tag-row {
@@ -3965,7 +4022,7 @@ h1:focus {
     align-items: center;
     gap: 0.5rem;
     padding: 0.45rem 0.65rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--em-border);
     border-radius: 8px;
     font-size: 0.82rem;
     cursor: pointer;
@@ -3981,7 +4038,7 @@ h1:focus {
     height: 84px;
     object-fit: cover;
     border-radius: 8px;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--em-border);
     flex-shrink: 0;
 }
 
@@ -4044,7 +4101,7 @@ h1:focus {
 
 .planner-form-card,
 .planner-result-card {
-    background: #fff;
+    background: var(--em-surface-raised);
     border-radius: 16px;
     box-shadow: var(--em-shadow-md);
     padding: 1.5rem;
@@ -4110,7 +4167,7 @@ h1:focus {
 
 .planner-empty i {
     font-size: 2rem;
-    color: #d1d5db;
+    color: var(--em-border-strong);
     display: block;
     margin-bottom: 0.75rem;
 }
@@ -4126,7 +4183,7 @@ h1:focus {
     align-items: flex-start;
     gap: 0.75rem;
     padding: 0.9rem 1rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--em-border);
     border-radius: 12px;
     cursor: pointer;
     transition: border-color 0.15s ease, background-color 0.15s ease;
@@ -4189,7 +4246,7 @@ h1:focus {
     gap: 1rem;
     margin-top: 1.5rem;
     padding-top: 1.25rem;
-    border-top: 1px solid #f0f1f2;
+    border-top: 1px solid var(--em-border);
 }
 
 .planner-approved-total {

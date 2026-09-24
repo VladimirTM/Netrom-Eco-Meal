@@ -171,7 +171,7 @@ else
                                             <span><i class="bi bi-clock"></i>@PickupLabel(package)</span>
                                             @if (ClosingSoonBadge(package) is { } closingSoon)
                                             {
-                                                <span class="biz-pkg-closing-badge"><i class="bi bi-alarm-fill"></i>@closingSoon</span>
+                                                <span class="biz-card-closed-badge"><i class="bi bi-alarm-fill"></i>@closingSoon</span>
                                             }
                                         </div>
                                         <p class="biz-pkg-desc">@package.Description</p>
@@ -349,7 +349,7 @@ else
                                             <StarRating Value="@review.Rating" Size="0.75rem"/>
                                             @if (review.Package is not null)
                                             {
-                                                <span class="biz-review-package-tag">@review.Package.Name</span>
+                                                <span class="diet-tag">@review.Package.Name</span>
                                             }
                                         </div>
                                         @if (!string.IsNullOrWhiteSpace(review.Comment))

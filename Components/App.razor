@@ -4,6 +4,18 @@
 <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    @* Sets data-theme before first paint to avoid a flash — kept in sync after load by EcoMeal.theme in site.js. *@
+    <script>
+        (function () {
+            try {
+                var stored = localStorage.getItem("em-theme");
+                var theme = stored === "dark" || stored === "light" ? stored
+                    : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+                document.documentElement.setAttribute("data-theme", theme);
+                document.documentElement.setAttribute("data-bs-theme", theme);
+            } catch { }
+        })();
+    </script>
     <base href="/"/>
     <ResourcePreloader/>
     <link rel="preconnect" href="https://fonts.googleapis.com"/>

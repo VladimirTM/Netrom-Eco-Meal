@@ -61,7 +61,7 @@
     {
         <div class="home-ai-search">
             <div class="input-group">
-                <span class="input-group-text bg-white border-end-0"><i class="bi bi-stars text-muted"></i></span>
+                <span class="input-group-text border-end-0"><i class="bi bi-stars text-muted"></i></span>
                 <input type="text" class="form-control border-start-0 ps-0 home-ai-search-input" placeholder="Or describe what you want — “vegan dinner under 30 lei, closing soon”…"
                        @bind="_aiQuery" @bind:event="oninput" @onkeydown="OnAiSearchKeyDownAsync"/>
                 <button type="button" class="btn btn-primary home-ai-search-btn" disabled="@(_parsingAiSearch || string.IsNullOrWhiteSpace(_aiQuery))" @onclick="RunAiSearchAsync">
@@ -82,90 +82,122 @@
             }
         </div>
 
-        <div class="home-filter-bar">
+        <div class="home-toolbar">
             <div class="input-group home-search">
-                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <span class="input-group-text border-end-0"><i class="bi bi-search text-muted"></i></span>
                 <input type="text" class="form-control border-start-0 ps-0" placeholder="Search kitchens or packages…"
                        @bind="_search" @bind:event="oninput" @bind:after="OnSearchInputAsync"/>
             </div>
 
-            <select class="form-select home-business-filter" @bind="_businessTypeFilter" @bind:after="FilterChangedAsync">
-                <option value="">All kitchen types</option>
-                @foreach (var bt in _businessTypes ?? [])
+            <button type="button" class="home-fav-toggle @(ActiveFilterCount > 0 ? "home-fav-toggle-active" : "")" @onclick="() => _filtersOpen = true">
+                <i class="bi bi-sliders"></i> Filters
+                @if (ActiveFilterCount > 0)
                 {
-                    <option value="@bt.Id">@bt.Name</option>
+                    <span class="home-filters-count">@ActiveFilterCount</span>
                 }
-            </select>
-
-            <select class="form-select home-business-filter" @bind="_sortBy" @bind:after="FilterChangedAsync">
-                <option value="@BusinessSortOptions.Name">Name (A–Z)</option>
-                <option value="@BusinessSortOptions.ClosingSoon">Closing soon</option>
-                @if (_customerLat.HasValue)
-                {
-                    <option value="@BusinessSortOptions.Distance">Nearest</option>
-                }
-            </select>
-
-            <select class="form-select home-business-filter" @bind="_dietaryTagFilter" @bind:after="FilterChangedAsync">
-                <option value="">Any diet/allergen</option>
-                <optgroup label="Dietary preference">
-                    @foreach (var tag in DietaryTags.All.Where(t => !DietaryTags.IsAllergen(t)))
-                    {
-                        <option value="@tag">@tag</option>
-                    }
-                </optgroup>
-                <optgroup label="Contains (allergen warning)">
-                    @foreach (var tag in DietaryTags.Allergens)
-                    {
-                        <option value="@tag">@tag</option>
-                    }
-                </optgroup>
-            </select>
-
-            <button type="button" class="home-fav-toggle @(_sortBy == BusinessSortOptions.Distance ? "home-fav-toggle-active" : "")"
-                    @onclick="ToggleNearMeAsync" disabled="@_locatingNearMe">
-                @if (_locatingNearMe)
-                {
-                    <span class="spinner-border spinner-border-sm" role="status"></span>
-                }
-                else
-                {
-                    <i class="bi bi-geo-alt-fill"></i>
-                }
-                Near me
             </button>
 
             <button type="button" class="home-fav-toggle @(_showMap ? "home-fav-toggle-active" : "")" @onclick="ToggleMapAsync">
                 <i class="bi @(_showMap ? "bi-list-ul" : "bi-map")"></i> @(_showMap ? "List view" : "Map view")
             </button>
-
-            <AuthorizeView Roles="@AppRoles.Customer">
-                <Authorized>
-                    <button type="button" class="home-fav-toggle @(_favoritesOnly ? "home-fav-toggle-active" : "")" @onclick="ToggleFavoritesOnlyAsync">
-                        <i class="bi @(_favoritesOnly ? "bi-heart-fill" : "bi-heart")"></i> Favorites
-                    </button>
-                </Authorized>
-            </AuthorizeView>
-
-            @if (HasActiveFilters)
-            {
-                <button class="btn btn-outline-secondary btn-sm" @onclick="ClearFiltersAsync">
-                    <i class="bi bi-x-lg me-1"></i>Clear
-                </button>
-            }
         </div>
 
-        @if (_locationError is not null)
+        @if (_filtersOpen)
         {
-            <div class="text-danger small mb-2">@_locationError</div>
-        }
+            <div class="em-popover-backdrop" @onclick="() => _filtersOpen = false"></div>
+            <div class="em-popover home-filters-panel">
+                <div class="em-popover-header">
+                    <span>Filters</span>
+                    <button type="button" class="em-popover-close" aria-label="Close filters" @onclick="() => _filtersOpen = false">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <div class="em-popover-body">
+                    <div class="em-popover-field">
+                        <label class="form-label small text-muted mb-1">Kitchen type</label>
+                        <select class="form-select" @bind="_businessTypeFilter" @bind:after="FilterChangedAsync">
+                            <option value="">All kitchen types</option>
+                            @foreach (var bt in _businessTypes ?? [])
+                            {
+                                <option value="@bt.Id">@bt.Name</option>
+                            }
+                        </select>
+                    </div>
 
-        @if (_maxPriceFilter.HasValue)
-        {
-            <div class="home-chip-row">
-                <button type="button" class="home-chip home-chip-active" @onclick="ClearMaxPriceAsync">
-                    Under @_maxPriceFilter.Value.ToString("C") <i class="bi bi-x-lg"></i>
-                </button>
+                    <div class="em-popover-field">
+                        <label class="form-label small text-muted mb-1">Sort by</label>
+                        <select class="form-select" @bind="_sortBy" @bind:after="FilterChangedAsync">
+                            <option value="@BusinessSortOptions.Name">Name (A–Z)</option>
+                            <option value="@BusinessSortOptions.ClosingSoon">Closing soon</option>
+                            @if (_customerLat.HasValue)
+                            {
+                                <option value="@BusinessSortOptions.Distance">Nearest</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="em-popover-field">
+                        <label class="form-label small text-muted mb-1">Diet / allergen</label>
+                        <select class="form-select" @bind="_dietaryTagFilter" @bind:after="FilterChangedAsync">
+                            <option value="">Any diet/allergen</option>
+                            <optgroup label="Dietary preference">
+                                @foreach (var tag in DietaryTags.All.Where(t => !DietaryTags.IsAllergen(t)))
+                                {
+                                    <option value="@tag">@tag</option>
+                                }
+                            </optgroup>
+                            <optgroup label="Contains (allergen warning)">
+                                @foreach (var tag in DietaryTags.Allergens)
+                                {
+                                    <option value="@tag">@tag</option>
+                                }
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div class="em-popover-toggle-row">
+                        <button type="button" class="home-fav-toggle @(_sortBy == BusinessSortOptions.Distance ? "home-fav-toggle-active" : "")"
+                                @onclick="ToggleNearMeAsync" disabled="@_locatingNearMe">
+                            @if (_locatingNearMe)
+                            {
+                                <span class="spinner-border spinner-border-sm" role="status"></span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-geo-alt-fill"></i>
+                            }
+                            Near me
+                        </button>
+
+                        <AuthorizeView Roles="@AppRoles.Customer">
+                            <Authorized>
+                                <button type="button" class="home-fav-toggle @(_favoritesOnly ? "home-fav-toggle-active" : "")" @onclick="ToggleFavoritesOnlyAsync">
+                                    <i class="bi @(_favoritesOnly ? "bi-heart-fill" : "bi-heart")"></i> Favorites
+                                </button>
+                            </Authorized>
+                        </AuthorizeView>
+                    </div>
+
+                    @if (_locationError is not null)
+                    {
+                        <div class="text-danger small">@_locationError</div>
+                    }
+
+                    @if (_maxPriceFilter.HasValue)
+                    {
+                        <div class="home-chip-row mb-0">
+                            <button type="button" class="home-chip home-chip-active" @onclick="ClearMaxPriceAsync">
+                                Under @_maxPriceFilter.Value.ToString("C") <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                    }
+                </div>
+                <div class="em-popover-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@(!HasActiveFilters)" @onclick="ClearFiltersAsync">
+                        <i class="bi bi-x-lg me-1"></i>Clear all
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm" @onclick="() => _filtersOpen = false">Done</button>
+                </div>
             </div>
         }
 
@@ -188,7 +220,7 @@
             else if (_mapBusinesses.Count == 0)
             {
                 <div class="text-center py-5">
-                    <i class="bi bi-map fs-1 text-muted d-block mb-3"></i>
+                    <div class="em-empty-icon"><i class="bi bi-map"></i></div>
                     <p class="text-muted mb-0">No kitchens have a saved location yet.</p>
                 </div>
             }
@@ -209,7 +241,7 @@
     else if (_paged.Items.Count == 0)
     {
         <div class="home-empty">
-            <i class="bi bi-shop fs-1 text-muted d-block mb-3"></i>
+            <div class="em-empty-icon"><i class="bi bi-shop"></i></div>
             <p class="text-muted mb-0">@(_paged.TotalCount == 0 && !HasActiveFilters ? "No kitchens have joined yet — check back soon." : "Nothing matches your filters yet.")</p>
         </div>
     }
@@ -299,6 +331,7 @@
     private string _dietaryTagFilter = "";
     private decimal? _maxPriceFilter;
     private bool _favoritesOnly;
+    private bool _filtersOpen;
     private int _pageIndex = 1;
     private const int PageSize = 9;
     private readonly Debouncer _reloadGate = new();
@@ -321,6 +354,14 @@
     private bool _mapNeedsRender;
 
     private bool HasActiveFilters => _search != "" || _businessTypeFilter != "" || _dietaryTagFilter != "" || _maxPriceFilter.HasValue || _sortBy != BusinessSortOptions.Name || _favoritesOnly;
+
+    // Badge on the Filters trigger — excludes the always-visible search box.
+    private int ActiveFilterCount =>
+        (_businessTypeFilter != "" ? 1 : 0) +
+        (_dietaryTagFilter != "" ? 1 : 0) +
+        (_maxPriceFilter.HasValue ? 1 : 0) +
+        (_sortBy != BusinessSortOptions.Name ? 1 : 0) +
+        (_favoritesOnly ? 1 : 0);
 
     protected override async Task OnInitializedAsync()
     {

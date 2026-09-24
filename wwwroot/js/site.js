@@ -148,6 +148,27 @@ window.EcoMeal = {
         }
     },
 
+    // Manual dark/light toggle (UI revamp Phase 2/3). Sets data-bs-theme alongside data-theme so
+    // Bootstrap's own dark mode covers raw .card/.table/.form-control that --em-* tokens don't.
+    theme: {
+        KEY: "em-theme",
+        get: function () {
+            return document.documentElement.getAttribute("data-theme") || "light";
+        },
+        set: function (theme) {
+            document.documentElement.setAttribute("data-theme", theme);
+            document.documentElement.setAttribute("data-bs-theme", theme);
+            try {
+                localStorage.setItem(this.KEY, theme);
+            } catch { /* storage unavailable (private browsing, quota, etc.) */ }
+        },
+        toggle: function () {
+            var next = this.get() === "dark" ? "light" : "dark";
+            this.set(next);
+            return next;
+        }
+    },
+
     // Persists which business a multi-business staff member is currently managing — same
     // survives-reload need as cart, above.
     managedBusiness: {

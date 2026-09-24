@@ -33,7 +33,7 @@
     else if (_standingOrders.Count == 0)
     {
         <div class="text-center py-5">
-            <i class="bi bi-arrow-repeat fs-1 text-muted d-block mb-3"></i>
+            <div class="em-empty-icon"><i class="bi bi-arrow-repeat"></i></div>
             <p class="text-muted mb-3">No standing orders yet.</p>
             <p class="text-muted small mb-0">Open a kitchen you rescue from often and look for the "Standing order" section on its page.</p>
         </div>
@@ -116,7 +116,7 @@
     private async Task ToggleActiveAsync(StandingOrder standing)
     {
         await StandingOrderController.UpdateAsync(standing.Id, standing.MaxWeeklySpend, !standing.IsActive);
-        standing.IsActive = !standing.IsActive;
+        await LoadAsync();
     }
 
     private void RequestDelete(StandingOrder standing) => _pendingDelete = standing;

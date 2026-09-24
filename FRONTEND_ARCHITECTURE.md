@@ -58,6 +58,7 @@ Components/
 │   ├── AccountSettingsDashboard.razor # /account-settings — MainLayout host, Admin/BusinessManager only
 │   ├── TripPlanner.razor         # /trip-planner — nearest-neighbor pickup route across live orders (Phase 15)
 │   ├── Referrals.razor           # /referrals — Phase 16 invite link, store-credit balance, invite history
+│   ├── Brands.razor / BrandDetail.razor  # /brands, /brands/{Id} — Phase 17 multi-location chain grouping
 │   ├── Orders.razor              # /orders — customer order history + cancel + reorder + rescue-streak stat (Phase 16)
 │   ├── OrderPickupPass.razor     # /orders/pickup/{Id} — QR code(s) for a Confirmed order, splittable into several
 │   ├── OrderScan.razor(.js)      # /orders/scan — manager camera scanner + manual order-number lookup fallback
@@ -82,6 +83,8 @@ Components/
     ├── AccountSettingsPanel.razor # Name + password form, shared by both AccountSettings pages above
     ├── AnchoredDropdown.razor    # Generic trigger+panel dropdown, JS-positioned to escape overflow clipping
     ├── ConfirmDialog.razor       # Generic confirm/cancel modal
+    ├── ReportDialog.razor        # Phase 9 — same shell as ConfirmDialog, plus a required reason textarea
+    ├── SafeFocusOnNavigate.razor # Replaces <FocusOnNavigate> — only focuses if nothing else has focus, see §15
     ├── ForbiddenPanel.razor / NotFoundPanel.razor
     ├── NotificationBell.razor   # Trigger button only — badge + polling, used in both layouts
     ├── NotificationPanel.razor  # The actual popup, rendered once at each layout's top level — also
@@ -90,11 +93,12 @@ Components/
     ├── ImpactEquivalencyStats.razor  # Impact Phase 1 — kg saved -> km not driven / L water saved
     ├── Pagination.razor
     ├── StarRating.razor         # Read-only fractional-fill display + editable 1-5 picker, same component
+    ├── ThemeToggle.razor        # UI revamp Phase 2 — trigger only, used in both layouts, see §12/§13
     └── CartPanel.razor          # Slide-in basket + checkout
 
 Constants/  Models/               # Debouncer, PaginatedList<T>, GeoDistance, TripPlanner — see below and BACKEND_ARCHITECTURE.md
 wwwroot/
-├── app.css                       # ~4100 lines, one file, no preprocessor — see §13
+├── app.css                       # ~4300 lines, one file, no preprocessor — see §13
 ├── js/site.js                    # window.EcoMeal namespace — see §14
 ├── service-worker.js             # Web push: push + notificationclick handlers, registered by
 │                                  # EcoMeal.push.registerAsync on every page load (§14)
@@ -194,7 +198,7 @@ One consequence worth knowing: when `NotFoundPage` renders via the Router's in-c
 
 | Layout | Used by | Shell |
 |---|---|---|
-| `PublicLayout` | Home, BusinessDetail, BusinessApply, Orders, TripPlanner, OrderPickupPass, BasketPlanner, Impact, AccountSettings, AccessDenied, NotFound | Sticky header (logo, impact-leaderboard trophy link, notification bell, AI plan-basket sparkle for Customer, orders link + trip-planner link + basket button/badge for Customer, dashboard link for staff, "list your business" link for Customer/BusinessManager, account-settings gear icon, logout), `@Body`, footer. Owns the `CartPanel` and (`AuthorizeView`-gated) `NotificationPanel`, and the cart's open/closed state |
+| `PublicLayout` | Home, BusinessDetail, BusinessApply, Orders, TripPlanner, OrderPickupPass, BasketPlanner, Impact, AccountSettings, AccessDenied, NotFound | Sticky header (logo, impact-leaderboard trophy link, notification bell, AI plan-basket sparkle for Customer, orders link + trip-planner link + basket button/badge for Customer, dashboard link for staff, "list your business" link for Customer/BusinessManager, account-settings gear icon, `ThemeToggle` (Phase 2), logout), `@Body`, footer. Owns the `CartPanel` and (`AuthorizeView`-gated) `NotificationPanel`, and the cart's open/closed state |
 | `MainLayout` | Dashboard, Businesses(+Form), Packages(+Form), PackageTemplates, OrderManagement, Payments, AccountSettingsDashboard, Users, Reports, AuditLog, Types, OrderScan, OrderValidate, OrderValidateLegacy | Fixed left sidebar (`NavMenu`) + `<main>` content area — the classic admin-panel shell. Also owns `NotificationPanel` |
 | `EmptyLayout` | Login, Register, ForgotPassword, ResetPassword, ConfirmEmail, ResendConfirmation, PaymentReturn, PaymentCancel | Just `@Body` — no header, no sidebar, no footer; the login/register cards and the Stripe redirect landing pages all center themselves entirely via `app.css`'s `.login-page`/`.login-card`/`.cart-confirmation` (see §8) |
 
@@ -273,7 +277,7 @@ Same panel either way, since a password belongs to the account, not the role or 
 
 ### NavMenu — role-aware sidebar
 
-Plain `<AuthorizeView Roles="@AppRoles.Admin">` gates the "User Roles", "Reports", "Audit Log", and (Phase 11) "Types" nav links; every other link (Dashboard, Businesses, Packages, Orders, Payments, Account Settings) is visible to both `Admin` and `BusinessManager` — the actual data scoping (a manager only sees the business or businesses they're staff of) happens page-side, not by hiding nav links per role. The sidebar footer shows the signed-in user's initial-avatar, email, and a role label resolved by a local `DisplayRole` switch expression, plus the same `NotificationBell` trigger the public header uses, with `TriggerClass="sidebar-notif-btn"` for the icon — the popup itself renders from `MainLayout`, not from here (§4, §12).
+Plain `<AuthorizeView Roles="@AppRoles.Admin">` gates the "User Roles", "Reports", "Audit Log", and (Phase 11) "Types" nav links; every other link (Dashboard, Businesses, Packages, Orders, Payments, Account Settings) is visible to both `Admin` and `BusinessManager` — the actual data scoping (a manager only sees the business or businesses they're staff of) happens page-side, not by hiding nav links per role. The sidebar footer shows the signed-in user's initial-avatar, email, and a role label resolved by a local `DisplayRole` switch expression, plus the same `NotificationBell` and `ThemeToggle` (Phase 2) triggers the public header uses, both with `TriggerClass="sidebar-notif-btn"` for the icon — the notification popup itself renders from `MainLayout`, not from here (§4, §12).
 
 **"Admin Panel" / "Manager Panel" subtitle**: this sidebar is the one `DefaultLayout` shared by both `Admin` and `BusinessManager` (§3), and the brand subtitle under the logo used to hardcode "Admin Panel" regardless of who was actually signed in — a plain manager saw a title implying admin privileges they don't have. Now a small `<AuthorizeView Roles="@AppRoles.Admin">` picks "Admin Panel" for the `Authorized` branch and "Manager Panel" for `NotAuthorized`, so the label always matches the viewer's real role.
 
@@ -382,6 +386,7 @@ The storefront. Loads `_livePackages` (all packages with `PickupEnd > now`, for 
 - Clicking a card calls `NavigationManager.NavigateTo($"/businesses/{id}")` — cards are rendered as `<button>` elements (not `<a>`) specifically so the per-card favorite-heart button can `@onclick:stopPropagation="true"` without fighting an anchor's default navigation.
 - **"Closed now" badge** — `IsClosedNow(business)` calls `Models.BusinessHoursStatus.IsOpenNow(business.Hours, business.Closures, ClientTimeZoneService.ToLocal(DateTime.UtcNow))` (`BACKEND_ARCHITECTURE.md` §3) and only renders the badge when that's explicitly `false` — a `null` (hours never configured) or `true` result shows nothing, so a business that hasn't set hours yet never looks closed. `Home.razor` subscribes to `ClientTimeZoneService.OnChange` (same pattern `BusinessDetail.razor` already used, §7) so the badge re-evaluates once the browser's real timezone resolves via JS interop, not just on the initial UTC-default render.
 - **Card photo placeholder** — `.biz-card-media`'s background-color fallback (`--em-forest`) has no failure event of its own, so a *set* `ImageUrl` that fails to load (unreachable host, no network egress) looked identical to a genuinely broken/empty card. `EcoMeal.media.checkPlaceholders` (§14) probes each card's `data-image-url` via a JS `Image()` and reveals a centered shop icon on failure; a `MutationObserver` re-runs it for cards that appear after pagination/filtering, since a one-time page-load scan would miss every page after the first.
+- **Filters popover (UI revamp Phase 4)** — kitchen-type, sort, diet/allergen, Near me, Favorites, and the max-price chip all moved off the default-visible toolbar into an `.em-popover` (§13) gated by one `_filtersOpen` bool; the toolbar itself keeps only search, the Filters trigger, and Map view. `ActiveFilterCount` (a separate computed property from `HasActiveFilters`, which still gates "Clear all") deliberately excludes the search box from its count — the badge on the Filters button is meant to answer "how much is hidden behind this click," not "is anything non-default at all." None of the underlying filter state, bindings, or reload plumbing changed — every `@bind`/`@bind:after` call moved with its control, unmodified.
 
 ### AI search bar (Phase 2)
 
@@ -864,6 +869,8 @@ Reuses the exact same `OrderController.GetOrdersInRangeAsync` call the CSV expor
 
 A `BusinessManager`'s stat cards and trend chart are scoped to `ManagedBusinessContext.SelectedBusinessId`, not every business they staff — `LoadDashboardAsync` passes it straight through to `OrderController.GetOrdersForManagementAsync`/`GetOrdersInRangeAsync`, and `OnInitializedAsync` subscribes to `ManagedBusinessContext.OnChange` (`HandleManagedBusinessChanged` re-runs `LoadDashboardAsync`) so switching businesses in `NavMenu` reloads every card and the chart in place, no navigation needed. Admins skip `ManagedBusinessContext` entirely and always see platform-wide totals.
 
+**Business tools accordion (UI revamp Phase 4)** — Share-your-impact and the POS/inventory webhook panel (both only rendered when `_myBusinessId is not null`, i.e. never for an admin) start collapsed behind `_impactPanelOpen`/`_webhookPanelOpen` bools gating each body's `@if`, under a page-only "Business tools" heading separate from the "Analytics" heading above the trend chart and Business Analytics card. Deliberately **not** a real Bootstrap accordion (`data-bs-toggle="collapse"`) — this app never loads Bootstrap's JS bundle (only `bootstrap.min.css`, `App.razor` §2), so the data-attribute markup would render but do nothing. The toggle button reuses the `card-header` class purely for its rounded-top-corner/padding styling (not for any `.accordion-button` behavior), composed with the same plain-Bootstrap utility classes (`btn`, `d-flex`, `bg-transparent`) the rest of this admin-only page already uses instead of any `--em-*` token (§13's "the admin section reskins entirely through `data-bs-theme`" finding).
+
 **Business Analytics card (Phase 8)** — sell-through rate and a 24-bar "busiest pickup hours" chart, right below the trend chart, fed by one call to `PackageController.GetForAnalyticsAsync(businessId, since)` (same 14-day `since` as the trend chart, reused from `LoadDailyStatsAsync`) rather than a second backend round-trip per metric:
 ```csharp
 private async Task LoadAnalyticsAsync(Guid? businessId)
@@ -983,6 +990,8 @@ The selection deliberately **isn't** scoped to the current page — it's a plain
 ```
 This is a **plain `<a href>`**, not a button wired to `OrderController` — it has to be, since `OrderExportController` is a real HTTP endpoint and the browser needs to treat the response as a downloadable file (see `BACKEND_ARCHITECTURE.md` §6). The rest of the page (search, status/business filters, confirm/complete actions) follows the identical `Debouncer`-gated paged-list pattern every other admin list page uses. Cancel is the one action that's `ConfirmDialog`-gated rather than instant (`_pendingCancel` holds the order awaiting confirmation) — a manager's misclick here refunds a paying customer, so it gets the same confirm-before-mutate treatment as the customer-facing cancel on `Orders.razor` (§9).
 
+**Export popover (UI revamp Phase 4)** — the from/to date pickers used to sit permanently in their own row below the filters; they now live inside an `.em-popover` (§13) gated by `_exportOpen`, opened by an "Export CSV" button next to the filters instead. `ExportHref` itself is unchanged — still the same plain `<a href target="_blank">` computed property above, just rendered inside the popover's footer, with `@onclick="() => _exportOpen = false"` closing the panel alongside the browser's own download-tab navigation.
+
 A manager's `businessId` (both for the paged list and for `ExportHref` above) comes from `ManagedBusinessContext.SelectedBusinessId`, not a page-local dropdown — an admin instead picks from `_businessFilter`, a plain `<select>` over every business. `OnInitializedAsync` subscribes to `ManagedBusinessContext.OnChange` (`HandleManagedBusinessChanged`, resetting `_pageIndex` back to 1 before reloading) so switching businesses in `NavMenu` refreshes the order queue in place. If a manager staffs zero businesses, `GetOrdersForManagementPagedAsync` returns `UnauthorizedResult` and the page renders `ForbiddenPanel` ("You don't manage a business yet…") instead of an empty table.
 
 **Logistics note hint (Phase 15)**: a small `bi-chat-left-text` icon next to the order number, `@if (!string.IsNullOrWhiteSpace(order.LogisticsNote))`, its `title` attribute carrying the note text for an at-a-glance hover — the full note itself only renders in `OrderDetailModal` (§12) once the row is clicked open.
@@ -1028,31 +1037,37 @@ Delete still goes through `ConfirmDialog` (§12) — a single shared dialog inst
 | `AnchoredDropdown` | Generic trigger + floating panel, for triggers whose on-screen position genuinely varies (a table row that can be anywhere depending on scroll/paging). `OnAfterRenderAsync` calls `EcoMeal.positionDropdown(anchorRef, panelRef)` on **every** render while open, not just the first — content that loads in async can grow the panel past its first, smaller measurement, and a stale position clips it against the viewport edge; repositioning is idempotent (no visible jump) since nothing else re-renders this subtree on a bare scroll. `positionDropdown` itself clamps against both the top and bottom edges (not just top), since a `100dvh`-sized anchor (§4) can still measure a few px past the visible viewport on some browsers. See §14 for the JS side. Used for the Businesses/Users manager-assignment pickers. Not suitable for the notification popup even with perfect positioning math, since its trigger lives inside a `position: sticky` ancestor — see `NotificationBell`/`NotificationPanel` below and §4 |
 | `ConfirmDialog` | Generic confirm/cancel modal — delete confirmations, the cross-business "start a new basket?" prompt, cancel-order confirmations. `Busy` disables both buttons and swaps the confirm label for a spinner mid-request |
 | `ReportDialog` (Phase 9) | Same `.confirm-backdrop`/`.confirm-dialog` shell as `ConfirmDialog` (both capped at `max-height: calc(100vh - 3rem)` with `overflow-y: auto`, so a tall message/reason can't push the buttons off a short viewport), plus a required reason `<textarea>` — the Submit button stays disabled until non-whitespace text is entered. Optional `Title`/`Message`/`Placeholder`/`ConfirmLabel` parameters default to the customer-facing report copy ("Report {TargetLabel}" / "Submit report"), used as-is by the report action on `BusinessDetail.razor`/`PackageDetailModal.razor` (submits via `ReportController.SubmitAsync`) — **Phase 16**: `BusinessDetail.razor` reuses the same single dialog instance for its per-tip flag icons too, just with a dynamic `TargetLabel` ("this tip" vs. the business's own name) picked by whether a `_reportTipId` is set. The admin-facing Reject/Hide actions on `Businesses.razor`/`Packages.razor` (§11) pass their own copy instead ("Hide '{name}'?" / "Hide package", etc.) — those two call sites never touch `ReportController` at all, they just borrow the modal shape for its `EventCallback<string>` |
-| `ForbiddenPanel` / `NotFoundPanel` | Inline empty-state panels — the former for "wrong role," the latter for "this specific entity no longer exists" (distinct from the global 404 route, used by edit pages when a fetched-by-ID entity comes back null) |
+| `ForbiddenPanel` / `NotFoundPanel` | Inline empty-state panels — the former for "wrong role," the latter for "this specific entity no longer exists" (distinct from the global 404 route, used by edit pages when a fetched-by-ID entity comes back null). Both render the shared `.em-empty-icon` badge (§13, UI revamp Phase 6); `RescueCircleInvite.razor` is `NotFoundPanel`'s one non-edit-page caller |
 | `NotificationBell` / `NotificationPanel` | Split into a trigger (`NotificationBell`, rendered inside the sidebar footer / public header) and the popup itself (`NotificationPanel`, rendered once from each layout's top level, outside the sidebar/header entirely) sharing state through `NotificationPanelState` (§5) — not one component, because one component can't render in two DOM locations at once, and the popup *has* to live outside the sidebar/header's subtree (§4). Styled as a centered modal (`.notif-panel`, `position: fixed; top/left: 50%; transform: translate(-50%,-50%)`, `max-height: calc(100vh - 3rem)` with internal scroll) — the same family as `ConfirmDialog`/`ReportDialog`, chosen after a corner-pinned/`AnchoredDropdown`-based panel kept re-clipping against the sidebar's edge across several earlier fixes; centering plus a viewport-fraction max-height can't clip against any edge, on any screen size. A `System.Threading.Timer` on `NotificationPanelState` polls `GetMyUnreadCountAsync` every 30 seconds regardless of whether the panel is open, so the badge count stays fresh for e.g. a manager waiting on new orders; opening the panel separately fetches the actual list (`GetMyNotificationsAsync(20)`) on demand rather than keeping 20 rows in memory at all times. Unread items get a `--em-rescue` left accent bar rather than the generic dot the shared dropdowns use. `NotificationPanel`'s header also carries a bell-icon toggle for **web push** — `OnAfterRenderAsync(firstRender)` calls `PushSubscriptionController.GetPublicKey()` (hides the toggle entirely when `null`, i.e. `WebPush:*` isn't configured server-side — `BACKEND_ARCHITECTURE.md` §10) and `EcoMeal.push.getSubscriptionEndpoint()` (§14) to seed its on/off state without prompting for permission; clicking it calls `EcoMeal.push.subscribe`/`unsubscribe` then mirrors the result to `PushSubscriptionController.SubscribeAsync`/`UnsubscribeAsync`. Gated behind a bare `<AuthorizeView>` (any signed-in role, not just `Customer` — managers/admins get order-lifecycle pushes too) since subscribing needs a real `userId` to attach the row to |
 | `OrderDetailModal` / `PackageDetailModal` | Drill-down modals from a ticket/row click — same visual shell (`biz-modal-*`/`pkg-modal-*` CSS classes), one shows order line items + status, the other a package's full description/tags/price with an "Add to basket" action. Its total shows `Order.Payment.Amount` (§9), not the raw line-item subtotal. **Impact Phase 1**: `OrderDetailModal` renders `<ImpactEquivalencyStats>` under the total, only for a `Completed` order. **Phase 15**: a "Customer note" fact row renders `@if (!string.IsNullOrWhiteSpace(Order.LogisticsNote))` — shared by both `Orders.razor` (the customer's own ticket) and `OrderManagement.razor` (the business side), so no separate note UI was needed for either. `PackageDetailModal`'s `RatingAverage`/`ReviewCount` parameters are plain caller-computed numbers, not a fetch of its own — `BusinessDetail.razor` passes them in from `_reviews` (above); the `StarRating` only renders when `ReviewCount > 0`, so a never-reviewed package shows no rating rather than a misleading 0-star one. Its `.pkg-modal-hero` image banner only renders `@if (!string.IsNullOrWhiteSpace(Package.ImageUrl))` — a package with no photo used to still get the hero block, just empty; now it gets no hero section at all, same "nothing configured → no section" rule the business hours panel (§7) follows |
 | `Pagination` | Renders nothing at all when `TotalPages <= 1` — every paged list page is written to just drop the component in unconditionally rather than wrapping it in its own visibility check |
 | `StarRating` | One component, two modes: `Editable=false` renders a fractional-fill overlay (two stacked 5-star rows, the top one clipped to `Value/5 * 100%` width) for display; `Editable=true` renders a real 1-5 click/hover picker. Both business cards and the review form use the same component, just with different parameters |
+| `ThemeToggle` (UI revamp Phase 2/3) | One icon button, dropped into both the sidebar footer and the public header, just like `NotificationBell` above. Doesn't own any state itself — `OnAfterRenderAsync(firstRender)` reads the real DOM via `EcoMeal.theme.get()` (§14) to seed its icon (moon = currently light, sun = currently dark, i.e. the icon shows what clicking it switches *to*), and every click calls `EcoMeal.theme.toggle()` and mirrors its return value. The actual `data-theme`/`data-bs-theme` attribute writes and `localStorage` persistence all happen in JS, not here — see §13/§14 for why (the first-paint case has to run before any Blazor circuit exists) |
 
 ---
 
 ## 13. CSS Design System
 
-**File:** `wwwroot/app.css` — a single ~4100-line stylesheet, no Sass/Less, no CSS-in-JS, no Tailwind. Organized into clearly delimited sections (`/* ── Section name ── */`), roughly in the order features were added:
+**File:** `wwwroot/app.css` — a single ~4300-line stylesheet, no Sass/Less, no CSS-in-JS, no Tailwind. Organized into clearly delimited sections (`/* ── Section name ── */`), roughly in the order features were added:
 
 ```
-Design tokens · Buttons · Sidebar nav · Content · Stat card accents · Table · Badges
-Role badges · Form focus · Login page · Sidebar user footer · Blazor error banner
-Misc · Public shell · Home hero · Home browse · Impact leaderboard · Package grid
-Add to basket · Cart button + badge · Cart panel · Toast · Orders hero · Orders list
+Design tokens · Dark palette (UI revamp Phase 3) · Shared card shell (UI revamp Phase 5) · Shared pill shape (UI revamp Phase 5)
+Empty-state icon (UI revamp Phase 6) · Buttons · Sidebar nav · Content · Stat card accents · Table · Badges · Role badges
+Form focus · Login page · Sidebar user footer · Blazor error banner
+Misc · Public shell · Home hero · Home browse · Impact leaderboard · Sign in / Create account (logged-out header)
+Cart button + badge · Cart panel · Toast · Orders hero · Orders list
 Order ticket (signature element) · Pickup pass (single-order QR page) · Account settings
-Multiple pickup passes · Packages bulk-action toolbar · Confirm dialog
+Multiple pickup passes · Packages bulk-action toolbar · Confirm dialog · Filter / export popover (UI revamp Phase 4)
 Manager order actions · Dashboard trend chart (+ axis row) · Star rating
 Business grid (home) · Business detail page · Packages inside the business modal
 Reviews inside the business modal · Package detail modal · Order detail modal
 Manager pickup scanner · Pickup validation page · Notification bell · Favorites
 Dietary tag badges · AI budget/basket planner
 ```
+**UI revamp Phase 5** deleted the old "Package grid"/"Add to basket" sections outright rather than
+migrating them — `.package-card`/`.home-grid`/`.package-card-add-btn` turned out to be dead CSS,
+orphaned when `Home.razor` moved to the `.biz-card` business grid (browse kitchens, not raw
+packages); grepping the whole `Components/` tree found zero `.razor` references to any of them.
 
 ### Design tokens
 
@@ -1072,6 +1087,17 @@ Dietary tag badges · AI budget/basket planner
     --em-ink:        #1b2a1f;
     --em-text:       var(--em-ink);
     --em-muted:      #6f6656;
+    --em-leaf-darker: #166534;  /* pressed/active button state, one step past --em-leaf-dark */
+    --em-cream:      #fffaf2;   /* the hero "rescued" stamp's own ink color */
+
+    /* Semantic layer — components reach for these instead of a hardcoded hex, so a future
+       dark theme only needs to redefine tokens here, not be hunted through the whole file. */
+    --em-bg:             var(--em-paper);
+    --em-surface-raised: #ffffff;
+    --em-border:         #e3ddd0;
+    --em-border-strong:  #cbc2ac;
+    --em-text-muted:     var(--em-muted);
+    --em-text-inverse:   #ffffff;
 
     --bs-primary: #1f8a4c;      /* + -rgb, --bs-link-color(-hover), all retuned to match */
     ...
@@ -1082,6 +1108,26 @@ Dietary tag badges · AI budget/basket planner
     --em-rescue-dark: #b85a22;
     --em-rescue-soft: rgba(217, 112, 47, 0.16);
 
+    /* Gold — reserved for "you earned this" moments only (loyalty, streaks, leaderboard
+       rank #1): darkened off the raw sampled logo pixel to actually clear 4.5:1 on --em-paper. */
+    --em-gold:      #a3811a;
+    --em-gold-dark: #7a5f12;
+    --em-gold-soft: rgba(163, 129, 26, 0.16);
+    --em-bronze:    #92400e;    /* leaderboard's #3 rank — its own hue, unrelated to gold */
+
+    /* Status accents — still need distinct hues for multi-state badges/stat cards, but
+       hand-warmed off the raw Tailwind defaults that used to clash with the palette above. */
+    --em-info:         #3f6d99;
+    --em-info-soft:    rgba(63, 109, 153, 0.1);
+    --em-violet:       #7d5fb0;
+    --em-violet-soft:  rgba(125, 95, 176, 0.1);
+    --em-danger:       #c9503f;
+    --em-danger-dark:  #9c3a2c;
+    --em-danger-soft:  #fbe9e6;
+    --em-warning:      #f59e0b;
+    --em-warning-dark: #b45309;
+    --em-warning-soft: #fef3c7;
+
     --em-font-display: 'Fraunces', Georgia, 'Iowan Old Style', serif;
     --em-font-body:    'Hanken Grotesk', system-ui, -apple-system, sans-serif;
     --em-font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
@@ -1091,15 +1137,98 @@ Dietary tag badges · AI budget/basket planner
 ```
 `--bs-primary`/`--bs-link-color` are overridden to the same `#1f8a4c` as `--em-leaf-mid`, so Bootstrap's own `.btn-primary`/link-color utilities blend in with the custom design language instead of clashing with it — the app doesn't fight Bootstrap, it retunes it.
 
+**UI revamp Phase 1 (design tokens)** eliminated all 170 raw hex literals that used to sit outside this block (confirmed by grep, zero remain), across `app.css` and all three `*.razor.css` isolation files. A near-duplicate of an existing brand color (`#1f8a4c`, `#1b7a44`, `#22c55e` in the reconnect-modal scaffold, `#1a7540` in the public header) just became a `var()` reference to the token it had drifted from. A genuinely off-brand, never-tuned Tailwind default (`#2563eb`, `#8b5cf6`, `#0ea5e9`, `#64748b`, `#e5e7eb`, `#d1d5db`, and the four separate reds `#ef4444`/`#f87171`/`#dc2626`/`#b91c1c`) was consolidated into the new `--em-info`/`--em-violet`/`--em-text-muted`/`--em-border(-strong)`/`--em-danger(-dark/-soft)` tokens above instead, warmed enough to sit next to `--em-leaf`/`--em-rescue` without clashing. Amber/warning hexes (`#f59e0b`, `#b45309`, `#fef3c7`) were already warm-compatible, so `--em-warning*` just tokenizes them as-is. One accidental collision the pass turned up: `.impact-rank-gold` and the allergen-warning tag both hardcoded the same `#b45309` by coincidence — now split into `--em-gold-dark` and `--em-warning-dark`.
+
+### Theme switching (UI revamp Phase 2/3)
+
+`<html>` carries a `data-theme="light"`/`"dark"` attribute, decided by a synchronous inline `<script>` at the very top of `App.razor`'s `<head>` — before the font/Bootstrap/`app.css` `<link>` tags, so the attribute exists before the browser has anything to paint. Resolution order: an explicit stored choice (`localStorage["em-theme"]`) wins; otherwise it falls back to `prefers-color-scheme: dark`. This has to be inline rather than in `site.js` because `site.js` loads at the bottom of `<body>` — by then the browser has already painted once, and swapping the attribute after that first paint is the exact flash the phase exists to avoid. `ThemeToggle` (§12) is the one component that touches this after load, via `EcoMeal.theme` (§14). The same script also sets `data-bs-theme` to the identical value — see below.
+
+**The dark palette (Phase 3)** redefines the token layer inside `:root[data-theme="dark"]`, immediately after the base `:root` block, rather than as one block at the end of the file or scattered per-component — tokens are the one thing that legitimately belongs centralized, since every component already reaches for them by name. Only `--em-ink`, `--em-muted`, the surface/border tokens, the accent hues used as *text* (`--em-leaf(-mid/-dark)`, `--em-rescue(-dark)`, `--em-info`, `--em-violet`, `--em-danger(-dark)`, `--em-warning-dark`, `--em-gold(-dark)`, `--em-bronze`), the two rgba `-soft` pairs that were flat hex before, and the shadow tokens get redefined; `--em-forest`/`--em-paper` themselves are untouched, since two dozen components already use `--em-forest` as a fixed decorative fill (sidebar, order-ticket stub) that shouldn't shift with the reader's theme. Every value was reached by actually computing WCAG contrast against both `--em-bg` (`#0e2117`) and `--em-surface-raised` (`#1c3f28`) — not by inverting or applying a flat percentage. Most accents needed 20-45% blended toward white to clear 4.5:1, and the two that also sit on their own `-soft` tinted pill background (`--em-rescue-dark` in `.notif-push-error`, `--em-danger-dark`/`--em-warning-dark` on their own now-translucent `-soft`) needed 45-60%, because contrast against a translucent badge composited over the dark surface is a strictly harder bar than contrast against the plain surface alone.
+
+That brightening is why the base `:root` also gained seven `--em-*-solid` tokens (`leaf`, `leaf-mid`, `leaf-dark`, `rescue`, `info`, `danger`, `muted`) holding the original light-mode hex, unconditionally, in both themes. A handful of buttons/badges fill solid with an accent and lay white text on top (`.package-card-add-btn`, `.notif-badge`, `.home-chip-active`, the `order-action-*:hover` states...) — that white-on-solid-fill contrast pair doesn't depend on page theme at all, so brightening the *same* token for its more common on-surface-text role would have quietly broken every one of those buttons in dark mode. The ~10 call sites that fill solid now point at the `-solid` variant instead; nothing else changed. Two more spots needed a real per-component override, not a token flip, because they're fixed dark-forest ink on a surface that's now also dark: `.order-action-qr`'s base (non-hover) state and `.order-ticket-seam`'s dashed divider (the signature ticket element, §13 below) — both get a small `:root[data-theme="dark"] .selector { ... }` rule right next to their light-mode rule, same placement convention this file already uses for `@media (prefers-reduced-motion: reduce)` blocks. `#blazor-error-ui`'s old `color-scheme: light only` (flagged as a real gap before this phase) is now `light`/`dark` per theme the same way.
+
+**`data-bs-theme` rides alongside `data-theme`, set by the same two places** (`App.razor`'s inline script, `EcoMeal.theme.set`) — Bootstrap 5.3 ships its own complete `[data-bs-theme=dark]` palette that reskins every plain, un-customized Bootstrap primitive (`.card`, `.table`, `.form-control`/`.form-select`, `.dropdown-menu`, `.modal-content`...) at once. That matters more than it sounds: the entire admin section (§11 — Dashboard's stat tiles, every list/form page) is built from bare Bootstrap `.card`s that no `--em-*` token ever touches, and discovering that gap live (the sidebar went dark, the cards next to it stayed white) is what added this line — restyling every admin `.card` by hand would have been its own phase. `--bs-primary`/`--bs-link-color`/`--bs-btn-*` stay pinned to the brand green regardless of which Bootstrap theme is active, since `app.css` loads after `bootstrap.min.css` and wins on equal specificity — Bootstrap's own dark-theme values for those specific properties never apply.
+
 **Three typefaces, one job each** (§2 for how they're loaded): `--em-font-display` (Fraunces, a serif with real optical-size variation) on every heading and `.font-display` element — the one place the design language departs from Bootstrap's default sans, giving the brand a distinct voice on page titles, the hero, and the order-ticket stub. `--em-font-body` (Hanken Grotesk) is the default for `html, body` — everything not explicitly opted into the display or mono face falls back to it. `--em-font-mono` (JetBrains Mono) is reserved for `.font-mono` call sites — order numbers, QR-adjacent labels — where a fixed-width face reads as "a code/reference," not body copy.
+
+### Shared card & pill shapes (UI revamp Phase 5)
+
+Two consolidations, both landing as CSS-only changes with zero `.razor` markup churn for the
+existing call sites, because both use a **grouped selector** instead of a rename: `.order-ticket`,
+`.biz-card`, `.impact-row`, and `.impact-optin-card` are listed together on one rule defining
+`background`/`border-radius`/`box-shadow` (`.em-card`'s own selector joins the same list, for any
+*new* card-shaped block going forward), and a second rule handles the hover-lift + `card-rise`
+entrance animation the same way. `.impact-row`/`.impact-optin-card` get a second, denser rule
+(12px radius, `--em-shadow-sm`) layered on top, since a leaderboard row is a list item, not a
+clickable grid tile. `.order-ticket-clickable:hover`'s own bespoke `translateY(-1px)` + hand-rolled
+rgba shadow was deleted in favor of the same `translateY(-3px)` + `--em-shadow-lg` `.biz-card:hover`
+already used — a deliberate normalization, not an oversight; the two were only ever different
+because nobody had gone back to reconcile them. **`.cart-line`** — named in the original redesign
+plan as a fourth hand-rolled card shell — turned out on inspection to have no `background`/
+`border-radius`/`box-shadow` of its own at all, just a `border-bottom` divider between rows in a
+list; it was left alone rather than forced into a card shape that would have changed the cart
+panel's compact-list feel for no real consolidation gain.
+
+The pill/badge side works the same way: `.em-pill`'s selector is grouped with `.role-badge`,
+`.business-type-badge`, `.package-type-badge`, `.order-status-badge`, `.biz-card-live-badge`,
+`.biz-card-rating-badge`, `.biz-card-closed-badge`, `.biz-modal-open-badge`, and `.diet-tag` for
+the base shape (`display`/`gap`/`padding`/`border-radius`/`font-size`/`font-weight`), with
+`.em-pill--sm`/`--uppercase`/`--interactive` modifier rules doing the same grouped-selector trick
+for the handful of classes that need a smaller size, uppercase+letter-spacing, or the
+cursor/hover-filter/disabled treatment a clickable badge (`.role-badge`, used as an
+`AnchoredDropdown` trigger) needs but a static label doesn't. `.em-pill--leaf/info/violet/rescue/
+danger/warning/muted/dark/surface/glass` are the color modifiers a genuinely *new* badge reaches
+for going forward — the existing families keep their own semantic modifier class names
+(`.role-badge-admin`, `.order-status-cancelled`, `.diet-tag-allergen`...) rather than being renamed
+to the generic ones, since `.role-badge-admin` already documents what it's for better than
+`.em-pill--violet` would at the call site; only the *shape* needed to stop being redeclared
+per-class. Two genuinely duplicate badges got merged outright instead of just re-shaped:
+`.biz-pkg-closing-badge` (the "Ends in N min" countdown) turned out byte-for-byte identical to
+`.biz-card-closed-badge` ("Closed now") once both were reduced to just their color, so
+`PackageDetailModal.razor`/`BusinessDetail.razor` now render the countdown with
+`.biz-card-closed-badge` directly — the one visible side effect is the countdown text now
+renders uppercase, matching every other status pill in the app, where it used to be sentence case
+purely because nobody had unified it before. `.biz-review-package-tag` was identically merged into
+`.diet-tag` (same padding/font-size/color, just a different call site). Along the way, three color
+rules that had drifted onto a raw, never-updated Tailwind hex instead of the Phase 1 token
+(`role-badge-businessmanager`/`business-type-badge`'s blue, `role-badge-admin`'s violet,
+`order-status-cancelled`'s red — all in an `rgba(...)` literal, which Phase 1's hex-literal grep
+never caught since it only matched bare `#` hexes) now point at `--em-info-soft`/`--em-violet-soft`/
+`--em-danger-soft` like every other badge in the same color family already did.
+
+### Empty-state icon (UI revamp Phase 6)
+
+`.em-empty-icon` is one shared "nothing here yet" treatment — a 64px soft-tinted circle
+(`background: var(--em-muted-soft)`, a warm-tinted token off `--em-muted`'s own RGB, not
+Bootstrap's cold `#6c757d`) wrapping the glyph, reusing `card-rise` for its entrance so empty
+states aren't the one spot in the app with zero motion (same `prefers-reduced-motion` guard as
+everything else). It replaced a copy-pasted `<i class="bi bi-X fs-1 text-muted d-block mb-3">`
+fingerprint at 20 call sites — `home-empty`/`orders-empty`/`cart-empty`, `NotFoundPanel`/
+`ForbiddenPanel`/the global `NotFound.razor` 404 page, and eleven admin list pages' "no results"
+states (`Users`, `Packages`, `Businesses`, `Payments`, `Reports`, `AuditLog`, `OrderManagement`,
+`PackageTemplates`, `StandingOrders`, `Referrals`, `Home.razor`'s own map-view-empty state). Same
+sweep also caught `.em-pill--muted` still carrying a raw Tailwind slate (`rgba(107, 114, 128,
+0.1)`) instead of a token — now `var(--em-muted-soft)` like the rest of that pill family — plus
+two adjacent correctness fixes: `RescueCircleInvite.razor`'s bespoke "Rescue Circle no longer
+exists" block now uses `NotFoundPanel` (§12) like every other such page, and
+`PaymentCancel.razor`'s cancelled-state icon (was rendering leaf-green — `.cart-confirmation > i`'s
+color rule outranks the `text-muted` class on the same element by specificity) got its own
+`.cart-confirmation > i.text-muted` override so a cancellation no longer reads as a success.
+
+The animation half of this phase was a confirm-don't-change pass: `card-rise` (0.35s ease-out) and
+`.biz-card`/`.order-ticket-clickable`'s hover-lift (`translateY(-3px)` + `--em-shadow-lg`) from
+Phase 5 were checked live in a real browser session, both themes, and still read as intentional
+against the surfaces underneath them — no changes were needed there.
 
 ### The "order ticket" — the signature visual element
 
-`Order` rendering (`Orders.razor`, `OrderManagement.razor`, `OrderPickupPass.razor`, `OrderDetailModal`, `OrderValidate.razor`) all share one CSS shape: a perforated-ticket card with a dashed "seam" divider and a torn-stub side panel showing the order number — deliberately evoking a physical pickup receipt rather than a generic table row, reinforcing the app's "go pick this up in person" mental model. `OrderPickupPass.razor` reuses the identical `.order-ticket`/`.order-ticket-stub` classes at a larger scale (`--pass` modifier classes) rather than inventing a new component, so the QR-code pass reads as "the same ticket, just the one you're holding" instead of a different UI.
+`Order` rendering (`Orders.razor`, `OrderManagement.razor`, `OrderPickupPass.razor`, `OrderDetailModal`, `OrderValidate.razor`) all share one CSS shape: a perforated-ticket card with a dashed "seam" divider and a torn-stub side panel showing the order number — deliberately evoking a physical pickup receipt rather than a generic table row, reinforcing the app's "go pick this up in person" mental model. `OrderPickupPass.razor` reuses the identical `.order-ticket`/`.order-ticket-stub` classes at a larger scale (`--pass` modifier classes) rather than inventing a new component, so the QR-code pass reads as "the same ticket, just the one you're holding" instead of a different UI. The stub itself (`--em-forest` fill, white text) and the seam's punch-hole circles (`var(--em-surface)`, always matching whatever's behind the ticket) were already theme-safe by construction; only the seam's own dashed line — forest-tinted to read against light paper — needed a dark-mode override (previous section) once the surface behind it could also be dark.
 
 ### Modal family
 
 `PackageDetailModal`/`OrderDetailModal`/`BusinessDetail`'s own inline modal-like sections all share a `biz-modal-*`/`pkg-modal-*` class vocabulary (hero image banner, eyebrow label, fact-grid rows with an icon + label + value) — one visual grammar reused across three different data shapes rather than three bespoke modal designs. `ConfirmDialog`, `ReportDialog`, and the notification popup (`NotificationPanel`) form a second, simpler family: a `position: fixed`, viewport-centered card over a click-to-dismiss backdrop, capped at `max-height: calc(100vh - 3rem)` with internal scroll so tall content can't push controls off a short viewport.
+
+**`.em-popover` (UI revamp Phase 4)** generalizes that second family into a reusable form-field sheet rather than a fixed message/confirmation shape: same centered-overlay mechanics (`.em-popover-backdrop` reuses `cart-backdrop-in`, `.em-popover` reuses `confirm-dialog-in`) plus a header/body/footer skeleton (`.em-popover-header`, `.em-popover-close`, `.em-popover-body`, `.em-popover-toggle-row`, `.em-popover-footer`) any page can drop a handful of `<select>`/`<input>` fields into. `Home.razor`'s Filters button opens one (`.home-filters-panel` — kitchen type, sort, diet/allergen, Near me, Favorites, the max-price chip) and `OrderManagement.razor`'s Export CSV button opens a second, narrower one (`.orders-export-panel` — from/to date pickers) — both instances of the same shell rather than each page hand-rolling its own popover.
 
 ---
 
@@ -1120,6 +1249,11 @@ window.EcoMeal = {
     },
     cart: { save(key, json), load(key), clear(key) },   // thin localStorage wrapper, every call swallows exceptions
     managedBusiness: { save(key, businessId), load(key) },   // same wrapper shape, backs ManagedBusinessContext (§5)
+    theme: {
+        get() { /* reads the live data-theme attribute — always set by the inline head script by now */ },
+        set(theme) { /* writes the attribute + persists to localStorage, swallows storage exceptions */ },
+        toggle() { /* flips light/dark, calls set(), returns the new value */ }
+    },
     push: {
         isSupported() { /* "serviceWorker" in navigator && "PushManager" in window && "Notification" in window */ },
         registerAsync() { /* navigator.serviceWorker.register("/service-worker.js") — called once, below */ },
@@ -1141,6 +1275,8 @@ Called via plain `IJSRuntime.InvokeAsync("EcoMeal.xyz", ...)` from C# (`Anchored
 `push.subscribe`/`unsubscribe` follow the same "never reject, resolve to `null` on any failure" convention as `geo.getPosition` — denied permission, no service worker, or an unsupported browser all just mean `NotificationPanel`'s toggle shows its error text instead of an unhandled promise rejection. `push.registerAsync()` runs once at the bottom of `site.js` itself (not from a component), since service-worker registration needs no permission and has nothing to do with whether the viewer ever opens the notification panel — `wwwroot/service-worker.js` (a separate, un-bundled script, registered at scope `/`) owns the actual `push`/`notificationclick` event handling once registered; see `BACKEND_ARCHITECTURE.md` §3 PushSubscription for the server side that triggers it.
 
 `media.checkPlaceholders` is called once at the bottom of `site.js` and again from a `MutationObserver` on `document.body`, rather than from any C# component — CSS `background-image` has no failure event, so revealing `Home.razor`'s (§6) card placeholder icon needs an actual JS load attempt, and re-running it on DOM mutations is what catches cards rendered after the initial page load (pagination, search/filter) without Blazor needing its own callback into JS.
+
+`theme` (UI revamp Phase 2) only has to *stay in sync* with the DOM after first paint — the actual light/dark decision on a fresh page load is made by a separate, un-bundled inline `<script>` right in `App.razor`'s `<head>` (before `site.js` has even loaded), since deciding before first paint is the entire point and this file loads at the bottom of `<body>`, too late to prevent a flash. Both scripts agree on the same `localStorage` key (`em-theme`) and the same resolution order (explicit stored choice, else `prefers-color-scheme`), so `theme.get()` can stay a one-line attribute read instead of re-running that fallback logic a second time.
 
 ### 14.2 Stock framework template — `ReconnectModal.razor.js`
 

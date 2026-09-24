@@ -19,7 +19,7 @@
 {
     <div class="d-flex gap-3 mb-3 flex-wrap">
         <div class="input-group" style="max-width: 320px;">
-            <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+            <span class="input-group-text border-end-0"><i class="bi bi-search text-muted"></i></span>
             <input type="text" class="form-control border-start-0 ps-0" placeholder="Search actor or target…"
                    @bind="_search" @bind:event="oninput" @bind:after="OnSearchInputAsync"/>
         </div>
@@ -58,7 +58,7 @@
     else if (_paged.Items.Count == 0)
     {
         <div class="text-center py-5">
-            <i class="bi bi-journal-text fs-1 text-muted d-block mb-3"></i>
+            <div class="em-empty-icon"><i class="bi bi-journal-text"></i></div>
             <p class="text-muted mb-0">@(_paged.TotalCount == 0 && string.IsNullOrEmpty(_search) && _actionFilter == "" && _targetTypeFilter == "" ? "Nothing logged yet." : "No entries match your filters.")</p>
         </div>
     }
