@@ -14,10 +14,18 @@
         var pageType = RouteData?.PageType;
         if (pageType != _previousPageType)
         {
+            var isFirstPage = _previousPageType is null;
             _previousPageType = pageType;
             try
             {
                 await JSRuntime.InvokeVoidAsync("EcoMeal.a11y.focusIfIdle", Selector);
+
+                // Skip on the very first render — that's the browser's own initial page load,
+                // which already starts at the top; only subsequent in-app navigations need this.
+                if (!isFirstPage)
+                {
+                    await JSRuntime.InvokeVoidAsync("EcoMeal.a11y.scrollToTop");
+                }
             }
             catch (InvalidOperationException)
             {

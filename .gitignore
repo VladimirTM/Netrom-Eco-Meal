@@ -13,3 +13,4 @@ docker-compose.override.yml
 # Internal planning notes, not meant to ship with the repo.
 /FEATURE_IDEAS.md
 /AI_FEATURE_IDEAS.md
+/UI_UX_AUDIT.md

@@ -34,6 +34,9 @@
                 {
                     <button type="button" class="notif-mark-all" @onclick="() => PanelState.MarkAllReadAsync()">Mark all read</button>
                 }
+                <button type="button" class="notif-panel-close" title="Close" aria-label="Close" @onclick="() => PanelState.Close()">
+                    <i class="bi bi-x-lg"></i>
+                </button>
             </div>
         </div>
         @if (_pushError is not null)

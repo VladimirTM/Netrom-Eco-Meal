@@ -118,6 +118,11 @@
     --em-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 8px 20px rgba(0, 0, 0, 0.45);
     --em-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.10), 0 16px 34px rgba(0, 0, 0, 0.55);
 
+    /* Unlike text-muted, --bs-secondary doesn't adapt to color-scheme — left
+       .btn-outline-secondary (used app-wide) too low-contrast against our dark surfaces. */
+    --bs-secondary: #98a1a8;
+    --bs-secondary-rgb: 152, 161, 168;
+
     color-scheme: dark;
 }
 
@@ -126,6 +131,23 @@ html, body {
     background-color: var(--em-surface);
     color: var(--em-ink);
     overscroll-behavior-y: none;
+}
+
+/* ── Neutral "info" pill (AuditLog/Impact/Packages/Reports/Users) ──
+   Replaces `bg-light text-muted border`: bg-light stays fixed near-white in dark mode while
+   text-muted adapts, pairing them into near-invisible light-on-light text. */
+.em-badge-neutral {
+    background: var(--em-surface-raised);
+    color: var(--em-text-muted);
+    border-color: var(--em-border-strong) !important;
+}
+
+/* ── Bootstrap checkbox/switch controls (Impact opt-in, BusinessForm/PackageForm/Packages) ──
+   Bootstrap's checked-state fill is compiled from its own Sass variable at build time, so it stays
+   the stock blue even though --bs-primary is overridden to the brand green everywhere else. */
+.form-check-input:checked {
+    background-color: var(--bs-primary);
+    border-color: var(--bs-primary);
 }
 
 h1, h2, h3, h4, h5, h6,
@@ -750,6 +772,10 @@ h1:focus {
     mask-image: linear-gradient(to right, var(--em-text) calc(100% - 20px), transparent);
     -webkit-mask-image: linear-gradient(to right, var(--em-text) calc(100% - 20px), transparent);
     padding-right: 8px;
+    /* overflow-x: auto clips overflow-y too, slicing the top off .notif-badge/.public-cart-badge
+       (top:-5px). Padding + matching negative margin gives them room without shifting the icons. */
+    padding-top: 6px;
+    margin-top: -6px;
 }
 
 .public-header-inner .d-flex.gap-2.at-scroll-end {
@@ -1699,8 +1725,10 @@ h1:focus {
 
 .orders-chip-active,
 .orders-chip-active:hover {
-    background: var(--em-forest);
-    border-color: var(--em-forest);
+    /* Was var(--em-forest), which in dark mode equals --em-surface (.orders-hero's own
+       background) — the "active" pill vanished. This is a solid fill made for exactly that. */
+    background: var(--em-leaf-mid-solid);
+    border-color: var(--em-leaf-mid-solid);
     color: var(--em-text-inverse);
 }
 
@@ -3835,6 +3863,28 @@ h1:focus {
 
 .notif-push-toggle-on {
     background: var(--em-leaf-solid);
+    color: var(--em-text-inverse);
+}
+
+/* The panel had no visible dismiss affordance — closing relied entirely on clicking the
+   (invisible) backdrop, unlike the cart panel right next to it in the same header. */
+.notif-panel-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.8rem;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.notif-panel-close:hover {
+    background: rgba(255, 255, 255, 0.22);
     color: var(--em-text-inverse);
 }
 

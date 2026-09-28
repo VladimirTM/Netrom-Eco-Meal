@@ -38,6 +38,12 @@ window.EcoMeal = {
             }
             var el = document.querySelector(selector);
             if (el) el.focus();
+        },
+
+        // Also backs SafeFocusOnNavigate.razor — Blazor's router never triggers a real page
+        // load, so the browser's usual "new page starts at the top" behavior never fires.
+        scrollToTop: function () {
+            window.scrollTo(0, 0);
         }
     },
 
