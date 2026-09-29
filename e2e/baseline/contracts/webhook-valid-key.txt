@@ -1,0 +1,2 @@
+{"id":"73334fd3-1d1b-4524-a7ac-114459ec14b6","businessId":"44444444-0000-0000-0000-000000000001","name":"R7 baseline contract package","price":5.99,"quantity":1,"weightKg":1.0,"pickupStart":"2099-01-01T10:00:00Z","pickupEnd":"2099-01-01T12:00:00Z"}
+201

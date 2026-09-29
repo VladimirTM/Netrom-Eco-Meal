@@ -54,10 +54,12 @@ services:
       Email__FromName: "Eco Meal"
       Email__Smtp__Host: mailpit
       Email__Smtp__Port: "1025"
-      # Empty by default — checkout shows a "payments aren't configured yet" error until a real
-      # Stripe test-mode secret key (sk_test_...) is supplied here. Get one free from
-      # https://dashboard.stripe.com/test/apikeys; no live/production key is ever needed for this app.
-      Stripe__SecretKey: ""
+      # Empty unless STRIPE_SECRET_KEY is exported in the shell — checkout shows a "payments
+      # aren't configured yet" error until a real Stripe test-mode secret key (sk_test_...) is
+      # supplied. Get one free from https://dashboard.stripe.com/test/apikeys; no live/production
+      # key is ever needed for this app. Never hardcode the real value here — it stays out of the
+      # repo the same way Phase 9 of the migration plan moves it into `.env`.
+      Stripe__SecretKey: "${STRIPE_SECRET_KEY:-}"
       Stripe__Currency: "ron"
       # A self-generated VAPID key pair (WebPush.VapidHelper.GenerateVapidKeys()) — unlike Stripe/
       # SMTP this needs no external account at all, so it ships pre-configured here for a working

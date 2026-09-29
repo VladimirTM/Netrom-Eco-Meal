@@ -1,0 +1,2 @@
+{"businessId":"44444444-0000-0000-0000-000000000001","businessName":"Stadionul de Gusturi","totalKgSaved":27.7,"kgSavedThisMonth":26.3,"completedOrders":10,"co2eKgAvoided":69.25,"kmNotDriven":364.47368421052631578947368421,"litersWaterSaved":27700.0}
+200

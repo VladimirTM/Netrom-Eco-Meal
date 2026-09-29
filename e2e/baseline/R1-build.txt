@@ -1,0 +1,19 @@
+  Determining projects to restore...
+/Users/vladimirghimpau/Git/Netrom-Eco-Meal/Tests/Netrom-Eco-Meal.Tests.csproj : warning NU1903: Package 'SSH.NET' 2024.2.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-mggc-4xg6-vcxf [/Users/vladimirghimpau/Git/Netrom-Eco-Meal/Netrom-Eco-Meal.slnx]
+/Users/vladimirghimpau/Git/Netrom-Eco-Meal/Tests/Netrom-Eco-Meal.Tests.csproj : warning NU1903: Package 'SSH.NET' 2024.2.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-q939-rpr3-3284 [/Users/vladimirghimpau/Git/Netrom-Eco-Meal/Netrom-Eco-Meal.slnx]
+  All projects are up-to-date for restore.
+/Users/vladimirghimpau/Git/Netrom-Eco-Meal/Tests/Netrom-Eco-Meal.Tests.csproj : warning NU1903: Package 'SSH.NET' 2024.2.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-mggc-4xg6-vcxf
+/Users/vladimirghimpau/Git/Netrom-Eco-Meal/Tests/Netrom-Eco-Meal.Tests.csproj : warning NU1903: Package 'SSH.NET' 2024.2.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-q939-rpr3-3284
+  Netrom-Eco-Meal -> /Users/vladimirghimpau/Git/Netrom-Eco-Meal/bin/Debug/net10.0/Netrom-Eco-Meal.dll
+  Netrom-Eco-Meal.Tests -> /Users/vladimirghimpau/Git/Netrom-Eco-Meal/Tests/bin/Debug/net10.0/Netrom-Eco-Meal.Tests.dll
+
+Build succeeded.
+
+/Users/vladimirghimpau/Git/Netrom-Eco-Meal/Tests/Netrom-Eco-Meal.Tests.csproj : warning NU1903: Package 'SSH.NET' 2024.2.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-mggc-4xg6-vcxf [/Users/vladimirghimpau/Git/Netrom-Eco-Meal/Netrom-Eco-Meal.slnx]
+/Users/vladimirghimpau/Git/Netrom-Eco-Meal/Tests/Netrom-Eco-Meal.Tests.csproj : warning NU1903: Package 'SSH.NET' 2024.2.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-q939-rpr3-3284 [/Users/vladimirghimpau/Git/Netrom-Eco-Meal/Netrom-Eco-Meal.slnx]
+/Users/vladimirghimpau/Git/Netrom-Eco-Meal/Tests/Netrom-Eco-Meal.Tests.csproj : warning NU1903: Package 'SSH.NET' 2024.2.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-mggc-4xg6-vcxf
+/Users/vladimirghimpau/Git/Netrom-Eco-Meal/Tests/Netrom-Eco-Meal.Tests.csproj : warning NU1903: Package 'SSH.NET' 2024.2.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-q939-rpr3-3284
+    4 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:07.68

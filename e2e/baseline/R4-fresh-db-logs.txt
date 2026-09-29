@@ -1,0 +1,18 @@
+app-1  | Cannot load library libgssapi_krb5.so.2 
+app-1  | Error: libgssapi_krb5.so.2: cannot open shared object file: No such file or directory
+app-1  | [12:33:49 ERR] Failed executing DbCommand (9ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+app-1  | SELECT "MigrationId", "ProductVersion"
+app-1  | FROM "__EFMigrationsHistory"
+app-1  | ORDER BY "MigrationId";
+app-1  | [12:33:49 WRN] Storing keys in a directory '/root/.aspnet/DataProtection-Keys' that may not be persisted outside of the container. Protected data will be unavailable when container is destroyed. For more information go to https://aka.ms/aspnet/dataprotectionwarning
+app-1  | [12:33:50 DBG] Hosting starting
+app-1  | [12:33:50 WRN] No XML encryptor configured. Key {f1533f4c-e813-4060-81bb-3534a56f6d7d} may be persisted to storage in unencrypted form.
+app-1  | [12:33:50 WRN] Overriding HTTP_PORTS '8080' and HTTPS_PORTS ''. Binding to values defined by URLS instead 'http://+:8080'.
+app-1  | [12:33:50 INF] Now listening on: http://[::]:8080
+app-1  | [12:33:50 INF] Application started. Press Ctrl+C to shut down.
+app-1  | [12:33:50 INF] Hosting environment: Development
+app-1  | [12:33:50 INF] Content root path: /app
+app-1  | [12:33:50 DBG] Hosting started
+app-1  | [12:33:50 INF] Notified staff about 1 unsold-at-cutoff package(s).
+app-1  | [12:33:53 WRN] Failed to determine the https port for redirect.
+app-1  | [12:33:54 INF] HTTP GET / responded 200 in 258.3463 ms
