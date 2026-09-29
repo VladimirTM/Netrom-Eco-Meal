@@ -136,7 +136,7 @@
                                 <ValidationMessage For="@(() => _model.Longitude)" class="validation-message small d-block mt-1"/>
                             </div>
                             <div class="col-sm-2">
-                                <button type="button" class="btn btn-outline-secondary w-100" @onclick="UseCurrentLocationAsync" disabled="@_locating">
+                                <button type="button" class="btn btn-outline-secondary w-100" title="Use my current location" @onclick="UseCurrentLocationAsync" disabled="@_locating">
                                     @if (_locating)
                                     {
                                         <span class="spinner-border spinner-border-sm" role="status"></span>

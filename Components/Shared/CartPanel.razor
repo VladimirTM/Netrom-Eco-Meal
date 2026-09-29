@@ -113,7 +113,17 @@
                             </button>
                             <span class="text-muted small ms-auto">≈ @((CartService.TotalPrice / _participantCount).ToString("C")) each</span>
                         </div>
-                        <button type="button" class="btn btn-primary w-100 py-2" disabled="@_placing" @onclick="StartCircleAsync">
+                        @if (EstimatedShareTooSmall)
+                        {
+                            @* An even split's approximate per-person share is already below Stripe's charge
+                               floor — RescueCircleService.StartCircleAsync would reject this server-side
+                               regardless of how the rounding remainder ultimately falls, so warn before the
+                               round trip instead of only after a failed "Start & pay my share" click. *@
+                            <div class="alert alert-warning py-2 small mb-2">
+                                Each share would come to less than @Checkout.MinChargeableAmount.ToString("C") — try fewer people or a larger basket.
+                            </div>
+                        }
+                        <button type="button" class="btn btn-primary w-100 py-2" disabled="@(_placing || EstimatedShareTooSmall)" @onclick="StartCircleAsync">
                             @if (_placing)
                             {
                                 <span class="spinner-border spinner-border-sm me-2" role="status"></span>
@@ -140,6 +150,13 @@
     private bool _splitOpen;
     private int _participantCount = RescueCircles.MinParticipants;
     private string? _logisticsNote;
+
+    // An even split — the actual server-side math (RescueCircleService.StartCircleAsync) has the
+    // organizer's share absorb the rounding remainder, so this is only a client-side estimate,
+    // never the source of truth. It exists purely to warn before a round trip we already know
+    // the server will reject; the server re-validates for real regardless.
+    private bool EstimatedShareTooSmall =>
+        _participantCount > 0 && CartService.TotalPrice / _participantCount < Checkout.MinChargeableAmount;
 
     protected override void OnInitialized()
     {

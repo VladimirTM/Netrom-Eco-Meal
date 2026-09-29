@@ -25,6 +25,10 @@ public class BusinessTypeController(IBusinessTypeService businessTypeService) : 
         {
             return Unauthorized(ex.Message);
         }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(ex.Message);
+        }
     }
 
     public async Task<ActionResult> UpdateAsync(BusinessType businessType)
@@ -37,6 +41,10 @@ public class BusinessTypeController(IBusinessTypeService businessTypeService) : 
         catch (UnauthorizedAccessException ex)
         {
             return Unauthorized(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(ex.Message);
         }
     }
 

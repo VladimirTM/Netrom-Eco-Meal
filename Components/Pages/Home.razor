@@ -37,15 +37,15 @@
 
         <div class="home-stats">
             <div class="home-stat">
-                <span class="home-stat-value">@(_livePackages is null ? "—" : _livePackages.Count.ToString())</span>
+                <span class="home-stat-value">@(_livePackages is null ? "—" : _livePackages.Count.ToString("N0"))</span>
                 <span class="home-stat-label">packages live</span>
             </div>
             <div class="home-stat">
-                <span class="home-stat-value">@(_livePackages is null ? "—" : _livePackages.Sum(p => CartService.AvailableQuantity(p, _reservedByPackage.GetValueOrDefault(p.Id))).ToString())</span>
+                <span class="home-stat-value">@(_livePackages is null ? "—" : _livePackages.Sum(p => CartService.AvailableQuantity(p, _reservedByPackage.GetValueOrDefault(p.Id))).ToString("N0"))</span>
                 <span class="home-stat-label">portions to save</span>
             </div>
             <div class="home-stat">
-                <span class="home-stat-value">@(_livePackages is null ? "—" : _livePackages.Select(p => p.BusinessId).Distinct().Count().ToString())</span>
+                <span class="home-stat-value">@(_livePackages is null ? "—" : _livePackages.Select(p => p.BusinessId).Distinct().Count().ToString("N0"))</span>
                 <span class="home-stat-label">kitchens on board</span>
             </div>
             <div class="home-stat">

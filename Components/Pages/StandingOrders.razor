@@ -78,7 +78,7 @@
                                 <button class="btn btn-sm btn-outline-secondary" @onclick="() => ToggleActiveAsync(standing)">
                                     @(standing.IsActive ? "Pause" : "Resume")
                                 </button>
-                                <button class="btn btn-sm btn-outline-danger" @onclick="() => RequestDelete(standing)">
+                                <button class="btn btn-sm btn-outline-danger" title="Remove" @onclick="() => RequestDelete(standing)">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </div>

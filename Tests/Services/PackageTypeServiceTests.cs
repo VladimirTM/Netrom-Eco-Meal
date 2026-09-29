@@ -20,6 +20,10 @@ public class PackageTypeServiceTests
     private static Fixture Build(string? userId, params string[] roles)
     {
         var repo = new Mock<IPackageTypeRepository>();
+        // AddAsync/UpdateAsync now check for a name collision via GetAllAsync — an unconfigured
+        // Moq setup for a Task<List<T>> return defaults to a null result, not an empty list, the
+        // way a real repository against an empty/no-collision table actually behaves.
+        repo.Setup(r => r.GetAllAsync()).ReturnsAsync([]);
         var auditLog = new Mock<IAuditLogService>();
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
         var service = new PackageTypeService(repo.Object, currentUser, auditLog.Object);
@@ -33,6 +37,45 @@ public class PackageTypeServiceTests
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             f.Service.AddAsync(new PackageType { Name = "Salad Box" }));
+    }
+
+    [Fact]
+    public async Task AddAsync_Admin_TrimsNameAndPersists()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+
+        await f.Service.AddAsync(new PackageType { Name = "  Salad Box  " });
+
+        f.Repo.Verify(r => r.AddAsync(It.Is<PackageType>(t => t.Name == "Salad Box")), Times.Once);
+        f.Repo.Verify(r => r.SaveChangesAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task AddAsync_Admin_DuplicateNameCaseInsensitive_ThrowsAndDoesNotPersist()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        f.Repo.Setup(r => r.GetAllAsync()).ReturnsAsync([new PackageType { Id = Guid.NewGuid(), Name = "Meal Box" }]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            f.Service.AddAsync(new PackageType { Name = "  meal box  " }));
+
+        f.Repo.Verify(r => r.AddAsync(It.IsAny<PackageType>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_Admin_DuplicateNameOfAnotherType_ThrowsAndDoesNotRename()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var editing = new PackageType { Id = Guid.NewGuid(), Name = "Salad Box" };
+        var other = new PackageType { Id = Guid.NewGuid(), Name = "Meal Box" };
+        f.Repo.Setup(r => r.GetByIdAsync(editing.Id)).ReturnsAsync(editing);
+        f.Repo.Setup(r => r.GetAllAsync()).ReturnsAsync([editing, other]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            f.Service.UpdateAsync(new PackageType { Id = editing.Id, Name = "Meal Box" }));
+
+        Assert.Equal("Salad Box", editing.Name);
+        f.Repo.Verify(r => r.SaveChangesAsync(), Times.Never);
     }
 
     [Fact]

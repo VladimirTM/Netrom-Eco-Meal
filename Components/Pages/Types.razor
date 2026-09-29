@@ -67,7 +67,7 @@
 
                 <div class="input-group input-group-sm">
                     <input type="text" class="form-control" placeholder="e.g. Food Truck" @bind="_newBusinessTypeName" @bind:event="oninput" @onkeyup="@(e => HandleNewTypeKeyUpAsync(e, AddBusinessTypeAsync))"/>
-                    <button type="button" class="btn btn-outline-primary" disabled="@_addingBusinessType" @onclick="AddBusinessTypeAsync">
+                    <button type="button" class="btn btn-outline-primary" title="Add kitchen type" disabled="@_addingBusinessType" @onclick="AddBusinessTypeAsync">
                         @if (_addingBusinessType)
                         {
                             <span class="spinner-border spinner-border-sm" role="status"></span>
@@ -131,7 +131,7 @@
 
                 <div class="input-group input-group-sm">
                     <input type="text" class="form-control" placeholder="e.g. Salad Box" @bind="_newPackageTypeName" @bind:event="oninput" @onkeyup="@(e => HandleNewTypeKeyUpAsync(e, AddPackageTypeAsync))"/>
-                    <button type="button" class="btn btn-outline-primary" disabled="@_addingPackageType" @onclick="AddPackageTypeAsync">
+                    <button type="button" class="btn btn-outline-primary" title="Add package type" disabled="@_addingPackageType" @onclick="AddPackageTypeAsync">
                         @if (_addingPackageType)
                         {
                             <span class="spinner-border spinner-border-sm" role="status"></span>
@@ -196,7 +196,7 @@
 
                 <div class="input-group input-group-sm">
                     <input type="text" class="form-control" placeholder="e.g. Hat-Trick Bakeries" @bind="_newBrandName" @bind:event="oninput" @onkeyup="@(e => HandleNewTypeKeyUpAsync(e, AddBrandAsync))"/>
-                    <button type="button" class="btn btn-outline-primary" disabled="@_addingBrand" @onclick="AddBrandAsync">
+                    <button type="button" class="btn btn-outline-primary" title="Add brand" disabled="@_addingBrand" @onclick="AddBrandAsync">
                         @if (_addingBrand)
                         {
                             <span class="spinner-border spinner-border-sm" role="status"></span>
@@ -276,6 +276,12 @@
             return;
         }
 
+        if (result is ConflictObjectResult conflict)
+        {
+            _businessTypeError = conflict.Value?.ToString() ?? "That name is already taken.";
+            return;
+        }
+
         _newBusinessTypeName = "";
         await ReloadBusinessTypesAsync();
     }
@@ -298,6 +304,12 @@
         if (result is UnauthorizedObjectResult unauthorized)
         {
             _businessTypeError = unauthorized.Value?.ToString() ?? "You can't do that.";
+            return;
+        }
+
+        if (result is ConflictObjectResult conflict)
+        {
+            _businessTypeError = conflict.Value?.ToString() ?? "That name is already taken.";
             return;
         }
 
@@ -327,6 +339,12 @@
             return;
         }
 
+        if (result is ConflictObjectResult conflict)
+        {
+            _packageTypeError = conflict.Value?.ToString() ?? "That name is already taken.";
+            return;
+        }
+
         _newPackageTypeName = "";
         await ReloadPackageTypesAsync();
     }
@@ -349,6 +367,12 @@
         if (result is UnauthorizedObjectResult unauthorized)
         {
             _packageTypeError = unauthorized.Value?.ToString() ?? "You can't do that.";
+            return;
+        }
+
+        if (result is ConflictObjectResult conflict)
+        {
+            _packageTypeError = conflict.Value?.ToString() ?? "That name is already taken.";
             return;
         }
 
@@ -378,6 +402,12 @@
             return;
         }
 
+        if (result is ConflictObjectResult conflict)
+        {
+            _brandError = conflict.Value?.ToString() ?? "That name is already taken.";
+            return;
+        }
+
         _newBrandName = "";
         await ReloadBrandsAsync();
     }
@@ -400,6 +430,12 @@
         if (result is UnauthorizedObjectResult unauthorized)
         {
             _brandError = unauthorized.Value?.ToString() ?? "You can't do that.";
+            return;
+        }
+
+        if (result is ConflictObjectResult conflict)
+        {
+            _brandError = conflict.Value?.ToString() ?? "That name is already taken.";
             return;
         }
 

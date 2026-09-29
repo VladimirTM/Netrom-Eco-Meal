@@ -35,6 +35,9 @@
     --em-info-solid:      #3f6d99;
     --em-danger-solid:    #c9503f;
     --em-muted-solid:     #6f6656;
+    /* Same idea in reverse — dark ink text for a badge that always sits on a fixed near-white
+       chip (e.g. floating over a photo) regardless of theme. --em-ink flips light in dark mode. */
+    --em-ink-solid:       #1b2a1f;
 
     /* Gold — reserved for "you earned this" moments (loyalty, streaks, rank #1); darkened off
        the sampled logo pixel to clear 4.5:1 on --em-paper. */
@@ -315,15 +318,20 @@ h1, h2, h3, h4, h5, h6,
 }
 
 .btn-primary {
-    --bs-btn-bg: var(--em-leaf-mid);
-    --bs-btn-border-color: var(--em-leaf-mid);
-    --bs-btn-hover-bg: var(--em-leaf-dark);
-    --bs-btn-hover-border-color: var(--em-leaf-dark);
+    /* The *-solid tokens, not the plain --em-leaf-* ones — those brighten in dark mode for
+       on-surface text/accent use and were never meant to sit under white button text: dark mode
+       previously rendered white-on-#6db28a here at 2.5:1, well under the 4.5:1 AA text minimum
+       (light mode's white-on-#1f8a4c was marginal too, at 4.38:1). --em-leaf-darker isn't
+       redefined per-theme, so it's already theme-invariant and safe to keep for the active state. */
+    --bs-btn-bg: var(--em-leaf-mid-solid);
+    --bs-btn-border-color: var(--em-leaf-mid-solid);
+    --bs-btn-hover-bg: var(--em-leaf-dark-solid);
+    --bs-btn-hover-border-color: var(--em-leaf-dark-solid);
     --bs-btn-active-bg: var(--em-leaf-darker);
     --bs-btn-active-border-color: var(--em-leaf-darker);
     --bs-btn-focus-shadow-rgb: 31, 138, 76;
-    --bs-btn-disabled-bg: var(--em-leaf-mid);
-    --bs-btn-disabled-border-color: var(--em-leaf-mid);
+    --bs-btn-disabled-bg: var(--em-leaf-mid-solid);
+    --bs-btn-disabled-border-color: var(--em-leaf-mid-solid);
     color: var(--em-text-inverse);
 }
 
@@ -337,6 +345,29 @@ h1, h2, h3, h4, h5, h6,
     --bs-btn-active-bg: var(--em-leaf-mid);
     --bs-btn-active-border-color: var(--em-leaf-mid);
     --bs-btn-focus-shadow-rgb: 31, 138, 76;
+}
+
+/* bootstrap.min.css seeds .btn-outline-secondary's own --bs-btn-* variables from a literal
+   #6c757d baked in at build time — it never reads the app's --bs-secondary custom property, so
+   the dark-mode :root[data-theme="dark"] redefinition of --bs-secondary above (intended to fix
+   exactly this) silently never took effect. Re-pointing the button's own variables at
+   --bs-secondary here (3.59:1 -> 6.41:1 in dark mode) is what actually wires it up. */
+.btn-outline-secondary {
+    --bs-btn-color: var(--bs-secondary);
+    --bs-btn-border-color: var(--bs-secondary);
+    --bs-btn-hover-color: var(--em-text-inverse);
+    --bs-btn-hover-bg: var(--bs-secondary);
+    --bs-btn-hover-border-color: var(--bs-secondary);
+    --bs-btn-active-color: var(--em-text-inverse);
+    --bs-btn-active-bg: var(--bs-secondary);
+    --bs-btn-active-border-color: var(--bs-secondary);
+    --bs-btn-focus-shadow-rgb: var(--bs-secondary-rgb);
+    /* Bootstrap's own --bs-btn-disabled-color/-border-color are baked-in #6c757d literals too,
+       same as the idle-state ones above — missing these left every disabled outline-secondary
+       button (pagination's "Prev" on page 1, "Write it for me" before a name is typed, etc.)
+       still rendering at the old 3.59:1 in dark mode even after the idle/hover/active fix above. */
+    --bs-btn-disabled-color: var(--bs-secondary);
+    --bs-btn-disabled-border-color: var(--bs-secondary);
 }
 
 .btn:focus, .btn:active:focus {
@@ -2776,7 +2807,9 @@ h1:focus {
     right: 0.75rem;
     gap: 0.3rem;
     background: rgba(255, 255, 255, 0.92);
-    color: var(--em-text);
+    /* Fixed near-white background regardless of theme (it floats over a photo), so its text
+       must stay a fixed dark ink too — var(--em-text) flips light in dark mode and disappears. */
+    color: var(--em-ink-solid);
 }
 
 .biz-card-body {
@@ -3167,6 +3200,10 @@ h1:focus {
     font-size: 0.95rem;
     font-weight: 700;
     color: var(--em-text);
+    /* .biz-pkg-info already sets min-width: 0 so the flex item itself can shrink, but that alone
+       doesn't stop a single unbroken "word" (an extreme package name with no spaces) from still
+       visually painting past the column and over .biz-pkg-side's price/qty next to it. */
+    overflow-wrap: break-word;
 }
 
 .biz-pkg-meta {

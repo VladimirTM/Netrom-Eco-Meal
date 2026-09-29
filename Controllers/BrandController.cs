@@ -32,6 +32,10 @@ public class BrandController(IBrandService brandService) : ControllerBase
         {
             return Unauthorized(ex.Message);
         }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(ex.Message);
+        }
     }
 
     public async Task<ActionResult> UpdateAsync(Brand brand)
@@ -44,6 +48,10 @@ public class BrandController(IBrandService brandService) : ControllerBase
         catch (UnauthorizedAccessException ex)
         {
             return Unauthorized(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(ex.Message);
         }
     }
 

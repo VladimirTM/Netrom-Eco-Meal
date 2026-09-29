@@ -35,8 +35,14 @@ public class BrandService(
     {
         await currentUser.EnsureAdminAsync("Only an admin can manage brands.");
 
+        var name = brand.Name.Trim();
+        // Neither the DB nor any caller enforces uniqueness otherwise — without this, two
+        // identically-named brands both show up (indistinguishably) on the brand-assignment form.
+        if (await IsNameTakenAsync(name, excludingId: null))
+            throw new InvalidOperationException($"A brand named \"{name}\" already exists.");
+
         brand.Id = Guid.NewGuid();
-        brand.Name = brand.Name.Trim();
+        brand.Name = name;
         await brandRepository.AddAsync(brand);
         await brandRepository.SaveChangesAsync();
 
@@ -51,11 +57,23 @@ public class BrandService(
         if (existing is null)
             return;
 
+        var name = brand.Name.Trim();
+        if (await IsNameTakenAsync(name, excludingId: existing.Id))
+            throw new InvalidOperationException($"A brand named \"{name}\" already exists.");
+
         var previousName = existing.Name;
-        existing.Name = brand.Name.Trim();
+        existing.Name = name;
         await brandRepository.SaveChangesAsync();
 
         await auditLogService.LogAsync(AuditActions.BrandUpdated, AuditTargetTypes.Brand, existing.Id.ToString(), existing.Name, $"{previousName} → {existing.Name}");
+    }
+
+    // Case-insensitive — two brands named "Golden Boot Bakeries" and "golden boot bakeries" would
+    // otherwise both silently exist and both show up as indistinguishable options on the form.
+    private async Task<bool> IsNameTakenAsync(string name, Guid? excludingId)
+    {
+        var all = await brandRepository.GetAllAsync();
+        return all.Any(b => b.Id != excludingId && string.Equals(b.Name, name, StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task DeleteAsync(Guid id)

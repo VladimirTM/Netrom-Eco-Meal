@@ -19,8 +19,14 @@ public class BusinessTypeService(
     {
         await currentUser.EnsureAdminAsync("Only an admin can manage kitchen types.");
 
+        var name = businessType.Name.Trim();
+        // Neither the DB nor any caller enforces uniqueness otherwise — without this, two
+        // identically-named types both show up (indistinguishably) in every kitchen-type filter.
+        if (await IsNameTakenAsync(name, excludingId: null))
+            throw new InvalidOperationException($"A kitchen type named \"{name}\" already exists.");
+
         businessType.Id = Guid.NewGuid();
-        businessType.Name = businessType.Name.Trim();
+        businessType.Name = name;
         await businessTypeRepository.AddAsync(businessType);
         await businessTypeRepository.SaveChangesAsync();
 
@@ -35,11 +41,23 @@ public class BusinessTypeService(
         if (existing is null)
             return;
 
+        var name = businessType.Name.Trim();
+        if (await IsNameTakenAsync(name, excludingId: existing.Id))
+            throw new InvalidOperationException($"A kitchen type named \"{name}\" already exists.");
+
         var previousName = existing.Name;
-        existing.Name = businessType.Name.Trim();
+        existing.Name = name;
         await businessTypeRepository.SaveChangesAsync();
 
         await auditLogService.LogAsync(AuditActions.BusinessTypeUpdated, AuditTargetTypes.BusinessType, existing.Id.ToString(), existing.Name, $"{previousName} → {existing.Name}");
+    }
+
+    // Case-insensitive — "Bakery" and "bakery" would otherwise both silently exist and both show
+    // up as indistinguishable options in every kitchen-type dropdown/filter.
+    private async Task<bool> IsNameTakenAsync(string name, Guid? excludingId)
+    {
+        var all = await businessTypeRepository.GetAllAsync();
+        return all.Any(t => t.Id != excludingId && string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task DeleteAsync(Guid id)

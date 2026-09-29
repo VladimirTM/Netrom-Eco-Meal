@@ -93,9 +93,14 @@ public class WebhookIntakeServiceTests
     }
 
     [Theory]
-    [InlineData(0, 1, 1)]   // Price not positive
-    [InlineData(1, -1, 1)]  // Negative quantity
-    [InlineData(1, 1, 0)]   // WeightKg not positive
+    [InlineData(0, 1, 1)]        // Price not positive
+    [InlineData(1, -1, 1)]       // Negative quantity
+    [InlineData(1, 1, 0)]        // WeightKg not positive
+    // Same upper bounds PackageForm.razor's [Range] attributes enforce (Constants.PackageLimits)
+    // — this endpoint used to have no ceiling at all on any of the three.
+    [InlineData(10001, 1, 1)]    // Price over the cap
+    [InlineData(1, 1001, 1)]     // Quantity over the cap
+    [InlineData(1, 1, 101)]      // WeightKg over the cap
     public async Task CreatePackageAsync_InvalidNumbers_Throws(decimal price, int quantity, decimal weightKg)
     {
         var f = Build();
@@ -110,6 +115,42 @@ public class WebhookIntakeServiceTests
         request.WeightKg = weightKg;
 
         await Assert.ThrowsAsync<ArgumentException>(() => f.Service.CreatePackageAsync(PlaintextKey, request));
+    }
+
+    [Fact]
+    public async Task CreatePackageAsync_UnknownDietaryTag_Throws()
+    {
+        // Every other field is checked against a closed vocabulary/limit; this used to be the
+        // one field a caller could put anything in, including markup, and have it render
+        // straight onto the public kitchen page as if it were a real diet/allergen tag.
+        var f = Build();
+        var business = MakeBusiness();
+        var packageType = new PackageType { Id = Guid.NewGuid(), Name = "Surprise Bag" };
+        f.Businesses.Setup(r => r.GetByApiKeyHashAsync(ApiKeyHasher.Hash(PlaintextKey))).ReturnsAsync(business);
+        f.PackageTypes.Setup(r => r.GetByIdAsync(packageType.Id)).ReturnsAsync(packageType);
+
+        var request = MakeRequest(packageType.Id);
+        request.DietaryTags = ["Vegan", "NotARealTag"];
+
+        await Assert.ThrowsAsync<ArgumentException>(() => f.Service.CreatePackageAsync(PlaintextKey, request));
+        f.Packages.Verify(svc => svc.AddFromWebhookAsync(It.IsAny<Package>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreatePackageAsync_DietaryTags_NormalizedToCanonicalCasingAndDeduplicated()
+    {
+        var f = Build();
+        var business = MakeBusiness();
+        var packageType = new PackageType { Id = Guid.NewGuid(), Name = "Surprise Bag" };
+        f.Businesses.Setup(r => r.GetByApiKeyHashAsync(ApiKeyHasher.Hash(PlaintextKey))).ReturnsAsync(business);
+        f.PackageTypes.Setup(r => r.GetByIdAsync(packageType.Id)).ReturnsAsync(packageType);
+
+        var request = MakeRequest(packageType.Id);
+        request.DietaryTags = ["vegan", "VEGAN", "gluten-free"];
+
+        var package = await f.Service.CreatePackageAsync(PlaintextKey, request);
+
+        Assert.Equal(["Vegan", "Gluten-Free"], package.DietaryTags);
     }
 
     [Fact]

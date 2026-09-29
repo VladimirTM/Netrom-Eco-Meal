@@ -99,7 +99,7 @@
                                 <button class="btn btn-sm btn-outline-secondary" @onclick="() => ToggleActiveAsync(template)">
                                     @(template.IsActive ? "Pause" : "Resume")
                                 </button>
-                                <button class="btn btn-sm btn-outline-danger" @onclick="() => RequestDelete(template)">
+                                <button class="btn btn-sm btn-outline-danger" title="Delete" @onclick="() => RequestDelete(template)">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </div>

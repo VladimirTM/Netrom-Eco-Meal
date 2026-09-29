@@ -35,6 +35,10 @@ public class PackageTypeController(IPackageTypeService packageTypeService) : Con
         {
             return Unauthorized(ex.Message);
         }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(ex.Message);
+        }
     }
 
     public async Task<ActionResult> UpdateAsync(PackageType packageType)
@@ -47,6 +51,10 @@ public class PackageTypeController(IPackageTypeService packageTypeService) : Con
         catch (UnauthorizedAccessException ex)
         {
             return Unauthorized(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(ex.Message);
         }
     }
 

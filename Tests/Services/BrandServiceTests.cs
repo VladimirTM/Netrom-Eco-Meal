@@ -21,6 +21,10 @@ public class BrandServiceTests
     private static Fixture Build(string? userId, params string[] roles)
     {
         var repo = new Mock<IBrandRepository>();
+        // AddAsync/UpdateAsync now check for a name collision via GetAllAsync — an unconfigured
+        // Moq setup for a Task<List<T>> return defaults to a null result, not an empty list, the
+        // way a real repository against an empty/no-collision table actually behaves.
+        repo.Setup(r => r.GetAllAsync()).ReturnsAsync([]);
         var reviews = new Mock<IReviewRepository>();
         var auditLog = new Mock<IAuditLogService>();
         var currentUser = new CurrentUserAccessor(new FakeAuthenticationStateProvider(userId, roles));
@@ -46,6 +50,34 @@ public class BrandServiceTests
 
         f.Repo.Verify(r => r.AddAsync(It.Is<Brand>(b => b.Name == "Hat-Trick Bakeries")), Times.Once);
         f.Repo.Verify(r => r.SaveChangesAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task AddAsync_Admin_DuplicateNameCaseInsensitive_ThrowsAndDoesNotPersist()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        f.Repo.Setup(r => r.GetAllAsync()).ReturnsAsync([new Brand { Id = Guid.NewGuid(), Name = "Hat-Trick Bakeries" }]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            f.Service.AddAsync(new Brand { Name = "  hat-trick bakeries  " }));
+
+        f.Repo.Verify(r => r.AddAsync(It.IsAny<Brand>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_Admin_DuplicateNameOfAnotherBrand_ThrowsAndDoesNotRename()
+    {
+        var f = Build(AdminId, AppRoles.Admin);
+        var editing = new Brand { Id = Guid.NewGuid(), Name = "Hat-Trick Bakeries" };
+        var other = new Brand { Id = Guid.NewGuid(), Name = "Golden Boot Bakeries" };
+        f.Repo.Setup(r => r.GetByIdAsync(editing.Id)).ReturnsAsync(editing);
+        f.Repo.Setup(r => r.GetAllAsync()).ReturnsAsync([editing, other]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            f.Service.UpdateAsync(new Brand { Id = editing.Id, Name = "Golden Boot Bakeries" }));
+
+        Assert.Equal("Hat-Trick Bakeries", editing.Name);
+        f.Repo.Verify(r => r.SaveChangesAsync(), Times.Never);
     }
 
     [Fact]

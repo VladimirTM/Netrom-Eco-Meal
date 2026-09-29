@@ -78,6 +78,13 @@
                 <text>Plan my basket</text>
             }
         </button>
+        @if (_planning)
+        {
+            @* The AI runs a multi-round tool-calling loop against the (usually free, local)
+               model backing this feature — that can genuinely take a few minutes, and with only
+               the spinner above it's easy to assume the page has hung. *@
+            <p class="text-muted small mt-2 mb-0">This can take a few minutes — it's searching real packages and weighing options, not stuck. No need to reload.</p>
+        }
     </div>
 </section>
 
