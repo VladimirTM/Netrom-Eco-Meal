@@ -1,0 +1,617 @@
+@page "/"
+@layout PublicLayout
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Mvc
+@using NetromEcoMeal.Constants
+@using NetromEcoMeal.Controllers
+@using NetromEcoMeal.Entities
+@using NetromEcoMeal.Models
+@using NetromEcoMeal.Services
+@using NetromEcoMeal.Services.Interfaces
+@rendermode InteractiveServer
+@implements IDisposable
+@inject BusinessController BusinessController
+@inject PackageController PackageController
+@inject OrderController OrderController
+@inject ReviewController ReviewController
+@inject FavoriteController FavoriteController
+@inject IBusinessTypeService BusinessTypeService
+@inject CartService CartService
+@inject ClientTimeZoneService ClientTimeZoneService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Eco Meal — rescue surplus food near you</PageTitle>
+
+<section class="home-hero">
+    <div class="home-hero-inner">
+        <span class="home-hero-eyebrow"><i class="bi bi-geo-alt-fill"></i> Near you, live now</span>
+        <h1 class="home-hero-title">
+            Today's surplus,<br/>
+            <span class="home-hero-highlight">rescued</span> before it's binned.
+        </h1>
+        <p class="home-hero-sub">
+            Local restaurants, bakeries and cafés list the food they'd otherwise throw out at closing time —
+            at a fraction of the price. Pick a kitchen to see what's left and book your pickup.
+        </p>
+
+        <div class="home-stats">
+            <div class="home-stat">
+                <span class="home-stat-value">@(_livePackages is null ? "—" : _livePackages.Count.ToString("N0"))</span>
+                <span class="home-stat-label">packages live</span>
+            </div>
+            <div class="home-stat">
+                <span class="home-stat-value">@(_livePackages is null ? "—" : _livePackages.Sum(p => CartService.AvailableQuantity(p, _reservedByPackage.GetValueOrDefault(p.Id))).ToString("N0"))</span>
+                <span class="home-stat-label">portions to save</span>
+            </div>
+            <div class="home-stat">
+                <span class="home-stat-value">@(_livePackages is null ? "—" : _livePackages.Select(p => p.BusinessId).Distinct().Count().ToString("N0"))</span>
+                <span class="home-stat-label">kitchens on board</span>
+            </div>
+            <div class="home-stat">
+                <span class="home-stat-value">@(_totalKgSaved is null ? "—" : _totalKgSaved.Value.ToString("0.#"))</span>
+                <span class="home-stat-label">kg of food saved</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="home-browse">
+    @if (_paged is not null)
+    {
+        <div class="home-ai-search">
+            <div class="input-group">
+                <span class="input-group-text border-end-0"><i class="bi bi-stars text-muted"></i></span>
+                <input type="text" class="form-control border-start-0 ps-0 home-ai-search-input" placeholder="Or describe what you want — “vegan dinner under 30 lei, closing soon”…"
+                       @bind="_aiQuery" @bind:event="oninput" @onkeydown="OnAiSearchKeyDownAsync"/>
+                <button type="button" class="btn btn-primary home-ai-search-btn" disabled="@(_parsingAiSearch || string.IsNullOrWhiteSpace(_aiQuery))" @onclick="RunAiSearchAsync">
+                    @if (_parsingAiSearch)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-send"></i>
+                    }
+                    Ask AI
+                </button>
+            </div>
+            @if (_aiSearchError is not null)
+            {
+                <div class="text-danger small mt-1">@_aiSearchError</div>
+            }
+        </div>
+
+        <div class="home-toolbar">
+            <div class="input-group home-search">
+                <span class="input-group-text border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search kitchens or packages…"
+                       @bind="_search" @bind:event="oninput" @bind:after="OnSearchInputAsync"/>
+            </div>
+
+            <button type="button" class="home-fav-toggle @(ActiveFilterCount > 0 ? "home-fav-toggle-active" : "")" @onclick="() => _filtersOpen = true">
+                <i class="bi bi-sliders"></i> Filters
+                @if (ActiveFilterCount > 0)
+                {
+                    <span class="home-filters-count">@ActiveFilterCount</span>
+                }
+            </button>
+
+            <button type="button" class="home-fav-toggle @(_showMap ? "home-fav-toggle-active" : "")" @onclick="ToggleMapAsync">
+                <i class="bi @(_showMap ? "bi-list-ul" : "bi-map")"></i> @(_showMap ? "List view" : "Map view")
+            </button>
+        </div>
+
+        @if (_filtersOpen)
+        {
+            <div class="em-popover-backdrop" @onclick="() => _filtersOpen = false"></div>
+            <div class="em-popover home-filters-panel">
+                <div class="em-popover-header">
+                    <span>Filters</span>
+                    <button type="button" class="em-popover-close" aria-label="Close filters" @onclick="() => _filtersOpen = false">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <div class="em-popover-body">
+                    <div class="em-popover-field">
+                        <label class="form-label small text-muted mb-1">Kitchen type</label>
+                        <select class="form-select" @bind="_businessTypeFilter" @bind:after="FilterChangedAsync">
+                            <option value="">All kitchen types</option>
+                            @foreach (var bt in _businessTypes ?? [])
+                            {
+                                <option value="@bt.Id">@bt.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="em-popover-field">
+                        <label class="form-label small text-muted mb-1">Sort by</label>
+                        <select class="form-select" @bind="_sortBy" @bind:after="FilterChangedAsync">
+                            <option value="@BusinessSortOptions.Name">Name (A–Z)</option>
+                            <option value="@BusinessSortOptions.ClosingSoon">Closing soon</option>
+                            @if (_customerLat.HasValue)
+                            {
+                                <option value="@BusinessSortOptions.Distance">Nearest</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="em-popover-field">
+                        <label class="form-label small text-muted mb-1">Diet / allergen</label>
+                        <select class="form-select" @bind="_dietaryTagFilter" @bind:after="FilterChangedAsync">
+                            <option value="">Any diet/allergen</option>
+                            <optgroup label="Dietary preference">
+                                @foreach (var tag in DietaryTags.All.Where(t => !DietaryTags.IsAllergen(t)))
+                                {
+                                    <option value="@tag">@tag</option>
+                                }
+                            </optgroup>
+                            <optgroup label="Contains (allergen warning)">
+                                @foreach (var tag in DietaryTags.Allergens)
+                                {
+                                    <option value="@tag">@tag</option>
+                                }
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div class="em-popover-toggle-row">
+                        <button type="button" class="home-fav-toggle @(_sortBy == BusinessSortOptions.Distance ? "home-fav-toggle-active" : "")"
+                                @onclick="ToggleNearMeAsync" disabled="@_locatingNearMe">
+                            @if (_locatingNearMe)
+                            {
+                                <span class="spinner-border spinner-border-sm" role="status"></span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-geo-alt-fill"></i>
+                            }
+                            Near me
+                        </button>
+
+                        <AuthorizeView Roles="@AppRoles.Customer">
+                            <Authorized>
+                                <button type="button" class="home-fav-toggle @(_favoritesOnly ? "home-fav-toggle-active" : "")" @onclick="ToggleFavoritesOnlyAsync">
+                                    <i class="bi @(_favoritesOnly ? "bi-heart-fill" : "bi-heart")"></i> Favorites
+                                </button>
+                            </Authorized>
+                        </AuthorizeView>
+                    </div>
+
+                    @if (_locationError is not null)
+                    {
+                        <div class="text-danger small">@_locationError</div>
+                    }
+
+                    @if (_maxPriceFilter.HasValue)
+                    {
+                        <div class="home-chip-row mb-0">
+                            <button type="button" class="home-chip home-chip-active" @onclick="ClearMaxPriceAsync">
+                                Under @_maxPriceFilter.Value.ToString("C") <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                    }
+                </div>
+                <div class="em-popover-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@(!HasActiveFilters)" @onclick="ClearFiltersAsync">
+                        <i class="bi bi-x-lg me-1"></i>Clear all
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm" @onclick="() => _filtersOpen = false">Done</button>
+                </div>
+            </div>
+        }
+
+        <div class="home-results-row">
+            <span class="text-muted small">@_paged.TotalCount kitchen@(_paged.TotalCount == 1 ? "" : "s") found</span>
+        </div>
+    }
+
+    @if (_showMap)
+    {
+        <div class="home-map-wrap card border-0 shadow-sm mb-4">
+            @if (_mapBusinesses is null)
+            {
+                <div class="d-flex justify-content-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            }
+            else if (_mapBusinesses.Count == 0)
+            {
+                <div class="text-center py-5">
+                    <div class="em-empty-icon"><i class="bi bi-map"></i></div>
+                    <p class="text-muted mb-0">No kitchens have a saved location yet.</p>
+                </div>
+            }
+            else
+            {
+                <div id="home-map" class="home-map"></div>
+            }
+        </div>
+    }
+    else if (_paged is null)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (_paged.Items.Count == 0)
+    {
+        <div class="home-empty">
+            <div class="em-empty-icon"><i class="bi bi-shop"></i></div>
+            <p class="text-muted mb-0">@(_paged.TotalCount == 0 && !HasActiveFilters ? "No kitchens have joined yet — check back soon." : "Nothing matches your filters yet.")</p>
+        </div>
+    }
+    else
+    {
+        <div class="biz-grid">
+            @foreach (var business in _paged.Items)
+            {
+                var live = LivePackagesFor(business.Id);
+                var reviews = ReviewsFor(business.Id);
+                <button type="button" class="biz-card" @key="business.Id" @onclick="() => OpenBusiness(business.Id)">
+                    @* data-image-url drives site.js's EcoMeal.media.checkPlaceholders — CSS background-image
+                       has no failure event, so a broken/unset URL needs JS to reveal the icon below. *@
+                    <div class="biz-card-media" style="@MediaStyle(business.ImageUrl)" data-image-url="@(business.ImageUrl ?? "")">
+                        <i class="bi bi-shop biz-card-media-placeholder-icon" aria-hidden="true"></i>
+                        @if (live.Count > 0)
+                        {
+                            <span class="biz-card-live-badge"><span class="biz-card-live-dot"></span>@live.Count live</span>
+                        }
+                        @if (reviews.Count > 0)
+                        {
+                            <span class="biz-card-rating-badge">
+                                <StarRating Value="@reviews.Average(r => r.Rating)" Size="0.65rem"/>
+                                @reviews.Average(r => r.Rating).ToString("0.0")
+                            </span>
+                        }
+                        <AuthorizeView Roles="@AppRoles.Customer" Context="favAuth">
+                            <Authorized>
+                                <button type="button" class="biz-card-fav-btn @(_favoriteBusinessIds.Contains(business.Id) ? "biz-card-fav-active" : "")"
+                                        @onclick="() => ToggleFavoriteAsync(business.Id)" @onclick:stopPropagation="true"
+                                        aria-label="@(_favoriteBusinessIds.Contains(business.Id) ? "Remove from favorites" : "Add to favorites")">
+                                    <i class="bi @(_favoriteBusinessIds.Contains(business.Id) ? "bi-heart-fill" : "bi-heart")"></i>
+                                </button>
+                            </Authorized>
+                        </AuthorizeView>
+                    </div>
+                    <div class="biz-card-body">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <span class="biz-card-type">@business.BusinessType.Name</span>
+                            @if (IsClosedNow(business))
+                            {
+                                <span class="biz-card-closed-badge">Closed now</span>
+                            }
+                        </div>
+                        <h2 class="biz-card-name">@business.Name</h2>
+                        <div class="biz-card-address"><i class="bi bi-geo-alt-fill"></i>@business.Address</div>
+                        @if (DistanceLabel(business) is { } distance)
+                        {
+                            <div class="biz-card-distance"><i class="bi bi-signpost-2-fill"></i>@distance</div>
+                        }
+                        <p class="biz-card-desc">@business.Description</p>
+                        <div class="biz-card-footer">
+                            @if (live.Count > 0)
+                            {
+                                <span class="biz-card-from">from @live.Min(p => p.Price).ToString("C")</span>
+                            }
+                            else
+                            {
+                                <span class="biz-card-from biz-card-from-muted">Nothing live now</span>
+                            }
+                            <span class="biz-card-cta">View kitchen <i class="bi bi-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </button>
+            }
+        </div>
+
+        <div class="home-pagination">
+            <Pagination CurrentPage="_paged.PageIndex" TotalPages="_paged.TotalPages" OnPageChange="PageChangedAsync"/>
+        </div>
+    }
+</section>
+
+@code {
+    private PaginatedList<Business>? _paged;
+    private List<BusinessType>? _businessTypes;
+    private List<Package>? _livePackages;
+    private Dictionary<Guid, List<Package>> _livePackagesByBusiness = [];
+    private Dictionary<Guid, int> _reservedByPackage = [];
+    private Dictionary<Guid, List<Review>> _reviewsByBusiness = [];
+    private decimal? _totalKgSaved;
+    private HashSet<Guid> _favoriteBusinessIds = [];
+
+    private string _search = "";
+    private string _businessTypeFilter = "";
+    private string _sortBy = BusinessSortOptions.Name;
+    private string _dietaryTagFilter = "";
+    private decimal? _maxPriceFilter;
+    private bool _favoritesOnly;
+    private bool _filtersOpen;
+    private int _pageIndex = 1;
+    private const int PageSize = 9;
+    private readonly Debouncer _reloadGate = new();
+
+    private double? _customerLat;
+    private double? _customerLng;
+    private bool _locatingNearMe;
+    private string? _locationError;
+
+    // State for the AI search bar above the literal one.
+    private string _aiQuery = "";
+    private bool _parsingAiSearch;
+    private string? _aiSearchError;
+    // Fed back into BusinessController.ParseSearchIntentAsync as refinement context, so a
+    // follow-up like "cheaper" adjusts this instead of starting over.
+    private SearchIntent? _lastSearchIntent;
+
+    private bool _showMap;
+    private List<Business>? _mapBusinesses;
+    private bool _mapNeedsRender;
+
+    private bool HasActiveFilters => _search != "" || _businessTypeFilter != "" || _dietaryTagFilter != "" || _maxPriceFilter.HasValue || _sortBy != BusinessSortOptions.Name || _favoritesOnly;
+
+    // Badge on the Filters trigger — excludes the always-visible search box.
+    private int ActiveFilterCount =>
+        (_businessTypeFilter != "" ? 1 : 0) +
+        (_dietaryTagFilter != "" ? 1 : 0) +
+        (_maxPriceFilter.HasValue ? 1 : 0) +
+        (_sortBy != BusinessSortOptions.Name ? 1 : 0) +
+        (_favoritesOnly ? 1 : 0);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _businessTypes = await BusinessTypeService.GetAllAsync();
+
+        var packages = (await PackageController.GetAllAsync()).Value;
+        var publicBusinessIds = (await BusinessController.GetAllAsync(publicOnly: true)).Value?.Select(b => b.Id).ToHashSet() ?? [];
+        // Only count packages still orderable today, not hidden, and from a publicly visible
+        // business — DbSeeder keeps seed data's window fresh.
+        _livePackages = packages?.Where(p => p.PickupEnd > DateTime.UtcNow && !p.IsHidden && publicBusinessIds.Contains(p.BusinessId)).ToList() ?? [];
+        _livePackagesByBusiness = _livePackages.GroupBy(p => p.BusinessId).ToDictionary(g => g.Key, g => g.ToList());
+        _reservedByPackage = (await OrderController.GetPendingReservedQuantitiesAsync(_livePackages.Select(p => p.Id))).Value ?? [];
+        _totalKgSaved = (await OrderController.GetTotalKgSavedAsync()).Value;
+        _favoriteBusinessIds = (await FavoriteController.GetMyFavoriteBusinessIdsAsync()).Value ?? [];
+
+        CartService.OnChange += HandleCartChanged;
+        ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
+
+        await LoadPageAsync();
+    }
+
+    // Same local-time convention PickupLabel uses for pickup windows — no per-business timezone.
+    private bool IsClosedNow(Business business) =>
+        BusinessHoursStatus.IsOpenNow(business.Hours, business.Closures, ClientTimeZoneService.ToLocal(DateTime.UtcNow)) == false;
+
+    private async Task LoadPageAsync()
+    {
+        Guid? typeId = Guid.TryParse(_businessTypeFilter, out var id) ? id : null;
+        _paged = (await BusinessController.GetPagedAsync(_pageIndex, PageSize, _search, typeId, sortBy: _sortBy, favoritesOnly: _favoritesOnly, customerLat: _customerLat, customerLng: _customerLng, publicOnly: true, dietaryTag: _dietaryTagFilter == "" ? null : _dietaryTagFilter, maxPrice: _maxPriceFilter)).Value;
+
+        // Only fetch reviews for the businesses actually shown on this page, not the whole table.
+        var businessIds = _paged?.Items.Select(b => b.Id).ToList() ?? [];
+        var reviews = businessIds.Count == 0 ? [] : (await ReviewController.GetByBusinessesAsync(businessIds)).Value ?? [];
+        _reviewsByBusiness = reviews.GroupBy(r => r.BusinessId).ToDictionary(g => g.Key, g => g.ToList());
+    }
+
+    private Task ReloadAsync(int delayMs = 0) => _reloadGate.DebounceAsync(LoadPageAsync, delayMs);
+
+    private Task OnSearchInputAsync()
+    {
+        _pageIndex = 1;
+        return ReloadAsync(300);
+    }
+
+    private Task FilterChangedAsync()
+    {
+        _pageIndex = 1;
+        return ReloadAsync();
+    }
+
+    private Task PageChangedAsync(int page)
+    {
+        _pageIndex = page;
+        return ReloadAsync();
+    }
+
+    private Task ClearFiltersAsync()
+    {
+        _search = "";
+        _businessTypeFilter = "";
+        _dietaryTagFilter = "";
+        _maxPriceFilter = null;
+        _sortBy = BusinessSortOptions.Name;
+        _favoritesOnly = false;
+        _aiQuery = "";
+        _aiSearchError = null;
+        _lastSearchIntent = null;
+        return FilterChangedAsync();
+    }
+
+    private Task ClearMaxPriceAsync()
+    {
+        _maxPriceFilter = null;
+        return FilterChangedAsync();
+    }
+
+    private Task ToggleFavoritesOnlyAsync()
+    {
+        _favoritesOnly = !_favoritesOnly;
+        return FilterChangedAsync();
+    }
+
+    private async Task ToggleNearMeAsync()
+    {
+        // A second click while already sorted by distance turns it back off.
+        if (_sortBy == BusinessSortOptions.Distance)
+        {
+            _sortBy = BusinessSortOptions.Name;
+            await FilterChangedAsync();
+            return;
+        }
+
+        _locatingNearMe = true;
+        var located = await TryLocateAsync();
+        _locatingNearMe = false;
+        if (!located)
+            return;
+
+        _sortBy = BusinessSortOptions.Distance;
+        await FilterChangedAsync();
+    }
+
+    // Shared by the "Near me" button above and RunAiSearchAsync below — both just want
+    // _customerLat/_customerLng populated afterward, they differ in what they do with them.
+    private async Task<bool> TryLocateAsync()
+    {
+        _locationError = null;
+        try
+        {
+            var position = await JSRuntime.InvokeAsync<GeoPosition?>("EcoMeal.geo.getPosition");
+            if (position is null)
+            {
+                _locationError = "Couldn't get your location — check your browser's location permission.";
+                return false;
+            }
+
+            _customerLat = position.Lat;
+            _customerLng = position.Lng;
+            return true;
+        }
+        catch
+        {
+            _locationError = "Couldn't get your location — check your browser's location permission.";
+            return false;
+        }
+    }
+
+    private Task OnAiSearchKeyDownAsync(KeyboardEventArgs e) =>
+        e.Key == "Enter" ? RunAiSearchAsync() : Task.CompletedTask;
+
+    private async Task RunAiSearchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_aiQuery) || _parsingAiSearch)
+            return;
+
+        _aiSearchError = null;
+        _parsingAiSearch = true;
+        try
+        {
+            var result = await BusinessController.ParseSearchIntentAsync(_aiQuery, _lastSearchIntent);
+            // ActionResult<T> doesn't throw across this in-process call the way it would over
+            // real HTTP — same ConflictObjectResult convention PackageForm.razor's
+            // DraftDescriptionAsync uses to detect "AI not configured/available".
+            if (result.Result is ConflictObjectResult conflict)
+                _aiSearchError = conflict.Value?.ToString() ?? "The AI search assistant isn't available right now.";
+            else if (result.Value is not null)
+                await ApplyIntentAsync(result.Value);
+        }
+        finally
+        {
+            _parsingAiSearch = false;
+        }
+    }
+
+    private async Task ApplyIntentAsync(SearchIntent intent)
+    {
+        _lastSearchIntent = intent;
+        _search = intent.Keywords ?? "";
+        _dietaryTagFilter = intent.DietaryTag ?? "";
+        _maxPriceFilter = intent.MaxPrice;
+
+        if (intent.NearMe && !_customerLat.HasValue)
+            await TryLocateAsync();
+
+        // Only one sort slot exists — closingSoon wins when both are requested, since it needs
+        // no permission prompt and is the app's core food-waste signal. nearMe still gets
+        // applied above (distance labels show on every card regardless of sort), just not as
+        // the primary order when it loses this tie.
+        _sortBy = intent.ClosingSoon
+            ? BusinessSortOptions.ClosingSoon
+            : intent.NearMe && _customerLat.HasValue ? BusinessSortOptions.Distance : BusinessSortOptions.Name;
+
+        _pageIndex = 1;
+        await ReloadAsync();
+    }
+
+    private async Task ToggleMapAsync()
+    {
+        _showMap = !_showMap;
+        if (!_showMap)
+            return;
+
+        if (_mapBusinesses is null)
+        {
+            var all = (await BusinessController.GetAllAsync(publicOnly: true)).Value ?? [];
+            _mapBusinesses = all.Where(b => b.Latitude.HasValue && b.Longitude.HasValue).ToList();
+        }
+
+        _mapNeedsRender = _mapBusinesses.Count > 0;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_mapNeedsRender || _mapBusinesses is null)
+            return;
+
+        _mapNeedsRender = false;
+        var markers = _mapBusinesses.Select(b => new { id = b.Id, name = b.Name, lat = b.Latitude, lng = b.Longitude });
+        await JSRuntime.InvokeVoidAsync("EcoMeal.map.render", "home-map", markers);
+    }
+
+    private string? DistanceLabel(Business business)
+    {
+        if (!_customerLat.HasValue || !_customerLng.HasValue || !business.Latitude.HasValue || !business.Longitude.HasValue)
+            return null;
+
+        var km = GeoDistance.Km(_customerLat.Value, _customerLng.Value, business.Latitude.Value, business.Longitude.Value);
+        return km < 1 ? $"{km * 1000:0} m away" : $"{km:0.#} km away";
+    }
+
+    private class GeoPosition
+    {
+        public double Lat { get; set; }
+        public double Lng { get; set; }
+    }
+
+    private async Task ToggleFavoriteAsync(Guid businessId)
+    {
+        var isFavorite = (await FavoriteController.ToggleFavoriteAsync(businessId)).Value;
+        if (isFavorite)
+            _favoriteBusinessIds.Add(businessId);
+        else
+            _favoriteBusinessIds.Remove(businessId);
+
+        // The favorites-only filter's current page can go stale the moment something is unfavorited.
+        if (_favoritesOnly)
+            await ReloadAsync();
+    }
+
+    private List<Package> LivePackagesFor(Guid businessId) =>
+        _livePackagesByBusiness.GetValueOrDefault(businessId, []);
+
+    private List<Review> ReviewsFor(Guid businessId) =>
+        _reviewsByBusiness.GetValueOrDefault(businessId, []);
+
+    // background-color stays set even with a URL present, so a broken image falls back to the
+    // forest placeholder instead of blank white — background-image has no failure event of its own.
+    private static string MediaStyle(string? imageUrl) => string.IsNullOrWhiteSpace(imageUrl)
+        ? "background-color: var(--em-forest);"
+        : $"background-color: var(--em-forest); background-image: url('{imageUrl}');";
+
+    private void OpenBusiness(Guid businessId) => NavigationManager.NavigateTo($"/businesses/{businessId}");
+
+    private void HandleCartChanged() => InvokeAsync(StateHasChanged);
+
+    private void HandleTimeZoneChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        CartService.OnChange -= HandleCartChanged;
+        ClientTimeZoneService.OnChange -= HandleTimeZoneChanged;
+    }
+}

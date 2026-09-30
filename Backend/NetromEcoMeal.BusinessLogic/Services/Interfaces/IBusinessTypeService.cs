@@ -1,0 +1,14 @@
+using NetromEcoMeal.Entities;
+
+namespace NetromEcoMeal.Services.Interfaces;
+
+// Reads are open to anyone (every business-browsing page needs the list); writes are admin-only,
+// enforced in the implementation via ICurrentUser.
+public interface IBusinessTypeService
+{
+    public Task<List<BusinessType>> GetAllAsync();
+    public Task AddAsync(BusinessType businessType);
+    public Task UpdateAsync(BusinessType businessType);
+    // Throws InvalidOperationException if a Business still references this type.
+    public Task DeleteAsync(Guid id);
+}

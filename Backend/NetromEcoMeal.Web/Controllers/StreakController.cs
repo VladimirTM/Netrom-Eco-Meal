@@ -1,0 +1,15 @@
+using Microsoft.AspNetCore.Mvc;
+using NetromEcoMeal.Services.Interfaces;
+
+namespace NetromEcoMeal.Controllers;
+
+// Also registered as a scoped service and injected directly into Razor pages, bypassing HTTP.
+[ApiController]
+[Route("/")]
+public class StreakController(IStreakService streakService) : ControllerBase
+{
+    public async Task<ActionResult<int>> GetMyStreakWeeksAsync()
+    {
+        return await streakService.GetMyStreakWeeksAsync();
+    }
+}

@@ -1,0 +1,139 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using NetromEcoMeal.Constants
+@using NetromEcoMeal.Controllers
+@using NetromEcoMeal.Entities
+@inject ReportController ReportController
+
+@if (Package is not null)
+{
+    <div class="pkg-modal-backdrop" @onclick="() => OnClose.InvokeAsync()"></div>
+    <div class="pkg-modal" role="dialog" aria-modal="true" aria-labelledby="pkg-modal-title">
+        <button type="button" class="biz-modal-close" @onclick="() => OnClose.InvokeAsync()" aria-label="Close">
+            <i class="bi bi-x-lg"></i>
+        </button>
+
+        @if (!string.IsNullOrWhiteSpace(Package.ImageUrl))
+        {
+            <div class="pkg-modal-hero" style="@HeroStyle"></div>
+        }
+
+        <div class="pkg-modal-body">
+            <span class="biz-modal-eyebrow">@Package.PackageType.Name</span>
+            <h2 class="pkg-modal-title" id="pkg-modal-title">@Package.Name</h2>
+            <div class="pkg-modal-price">@Package.Price.ToString("C")</div>
+            @if (ClosingSoonLabel is not null)
+            {
+                <span class="biz-card-closed-badge mb-2"><i class="bi bi-alarm-fill"></i>@ClosingSoonLabel</span>
+            }
+            @if (ReviewCount > 0)
+            {
+                <StarRating Value="@RatingAverage" ShowValue="true" Count="@ReviewCount" Size="0.8rem"/>
+            }
+
+            <p class="biz-modal-desc">@Package.Description</p>
+
+            @if (Package.DietaryTags.Count > 0)
+            {
+                <div class="diet-tag-row mb-3">
+                    @foreach (var tag in Package.DietaryTags)
+                    {
+                        <span class="diet-tag @(NetromEcoMeal.Constants.DietaryTags.IsAllergen(tag) ? "diet-tag-allergen" : "")">@tag</span>
+                    }
+                </div>
+            }
+
+            <div class="pkg-modal-facts">
+                <div class="pkg-modal-fact">
+                    <i class="bi bi-shop"></i>
+                    <div>
+                        <div class="pkg-modal-fact-label">From</div>
+                        <div class="pkg-modal-fact-value">@Package.Business.Name</div>
+                    </div>
+                </div>
+                <div class="pkg-modal-fact">
+                    <i class="bi bi-clock"></i>
+                    <div>
+                        <div class="pkg-modal-fact-label">Pickup window</div>
+                        <div class="pkg-modal-fact-value">@PickupLabel</div>
+                    </div>
+                </div>
+                <div class="pkg-modal-fact">
+                    <i class="bi bi-bag-check"></i>
+                    <div>
+                        <div class="pkg-modal-fact-label">Available</div>
+                        <div class="pkg-modal-fact-value">@AvailableQuantity left</div>
+                    </div>
+                </div>
+            </div>
+
+            <AuthorizeView Roles="@AppRoles.Customer" Context="cartAuth">
+                <Authorized>
+                    @if (AvailableQuantity <= 0)
+                    {
+                        <button type="button" class="btn btn-secondary w-100 pkg-modal-add-btn" disabled>Sold out</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn btn-primary w-100 pkg-modal-add-btn" @onclick="() => OnAddToCart.InvokeAsync(Package)">
+                            <i class="bi bi-bag-plus"></i> Add to basket
+                        </button>
+                    }
+                    <button type="button" class="btn btn-link btn-sm w-100 text-muted" @onclick="() => _reportPromptOpen = true">
+                        <i class="bi bi-flag"></i> Report this package
+                    </button>
+                </Authorized>
+            </AuthorizeView>
+
+            @if (_reportSent)
+            {
+                <p class="text-success small text-center mb-0"><i class="bi bi-check-circle-fill"></i> Thanks — an admin will take a look.</p>
+            }
+        </div>
+    </div>
+
+    <ReportDialog IsOpen="_reportPromptOpen"
+                  TargetLabel="@(Package?.Name ?? "")"
+                  Busy="@_reportBusy"
+                  OnSubmit="SubmitReportAsync"
+                  OnCancel="() => _reportPromptOpen = false"/>
+}
+
+@code {
+    [Parameter] public Package? Package { get; set; }
+    [Parameter] public int AvailableQuantity { get; set; }
+    [Parameter] public string PickupLabel { get; set; } = "";
+    [Parameter] public string? ClosingSoonLabel { get; set; }
+    [Parameter] public double RatingAverage { get; set; }
+    [Parameter] public int ReviewCount { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<Package> OnAddToCart { get; set; }
+
+    private bool _reportPromptOpen;
+    private bool _reportBusy;
+    private bool _reportSent;
+
+    // Only ever rendered when Package.ImageUrl is set — see the @if around .pkg-modal-hero.
+    private string HeroStyle => $"background-image: url('{Package?.ImageUrl}');";
+
+    protected override void OnParametersSet()
+    {
+        // A fresh package selection resets any leftover state from the previous one.
+        if (Package is null)
+        {
+            _reportPromptOpen = false;
+            _reportSent = false;
+        }
+    }
+
+    private async Task SubmitReportAsync(string reason)
+    {
+        if (Package is null || string.IsNullOrWhiteSpace(reason))
+            return;
+
+        _reportBusy = true;
+        await ReportController.SubmitAsync(AuditTargetTypes.Package, Package.Id, reason);
+        _reportBusy = false;
+        _reportPromptOpen = false;
+        _reportSent = true;
+    }
+}

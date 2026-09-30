@@ -1,0 +1,167 @@
+@page "/trip-planner"
+@layout PublicLayout
+@using Microsoft.AspNetCore.Authorization
+@using NetromEcoMeal.Constants
+@using NetromEcoMeal.Controllers
+@using NetromEcoMeal.Entities
+@using NetromEcoMeal.Models
+@rendermode InteractiveServer
+@inject OrderController OrderController
+@inject IJSRuntime JSRuntime
+@attribute [Authorize(Roles = AppRoles.Customer)]
+
+<PageTitle>Trip planner — Eco Meal</PageTitle>
+
+<div class="container py-4">
+    <div class="mb-4">
+        <h1 class="h3 fw-bold mb-1"><i class="bi bi-signpost-2 me-2"></i>Trip planner</h1>
+        <p class="text-muted mb-0">A suggested pickup order across every rescue you've got waiting right now — nearest stop first.</p>
+    </div>
+
+    @if (_orders is null)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (_stops.Count == 0)
+    {
+        <div class="text-center py-5">
+            <div class="em-empty-icon"><i class="bi bi-signpost-2"></i></div>
+            <p class="text-muted mb-1">No active orders to plan a route for yet.</p>
+            <span class="text-muted small d-block mb-3">Place an order (or two!) and they'll show up here once they're pending or confirmed.</span>
+            <a href="/" class="btn btn-primary px-4">Browse packages</a>
+        </div>
+    }
+    else
+    {
+        @if (_stops.Count == 1)
+        {
+            <div class="alert alert-info">Just one active order right now — plan a route once you've got more than one on the go.</div>
+        }
+        else if (_locating)
+        {
+            <div class="alert alert-secondary small"><span class="spinner-border spinner-border-sm me-2"></span>Trying to start the route from your current location…</div>
+        }
+        else if (_locationDenied)
+        {
+            <div class="alert alert-secondary small">Couldn't get your location, so the route below starts from the first stop instead.</div>
+        }
+
+        <div class="row g-3">
+            <div class="col-lg-5">
+                <ol class="list-group list-group-numbered">
+                    @for (var i = 0; i < _stops.Count; i++)
+                    {
+                        var stop = _stops[i];
+                        <li class="list-group-item d-flex justify-content-between align-items-start">
+                            <div class="ms-2 me-auto">
+                                <div class="fw-semibold">@stop.BusinessName</div>
+                                <div class="text-muted small"><i class="bi bi-geo-alt"></i> @stop.Address</div>
+                                @foreach (var order in stop.Orders)
+                                {
+                                    <div class="small">
+                                        Order #@order.OrderNumber.ToString("000")
+                                        <span class="order-status-badge order-status-@order.Status.Name.ToLowerInvariant()">@OrderStatuses.Label(order.Status.Name)</span>
+                                    </div>
+                                }
+                            </div>
+                        </li>
+                    }
+                </ol>
+            </div>
+            <div class="col-lg-7">
+                <div class="card border-0 shadow-sm home-map-wrap">
+                    <div id="trip-map" class="home-map"></div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Order>? _orders;
+    private List<StopView> _stops = [];
+    private double? _lat;
+    private double? _lng;
+    private bool _locating = true;
+    private bool _locationDenied;
+    private bool _mapNeedsRender;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _orders = (await OrderController.GetMyOrdersAsync()).Value ?? [];
+        BuildStops();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _stops.Count > 1)
+        {
+            // Belt-and-suspenders on top of the JS side's own 8s geolocation timeout — guarantees
+            // this spinner always resolves even if the JS interop call itself never completes.
+            GeoPosition? position = null;
+            try
+            {
+                var positionTask = JSRuntime.InvokeAsync<GeoPosition?>("EcoMeal.geo.getPosition").AsTask();
+                if (await Task.WhenAny(positionTask, Task.Delay(TimeSpan.FromSeconds(10))) == positionTask)
+                    position = await positionTask;
+            }
+            catch (Exception)
+            {
+                position = null;
+            }
+
+            _locating = false;
+            if (position is not null)
+            {
+                _lat = position.Lat;
+                _lng = position.Lng;
+                BuildStops();
+            }
+            else
+            {
+                _locationDenied = true;
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+
+        if (_mapNeedsRender)
+        {
+            _mapNeedsRender = false;
+            var markers = _stops.Select((s, i) => new { id = s.BusinessId, name = $"{i + 1}. {s.BusinessName}", lat = s.Lat, lng = s.Lng });
+            await JSRuntime.InvokeVoidAsync("EcoMeal.map.render", "trip-map", markers);
+        }
+    }
+
+    // One stop per business (an active order can't span businesses), ordered by TripPlanner's
+    // nearest-neighbor walk over each stop's Business.Latitude/Longitude.
+    private void BuildStops()
+    {
+        var active = _orders!
+            .Where(o => o.Status.Name is OrderStatuses.Pending or OrderStatuses.Confirmed
+                && o.Business.Latitude.HasValue && o.Business.Longitude.HasValue)
+            .GroupBy(o => o.BusinessId)
+            .Select(g => new StopView(
+                g.Key, g.First().Business.Name, g.First().Business.Address,
+                g.First().Business.Latitude!.Value, g.First().Business.Longitude!.Value,
+                g.OrderBy(o => o.OrderNumber).ToList()))
+            .ToList();
+
+        var points = active.Select(s => new NetromEcoMeal.Models.TripPlanner.Stop(s.BusinessId, s.Lat, s.Lng)).ToList();
+        var routeOrder = NetromEcoMeal.Models.TripPlanner.PlanRoute(points, _lat, _lng);
+
+        _stops = routeOrder.Select(id => active.First(s => s.BusinessId == id)).ToList();
+        _mapNeedsRender = _stops.Count > 0;
+    }
+
+    private record StopView(Guid BusinessId, string BusinessName, string Address, double Lat, double Lng, List<Order> Orders);
+
+    private class GeoPosition
+    {
+        public double Lat { get; set; }
+        public double Lng { get; set; }
+    }
+}

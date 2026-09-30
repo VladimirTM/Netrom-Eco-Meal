@@ -1,0 +1,55 @@
+using NetromEcoMeal.Entities;
+using NetromEcoMeal.Models;
+
+namespace NetromEcoMeal.Services.Interfaces;
+
+// Write methods are restricted to admins and the package's own business manager.
+public interface IPackageService
+{
+    public Task<List<Package>> GetAllAsync();
+    public Task<PaginatedList<Package>> GetPagedAsync(int pageIndex, int pageSize, string? search, Guid? businessId, Guid? packageTypeId);
+    public Task<Package?> GetByIdAsync(Guid id);
+    public Task<Dictionary<Guid, string>> GetNamesByIdsAsync(IEnumerable<Guid> ids);
+    // Public browsing data (same audience as package listing, no auth check) — feeds the AI
+    // budget planner's search tool (BasketPlannerAgent).
+    public Task<List<Package>> GetLiveCandidatesAsync(string? dietaryTag);
+    public Task AddAsync(Package package);
+    // Skips AddAsync's staff/admin check — WebhookIntakeService authenticates via API key instead.
+    public Task AddFromWebhookAsync(Package package);
+    public Task UpdateAsync(Package package);
+    public Task DeleteAsync(Package package);
+
+    // Bulk actions for the /packages multi-select toolbar — same per-business ownership check as the write methods above.
+    public Task<List<Package>> DuplicateManyAsync(List<Guid> packageIds);
+    public Task AdjustQuantityManyAsync(List<Guid> packageIds, int delta);
+    public Task ExtendPickupWindowManyAsync(List<Guid> packageIds, TimeSpan extension);
+
+    // Raw package + order graph behind the Dashboard's business analytics card — aggregated
+    // client-side since it needs the viewer's local timezone for hour bucketing.
+    public Task<List<Package>> GetForAnalyticsAsync(Guid? businessId, DateTime since);
+
+    // notify: false lets a caller (see ReportService.TakeActionAsync) defer the staff
+    // notification fan-out until after its own transaction commits, so outbound push calls
+    // don't hold DB locks open. Returns the hidden package (null if it was a no-op) so the
+    // caller has what NotifyHiddenAsync needs.
+    public Task<Package?> HideAsync(Guid packageId, string reason, bool notify = true);
+    public Task NotifyHiddenAsync(Package package, string reason);
+    public Task UnhideAsync(Guid packageId);
+
+    // Backs the /packages markdown-suggestion badge — same admin-or-own-business-staff
+    // authorization shape as GetForAnalyticsAsync.
+    public Task<List<Package>> GetMarkdownCandidatesAsync(Guid? businessId);
+    // null when the package doesn't exist, no cut is warranted, or the suggestion didn't
+    // validate — the caller shows "no suggestion right now".
+    public Task<MarkdownSuggestion?> GetMarkdownSuggestionAsync(Guid packageId, CancellationToken cancellationToken = default);
+    public Task DismissMarkdownSuggestionAsync(Guid packageId);
+
+    // Backs the /packages "mark as donated" badge — same admin-or-own-business-staff
+    // authorization shape as GetMarkdownCandidatesAsync.
+    public Task<List<Package>> GetDonationCandidatesAsync(Guid? businessId);
+    // Throws InvalidOperationException if the pickup window hasn't closed yet or the package ever
+    // had a real order — donation is only for food that closed completely unsold.
+    public Task<Package?> MarkAsDonatedAsync(Guid packageId);
+    // System-triggered (background sweep) — notifies each candidate's business staff once.
+    public Task<int> NotifyDonationCandidatesAsync();
+}

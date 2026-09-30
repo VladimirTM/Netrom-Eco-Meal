@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="NetromEcoMeal.Web/NetromEcoMeal.Web.csproj" />
+  <Project Path="NetromEcoMeal.BusinessLogic/NetromEcoMeal.BusinessLogic.csproj" />
+  <Project Path="NetromEcoMeal.DataAccess/NetromEcoMeal.DataAccess.csproj" />
+  <Project Path="NetromEcoMeal.Tests/NetromEcoMeal.Tests.csproj" />
+</Solution>

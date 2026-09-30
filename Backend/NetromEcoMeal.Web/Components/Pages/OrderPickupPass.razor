@@ -1,0 +1,253 @@
+@page "/orders/pickup/{Id:guid}"
+@layout PublicLayout
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Mvc
+@using NetromEcoMeal.Constants
+@using NetromEcoMeal.Controllers
+@using NetromEcoMeal.Entities
+@using NetromEcoMeal.Services
+@using QRCoder
+@rendermode InteractiveServer
+@implements IDisposable
+@inject OrderController OrderController
+@inject ClientTimeZoneService ClientTimeZoneService
+@inject NavigationManager NavigationManager
+@attribute [Authorize(Roles = AppRoles.Customer)]
+
+<PageTitle>Pickup pass — Eco Meal</PageTitle>
+
+<div class="pickup-pass-page">
+    <a href="/orders" class="biz-page-back"><i class="bi bi-arrow-left"></i> Back to your orders</a>
+
+    @if (_forbidden)
+    {
+        <ForbiddenPanel Message="You can only view the pickup pass for your own orders." BackHref="/orders" BackLabel="Back to your orders" />
+    }
+    else if (_notFound)
+    {
+        <NotFoundPanel Message="This order no longer exists." BackHref="/orders" BackLabel="Back to your orders" />
+    }
+    else if (_order is null)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (_order.Status.Name != OrderStatuses.Confirmed)
+    {
+        <div class="orders-empty">
+            <div class="em-empty-icon"><i class="bi bi-qr-code-scan"></i></div>
+            <p class="mb-1">No pickup pass to show.</p>
+            <span class="text-muted small d-block">@StatusExplanation</span>
+        </div>
+    }
+    else if (_selectedPass is not null)
+    {
+        var passes = _order.PickupPasses.OrderBy(p => p.CreatedAt).ToList();
+
+        @if (passes.Count > 1)
+        {
+            <div class="pickup-pass-switcher" role="tablist" aria-label="Pickup passes">
+                @foreach (var pass in passes)
+                {
+                    <button type="button" class="pickup-pass-tab @(pass.Id == _selectedPass.Id ? "active" : "")"
+                            role="tab" aria-selected="@(pass.Id == _selectedPass.Id)" @onclick="() => SelectPass(pass)">
+                        @pass.Label
+                    </button>
+                }
+            </div>
+            <p class="pickup-pass-switcher-hint">Each pass is its own QR code — hand a different one to each person picking up, whoever gets there first scans to complete the order.</p>
+        }
+
+        <article class="order-ticket order-ticket--pass">
+            <div class="order-ticket-main">
+                <div class="order-ticket-top">
+                    <div class="order-ticket-kitchen">
+                        <div class="order-ticket-business"><i class="bi bi-shop"></i>@_order.Business.Name</div>
+                        <div class="order-ticket-address"><i class="bi bi-geo-alt"></i>@_order.Business.Address</div>
+                    </div>
+                    <span class="order-status-badge order-status-confirmed">@_order.Status.Name</span>
+                </div>
+
+                <div class="order-ticket-items">
+                    @foreach (var line in _order.OrderPackages)
+                    {
+                        <div class="order-ticket-line">
+                            <span class="order-ticket-line-qty">@(line.Quantity)&times;</span>
+                            <span class="order-ticket-line-name">@line.Package.Name</span>
+                            <span class="order-ticket-line-price">@((line.Quantity * line.Package.Price).ToString("C"))</span>
+                        </div>
+                    }
+                </div>
+
+                <div class="order-ticket-footer">
+                    <div class="order-ticket-pickup"><i class="bi bi-clock"></i>Pickup @PickupWindow(_order)</div>
+                    <div class="order-ticket-total">
+                        <span>Total</span>
+                        <span class="order-ticket-total-value">@_order.OrderPackages.Sum(op => op.Quantity * op.Package.Price).ToString("C")</span>
+                    </div>
+                </div>
+
+                @{ var kgSaved = _order.OrderPackages.Sum(op => op.Quantity * op.Package.WeightKg); }
+                @if (kgSaved > 0)
+                {
+                    <div class="order-ticket-impact"><i class="bi bi-leaf"></i> You're about to save ~@kgSaved.ToString("0.#") kg of food from waste</div>
+                }
+            </div>
+
+            <div class="order-ticket-seam"></div>
+
+            <div class="order-ticket-stub order-ticket-stub--pass">
+                <span class="order-ticket-stub-label">Order</span>
+                <span class="order-ticket-stub-number">#@_order.OrderNumber.ToString("000")</span>
+                <div class="order-ticket-stub-qr">
+                    @((MarkupString)_qrSvg!)
+                </div>
+                @if (passes.Count > 1)
+                {
+                    <span class="order-ticket-stub-pass-label">@_selectedPass.Label</span>
+                }
+                <span class="order-ticket-stub-hint">Hand your phone to the counter — they'll scan this to confirm pickup</span>
+            </div>
+        </article>
+
+        <div class="pickup-pass-split">
+            @if (!_splitting)
+            {
+                <button type="button" class="pickup-pass-split-toggle" @onclick="() => _splitting = true">
+                    <i class="bi bi-people"></i> Splitting with a group? Get separate passes
+                </button>
+            }
+            else
+            {
+                <div class="pickup-pass-split-form">
+                    <label for="passCount">Number of passes</label>
+                    <select id="passCount" class="form-select form-select-sm" @bind="_passCount">
+                        @for (var n = PickupPasses.MinPasses; n <= PickupPasses.MaxPasses; n++)
+                        {
+                            <option value="@n">@n</option>
+                        }
+                    </select>
+                    <button type="button" class="btn btn-primary btn-sm" disabled="@_splitBusy" @onclick="SplitAsync">
+                        @if (_splitBusy)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        }
+                        Update passes
+                    </button>
+                    <button type="button" class="btn btn-link btn-sm" disabled="@_splitBusy" @onclick="() => _splitting = false">Cancel</button>
+                </div>
+                @if (_splitError is not null)
+                {
+                    <div class="alert alert-danger py-2 small mt-2" role="alert">@_splitError</div>
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Order? _order;
+    private bool _forbidden;
+    private bool _notFound;
+    private string? _qrSvg;
+    private Entities.OrderPickupPass? _selectedPass;
+    private bool _splitting;
+    private bool _splitBusy;
+    private string? _splitError;
+    private int _passCount = PickupPasses.MinPasses;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        ClientTimeZoneService.OnChange += HandleTimeZoneChanged;
+    }
+
+    private async Task LoadAsync()
+    {
+        var result = await OrderController.GetMyOrderAsync(Id);
+        if (result.Result is UnauthorizedResult)
+        {
+            _forbidden = true;
+            return;
+        }
+        if (result.Result is NotFoundResult)
+        {
+            _notFound = true;
+            return;
+        }
+
+        _order = result.Value;
+
+        if (_order is not null && _order.Status.Name == OrderStatuses.Confirmed && _order.PickupPasses.Count > 0)
+        {
+            var previouslySelected = _selectedPass?.Id;
+            var passes = _order.PickupPasses.OrderBy(p => p.CreatedAt).ToList();
+            SelectPass(passes.FirstOrDefault(p => p.Id == previouslySelected) ?? passes[0]);
+            // Keep the split-count selector in sync with reality — otherwise "Update passes"
+            // silently regenerates a stale count and invalidates already-issued QR codes.
+            _passCount = passes.Count;
+        }
+    }
+
+    private void SelectPass(Entities.OrderPickupPass pass)
+    {
+        _selectedPass = pass;
+        var payloadUrl = $"{NavigationManager.BaseUri}orders/validate/{_order!.Id}/{pass.Id}";
+        var qrData = new QRCodeGenerator().CreateQrCode(payloadUrl, QRCodeGenerator.ECCLevel.Q);
+        _qrSvg = new SvgQRCode(qrData).GetGraphic(5, "#0b1f13", "#ffffff", true, SvgQRCode.SizingMode.ViewBoxAttribute);
+    }
+
+    private async Task SplitAsync()
+    {
+        _splitBusy = true;
+        _splitError = null;
+
+        var result = await OrderController.SplitPickupPassesAsync(Id, _passCount);
+        if (result.Result is ConflictObjectResult conflict)
+        {
+            _splitError = conflict.Value as string ?? "Couldn't update pickup passes.";
+        }
+        else if (result.Value is not null)
+        {
+            _selectedPass = null;
+            await LoadAsync();
+            _splitting = false;
+        }
+
+        _splitBusy = false;
+    }
+
+    private void HandleTimeZoneChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        ClientTimeZoneService.OnChange -= HandleTimeZoneChanged;
+    }
+
+    private string StatusExplanation => _order!.Status.Name switch
+    {
+        OrderStatuses.Pending => "Your pickup pass appears once the business confirms this order.",
+        OrderStatuses.Completed => "This order has already been picked up.",
+        OrderStatuses.Cancelled => "This order was cancelled.",
+        _ => "This order's pickup pass isn't available.",
+    };
+
+    private string PickupWindow(Order order)
+    {
+        if (order.OrderPackages.Count == 0)
+            return "time to be confirmed";
+
+        // An order can span packages with different windows — show the widest span that covers them all.
+        var start = ClientTimeZoneService.ToLocal(order.OrderPackages.Min(op => op.Package.PickupStart));
+        var end = ClientTimeZoneService.ToLocal(order.OrderPackages.Max(op => op.Package.PickupEnd));
+
+        return start.Date == end.Date
+            ? FormattableString.Invariant($"{start:MMM d} · {start:HH:mm}–{end:HH:mm}")
+            : FormattableString.Invariant($"{start:MMM d, HH:mm} – {end:MMM d, HH:mm}");
+    }
+}

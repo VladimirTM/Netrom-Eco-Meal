@@ -1,0 +1,383 @@
+using Microsoft.AspNetCore.Identity;
+using Moq;
+using NetromEcoMeal.Entities;
+using NetromEcoMeal.Repositories.Interfaces;
+using NetromEcoMeal.Services;
+using NetromEcoMeal.Services.Interfaces;
+using NetromEcoMeal.Tests.TestSupport;
+
+namespace NetromEcoMeal.Tests.Services;
+
+// Covers BusinessService's staff-assignment authorization (admin-only, per the many-to-many
+// BusinessStaff join table that replaced the single Business.ManagerId) and pass-through
+// delegation to IBusinessRepository. IBusinessRepository is mocked; the repository's own
+// CRUD/uniqueness behavior is covered separately in BusinessRepositoryTests against a real
+// InMemory-backed EcoMealDbContext.
+public class BusinessServiceTests
+{
+    private const string AdminId = "admin-1";
+    private const string ManagerId = "manager-1";
+
+    private sealed record Fixture(BusinessService Service, Mock<IBusinessRepository> Repo, Mock<UserManager<ApplicationUser>> UserManager, Mock<IAuditLogService> AuditLog, Mock<INotificationService> Notification);
+
+    private static Mock<UserManager<ApplicationUser>> MockUserManager()
+    {
+        var store = new Mock<IUserStore<ApplicationUser>>();
+        return new Mock<UserManager<ApplicationUser>>(store.Object, null!, null!, null!, null!, null!, null!, null!, null!);
+    }
+
+    private static Fixture Build(string? userId, params string[] roles)
+    {
+        var repo = new Mock<IBusinessRepository>();
+        var userManager = MockUserManager();
+        var auditLog = new Mock<IAuditLogService>();
+        var notification = new Mock<INotificationService>();
+        var currentUser = new FakeCurrentUser(userId, roles);
+        var service = new BusinessService(repo.Object, userManager.Object, currentUser, auditLog.Object, notification.Object);
+        return new Fixture(service, repo, userManager, auditLog, notification);
+    }
+
+    [Fact]
+    public async Task AddStaffAsync_NonAdmin_Throws()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            f.Service.AddStaffAsync(Guid.NewGuid(), ManagerId));
+    }
+
+    [Fact]
+    public async Task AddStaffAsync_Admin_DelegatesToRepository()
+    {
+        var f = Build(AdminId, Constants.AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        f.Repo.Setup(r => r.AddStaffAsync(businessId, ManagerId)).ReturnsAsync(true);
+
+        var result = await f.Service.AddStaffAsync(businessId, ManagerId);
+
+        Assert.True(result);
+        f.Repo.Verify(r => r.AddStaffAsync(businessId, ManagerId), Times.Once);
+    }
+
+    [Fact]
+    public async Task RemoveStaffAsync_NonAdmin_Throws()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            f.Service.RemoveStaffAsync(Guid.NewGuid(), ManagerId));
+    }
+
+    [Fact]
+    public async Task RemoveStaffAsync_Admin_DelegatesToRepository()
+    {
+        var f = Build(AdminId, Constants.AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        f.Repo.Setup(r => r.RemoveStaffAsync(businessId, ManagerId)).ReturnsAsync(true);
+
+        var result = await f.Service.RemoveStaffAsync(businessId, ManagerId);
+
+        Assert.True(result);
+        f.Repo.Verify(r => r.RemoveStaffAsync(businessId, ManagerId), Times.Once);
+    }
+
+    [Fact]
+    public async Task IsStaffAsync_DelegatesToRepository()
+    {
+        var f = Build(AdminId, Constants.AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        f.Repo.Setup(r => r.IsStaffAsync(businessId, ManagerId)).ReturnsAsync(true);
+
+        Assert.True(await f.Service.IsStaffAsync(businessId, ManagerId));
+    }
+
+    [Fact]
+    public async Task GetByStaffUserIdAsync_OneUserStaffingTwoBusinesses_ReturnsBoth()
+    {
+        var f = Build(AdminId, Constants.AppRoles.Admin);
+        var businesses = new List<Business> { TestData.Business(), TestData.Business() };
+        f.Repo.Setup(r => r.GetByStaffUserIdAsync(ManagerId)).ReturnsAsync(businesses);
+
+        var result = await f.Service.GetByStaffUserIdAsync(ManagerId);
+
+        Assert.Equal(2, result.Count);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_StaffOfBusiness_Succeeds()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+        var business = TestData.Business();
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.IsStaffAsync(business.Id, ManagerId)).ReturnsAsync(true);
+
+        business.Name = "Updated Name";
+        await f.Service.UpdateAsync(business);
+
+        f.Repo.Verify(r => r.SaveChangesAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_NotStaffOfBusiness_Throws()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+        var business = TestData.Business();
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.IsStaffAsync(business.Id, ManagerId)).ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.UpdateAsync(business));
+    }
+
+    // ---- ApplyAsync (self-service signup) --------------------------------
+
+    [Fact]
+    public async Task ApplyAsync_Anonymous_Throws()
+    {
+        var f = Build(null);
+        var business = TestData.Business();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.ApplyAsync(business));
+    }
+
+    [Fact]
+    public async Task ApplyAsync_SignedInCustomer_SetsPendingApprovalAndSubmitter()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.Customer);
+        var business = TestData.Business();
+
+        var result = await f.Service.ApplyAsync(business);
+
+        Assert.Equal(Constants.BusinessStatuses.PendingApproval, result.Status);
+        Assert.Equal(ManagerId, result.SubmittedByUserId);
+        f.Repo.Verify(r => r.AddAsync(business), Times.Once);
+        f.Repo.Verify(r => r.SaveChangesAsync(), Times.Once);
+    }
+
+    // ---- ApproveAsync / RejectAsync ---------------------------------------
+
+    [Fact]
+    public async Task ApproveAsync_NonAdmin_Throws()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.ApproveAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task ApproveAsync_PendingBusiness_SetsApprovedAndNotifiesSubmitter()
+    {
+        var f = Build(AdminId, Constants.AppRoles.Admin);
+        var business = TestData.Business();
+        business.Status = Constants.BusinessStatuses.PendingApproval;
+        business.SubmittedByUserId = ManagerId;
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+
+        await f.Service.ApproveAsync(business.Id);
+
+        Assert.Equal(Constants.BusinessStatuses.Approved, business.Status);
+        f.Repo.Verify(r => r.SaveChangesAsync(), Times.Once);
+        f.Notification.Verify(n => n.CreateAsync(ManagerId, It.IsAny<string>(), It.IsAny<string?>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ApproveAsync_PromotesCustomerApplicantToBusinessManagerAndAddsThemAsStaff()
+    {
+        var f = Build(AdminId, Constants.AppRoles.Admin);
+        var business = TestData.Business();
+        business.Status = Constants.BusinessStatuses.PendingApproval;
+        business.SubmittedByUserId = ManagerId;
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.AddStaffAsync(business.Id, ManagerId)).ReturnsAsync(true);
+
+        var applicant = TestData.User(ManagerId, "Jane Applicant");
+        f.UserManager.Setup(m => m.FindByIdAsync(ManagerId)).ReturnsAsync(applicant);
+        f.UserManager.Setup(m => m.GetRolesAsync(applicant)).ReturnsAsync([Constants.AppRoles.Customer]);
+        f.UserManager.Setup(m => m.AddToRoleAsync(applicant, Constants.AppRoles.BusinessManager)).ReturnsAsync(IdentityResult.Success);
+
+        await f.Service.ApproveAsync(business.Id);
+
+        f.UserManager.Verify(m => m.RemoveFromRolesAsync(applicant, It.Is<IEnumerable<string>>(r => r.Contains(Constants.AppRoles.Customer))), Times.Once);
+        f.UserManager.Verify(m => m.AddToRoleAsync(applicant, Constants.AppRoles.BusinessManager), Times.Once);
+        f.Repo.Verify(r => r.AddStaffAsync(business.Id, ManagerId), Times.Once);
+    }
+
+    [Fact]
+    public async Task ApproveAsync_ExistingBusinessManagerApplicant_OnlyAddedAsStaffNotRepromoted()
+    {
+        var f = Build(AdminId, Constants.AppRoles.Admin);
+        var business = TestData.Business();
+        business.Status = Constants.BusinessStatuses.PendingApproval;
+        business.SubmittedByUserId = ManagerId;
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.AddStaffAsync(business.Id, ManagerId)).ReturnsAsync(true);
+
+        var applicant = TestData.User(ManagerId, "Jane Applicant");
+        f.UserManager.Setup(m => m.FindByIdAsync(ManagerId)).ReturnsAsync(applicant);
+        f.UserManager.Setup(m => m.GetRolesAsync(applicant)).ReturnsAsync([Constants.AppRoles.BusinessManager]);
+
+        await f.Service.ApproveAsync(business.Id);
+
+        f.UserManager.Verify(m => m.AddToRoleAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>()), Times.Never);
+        f.Repo.Verify(r => r.AddStaffAsync(business.Id, ManagerId), Times.Once);
+    }
+
+    [Fact]
+    public async Task ApproveAsync_RejectedBusiness_CanBeReconsideredToApproved()
+    {
+        var f = Build(AdminId, Constants.AppRoles.Admin);
+        var business = TestData.Business();
+        business.Status = Constants.BusinessStatuses.Rejected;
+        business.RejectionReason = "Bad address";
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+
+        await f.Service.ApproveAsync(business.Id);
+
+        Assert.Equal(Constants.BusinessStatuses.Approved, business.Status);
+        Assert.Null(business.RejectionReason);
+    }
+
+    [Fact]
+    public async Task RejectAsync_NonAdmin_Throws()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.RejectAsync(Guid.NewGuid(), "reason"));
+    }
+
+    [Fact]
+    public async Task RejectAsync_PendingBusiness_SetsRejectedWithReason()
+    {
+        var f = Build(AdminId, Constants.AppRoles.Admin);
+        var business = TestData.Business();
+        business.Status = Constants.BusinessStatuses.PendingApproval;
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+
+        await f.Service.RejectAsync(business.Id, "Bad address");
+
+        Assert.Equal(Constants.BusinessStatuses.Rejected, business.Status);
+        Assert.Equal("Bad address", business.RejectionReason);
+    }
+
+    // ---- HideAsync / UnhideAsync -------------------------------------------
+
+    [Fact]
+    public async Task HideAsync_NonAdmin_Throws()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.HideAsync(Guid.NewGuid(), "reason"));
+    }
+
+    [Fact]
+    public async Task HideAsync_Admin_SetsHiddenWithReasonAndNotifiesStaff()
+    {
+        var f = Build(AdminId, Constants.AppRoles.Admin);
+        var business = TestData.Business();
+        business.Staff.Add(TestData.BusinessStaff(business.Id, ManagerId));
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+
+        await f.Service.HideAsync(business.Id, "Food safety concern");
+
+        Assert.True(business.IsHidden);
+        Assert.Equal("Food safety concern", business.HiddenReason);
+        f.Notification.Verify(n => n.CreateAsync(ManagerId, It.IsAny<string>(), null), Times.Once);
+    }
+
+    [Fact]
+    public async Task UnhideAsync_Admin_ClearsHiddenState()
+    {
+        var f = Build(AdminId, Constants.AppRoles.Admin);
+        var business = TestData.Business();
+        business.IsHidden = true;
+        business.HiddenReason = "Food safety concern";
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+
+        await f.Service.UnhideAsync(business.Id);
+
+        Assert.False(business.IsHidden);
+        Assert.Null(business.HiddenReason);
+    }
+
+    // ---- SetHoursAsync / AddClosureAsync / RemoveClosureAsync -------------
+
+    [Fact]
+    public async Task SetHoursAsync_NotStaffOfBusiness_Throws()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+        var business = TestData.Business();
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.IsStaffAsync(business.Id, ManagerId)).ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.SetHoursAsync(business.Id, []));
+    }
+
+    [Fact]
+    public async Task SetHoursAsync_StaffOfBusiness_DelegatesToRepository()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+        var business = TestData.Business();
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.IsStaffAsync(business.Id, ManagerId)).ReturnsAsync(true);
+        var hours = new List<BusinessHours> { new() { BusinessId = business.Id, DayOfWeek = DayOfWeek.Monday, OpenTime = new TimeOnly(9, 0), CloseTime = new TimeOnly(18, 0) } };
+
+        await f.Service.SetHoursAsync(business.Id, hours);
+
+        f.Repo.Verify(r => r.SetHoursAsync(business.Id, hours), Times.Once);
+    }
+
+    [Fact]
+    public async Task AddClosureAsync_NotStaffOfBusiness_Throws()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+        var business = TestData.Business();
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.IsStaffAsync(business.Id, ManagerId)).ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            f.Service.AddClosureAsync(business.Id, new DateOnly(2026, 8, 10), new DateOnly(2026, 8, 12), "Holiday"));
+    }
+
+    [Fact]
+    public async Task AddClosureAsync_StaffOfBusiness_DelegatesToRepositoryAndLogsAudit()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+        var business = TestData.Business();
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.IsStaffAsync(business.Id, ManagerId)).ReturnsAsync(true);
+        f.Repo.Setup(r => r.AddClosureAsync(It.IsAny<BusinessClosure>()))
+            .ReturnsAsync((BusinessClosure c) => c);
+
+        var result = await f.Service.AddClosureAsync(business.Id, new DateOnly(2026, 8, 10), new DateOnly(2026, 8, 12), "Holiday");
+
+        Assert.Equal(business.Id, result.BusinessId);
+        f.AuditLog.Verify(a => a.LogAsync(Constants.AuditActions.BusinessClosureAdded, Constants.AuditTargetTypes.Business,
+            business.Id.ToString(), business.Name, It.IsAny<string?>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RemoveClosureAsync_NotStaffOfBusiness_Throws()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+        var business = TestData.Business();
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.IsStaffAsync(business.Id, ManagerId)).ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Service.RemoveClosureAsync(business.Id, Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task RemoveClosureAsync_StaffOfBusiness_DelegatesToRepository()
+    {
+        var f = Build(ManagerId, Constants.AppRoles.BusinessManager);
+        var business = TestData.Business();
+        var closureId = Guid.NewGuid();
+        f.Repo.Setup(r => r.GetByIdAsync(business.Id)).ReturnsAsync(business);
+        f.Repo.Setup(r => r.IsStaffAsync(business.Id, ManagerId)).ReturnsAsync(true);
+        f.Repo.Setup(r => r.RemoveClosureAsync(business.Id, closureId)).ReturnsAsync(true);
+
+        var result = await f.Service.RemoveClosureAsync(business.Id, closureId);
+
+        Assert.True(result);
+        f.Repo.Verify(r => r.RemoveClosureAsync(business.Id, closureId), Times.Once);
+    }
+}

@@ -1,0 +1,43 @@
+﻿@inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Authorization
+@using NetromEcoMeal.Services
+@inject ClientTimeZoneService ClientTimeZoneService
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu/>
+    </div>
+
+    <main>
+        <article class="content px-4 py-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+@* Outside .sidebar on purpose — see NotificationPanel's own comment for why. Gated behind
+   AuthorizeView so it doesn't start its 30s polling timer for an anonymous circuit. *@
+<AuthorizeView>
+    <Authorized>
+        <NotificationPanel/>
+    </Authorized>
+</AuthorizeView>
+
+@* Required by the framework; styled globally in app.css, not CSS-isolated. *@
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Needs JS interop (Intl API), only available after the first render.
+        if (firstRender)
+        {
+            await ClientTimeZoneService.InitializeAsync();
+            StateHasChanged();
+        }
+    }
+}

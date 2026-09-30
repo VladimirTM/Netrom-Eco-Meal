@@ -1,0 +1,209 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using NetromEcoMeal.Constants
+@using NetromEcoMeal.Services
+@implements IDisposable
+@inject CartService CartService
+@inject ManagedBusinessContext ManagedBusinessContext
+
+<div class="sidebar-brand py-4">
+    <a href="" class="text-decoration-none d-flex align-items-center justify-content-center gap-2">
+        <img src="logo.png" alt="Eco Meal" class="brand-logo" />
+        <div>
+            <span class="fw-bold text-white d-block lh-1" style="font-size:0.95rem">Eco Meal</span>
+            @* This sidebar is the DefaultLayout for every authorized page (Components/Routes.razor),
+               shared by both Admin and BusinessManager — the subtitle used to hardcode "Admin Panel"
+               even for a plain manager, so it's labelled per the signed-in user's actual role instead. *@
+            <span class="text-white-50" style="font-size:0.72rem">
+                <AuthorizeView Roles="@AppRoles.Admin">
+                    <Authorized>Admin Panel</Authorized>
+                    <NotAuthorized>Manager Panel</NotAuthorized>
+                </AuthorizeView>
+            </span>
+        </div>
+    </a>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+@* Closes the mobile nav toggle after any link click inside. *@
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="nav flex-column px-2 pb-3">
+        <AuthorizeView Roles="@AppRoles.BusinessManager">
+            <Authorized>
+                @if (ManagedBusinessContext.MyBusinesses.Count > 1)
+                {
+                    <div class="nav-item position-relative px-2 pb-2">
+                        <AnchoredDropdown TriggerClass="role-badge role-badge-businessmanager w-100 d-flex justify-content-between align-items-center"
+                                          Title="Switch business"
+                                          IsOpen="_businessSwitcherOpen"
+                                          OnToggle="ToggleBusinessSwitcher"
+                                          OnClose="CloseBusinessSwitcher">
+                            <Trigger>
+                                <span class="text-truncate">@SelectedBusinessName</span>
+                                <i class="bi bi-chevron-down" style="font-size:0.65rem;"></i>
+                            </Trigger>
+                            <Content>
+                                @foreach (var business in ManagedBusinessContext.MyBusinesses)
+                                {
+                                    <button type="button" class="role-option" @onclick="() => SelectBusinessAsync(business.Id)">
+                                        <span class="role-option-dot" style="background-color:#2563eb"></span>
+                                        @business.Name
+                                        @if (business.Id == ManagedBusinessContext.SelectedBusinessId)
+                                        {
+                                            <i class="bi bi-check-lg ms-auto text-muted"></i>
+                                        }
+                                    </button>
+                                }
+                            </Content>
+                        </AnchoredDropdown>
+                    </div>
+                }
+                else if (ManagedBusinessContext.MyBusinesses.Count == 1)
+                {
+                    <div class="nav-item px-2 pb-2 text-white-50 small text-truncate">
+                        <i class="bi bi-building me-2"></i>@SelectedBusinessName
+                    </div>
+                }
+            </Authorized>
+        </AuthorizeView>
+
+        <div class="nav-section-label">Main</div>
+
+        <div class="nav-item">
+            <NavLink class="nav-link" href="dashboard">
+                <i class="bi bi-house-door me-2"></i>Dashboard
+            </NavLink>
+        </div>
+
+        <div class="nav-item">
+            <NavLink class="nav-link" href="businesses">
+                <i class="bi bi-building me-2"></i>Businesses
+            </NavLink>
+        </div>
+
+        <div class="nav-item">
+            <NavLink class="nav-link" href="packages">
+                <i class="bi bi-box-seam me-2"></i>Packages
+            </NavLink>
+        </div>
+
+        <div class="nav-item">
+            <NavLink class="nav-link" href="orders/manage">
+                <i class="bi bi-cart3 me-2"></i>Orders
+            </NavLink>
+        </div>
+
+        <div class="nav-item">
+            <NavLink class="nav-link" href="payments">
+                <i class="bi bi-credit-card me-2"></i>Payments
+            </NavLink>
+        </div>
+
+        <div class="nav-item">
+            <NavLink class="nav-link" href="account-settings">
+                <i class="bi bi-person-gear me-2"></i>Account Settings
+            </NavLink>
+        </div>
+
+        <AuthorizeView Roles="@AppRoles.Admin">
+            <Authorized>
+                <div class="nav-section-label">Admin</div>
+
+                <div class="nav-item">
+                    <NavLink class="nav-link" href="users">
+                        <i class="bi bi-shield-lock me-2"></i>User Roles
+                    </NavLink>
+                </div>
+
+                <div class="nav-item">
+                    <NavLink class="nav-link" href="reports">
+                        <i class="bi bi-flag me-2"></i>Reports
+                    </NavLink>
+                </div>
+
+                <div class="nav-item">
+                    <NavLink class="nav-link" href="audit-log">
+                        <i class="bi bi-journal-text me-2"></i>Audit Log
+                    </NavLink>
+                </div>
+
+                <div class="nav-item">
+                    <NavLink class="nav-link" href="types">
+                        <i class="bi bi-tags me-2"></i>Types
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+    </nav>
+</div>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="sidebar-footer">
+            <div class="sidebar-user-avatar">@TextHelpers.GetInitial(context.User.Identity?.Name)</div>
+            <div class="sidebar-user-info">
+                <div class="sidebar-user-email" title="@context.User.Identity?.Name">@context.User.Identity?.Name</div>
+                <div class="sidebar-user-role">@DisplayRole(context.User)</div>
+            </div>
+            <NotificationBell TriggerClass="sidebar-notif-btn"/>
+            <ThemeToggle TriggerClass="sidebar-notif-btn"/>
+            <form method="post" action="api/auth/logout">
+                <AntiforgeryToken />
+                <button type="submit" class="sidebar-logout-btn" title="Sign out"
+                        onclick="EcoMeal.cart.clear('@CartService.StorageKey')">
+                    <i class="bi bi-box-arrow-right"></i>
+                </button>
+            </form>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="sidebar-footer">
+            <ThemeToggle TriggerClass="sidebar-notif-btn"/>
+            <a href="/account/login" class="btn btn-primary w-100 d-flex align-items-center justify-content-center gap-2">
+                <i class="bi bi-box-arrow-in-right"></i>Login
+            </a>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool _businessSwitcherOpen;
+
+    private string SelectedBusinessName =>
+        ManagedBusinessContext.MyBusinesses.FirstOrDefault(b => b.Id == ManagedBusinessContext.SelectedBusinessId)?.Name
+        ?? "Select a business";
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Harmless no-op for admins/customers — resolves to an empty business list, so the
+        // switcher above simply never renders for them.
+        await ManagedBusinessContext.EnsureLoadedAsync();
+        ManagedBusinessContext.OnChange += HandleManagedBusinessChanged;
+    }
+
+    private void HandleManagedBusinessChanged() => InvokeAsync(StateHasChanged);
+
+    private void ToggleBusinessSwitcher() => _businessSwitcherOpen = !_businessSwitcherOpen;
+
+    private void CloseBusinessSwitcher() => _businessSwitcherOpen = false;
+
+    private async Task SelectBusinessAsync(Guid businessId)
+    {
+        _businessSwitcherOpen = false;
+        await ManagedBusinessContext.SelectAsync(businessId);
+    }
+
+    public void Dispose()
+    {
+        ManagedBusinessContext.OnChange -= HandleManagedBusinessChanged;
+    }
+
+    // Falls back to "Signed in" for any authenticated role not named above.
+    private static string DisplayRole(System.Security.Claims.ClaimsPrincipal user) => user switch
+    {
+        _ when user.IsInRole(AppRoles.Admin) => "Admin",
+        _ when user.IsInRole(AppRoles.BusinessManager) => "Business Manager",
+        _ when user.IsInRole(AppRoles.Customer) => "Customer",
+        _ => "Signed in"
+    };
+}
