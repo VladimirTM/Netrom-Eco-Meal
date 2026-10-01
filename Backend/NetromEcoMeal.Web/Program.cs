@@ -182,9 +182,15 @@ builder.Services.AddScoped<BrandController>();
 // Real HTTP endpoint for Login/Register/Logout (see AuthController), but also registered here so
 // ConfirmEmail/ForgotPassword/ResetPassword can inject it in-process like every other controller.
 builder.Services.AddScoped<AuthController>();
-builder.Services.AddHostedService<OrderLifecycleSweepService>();
-builder.Services.AddHostedService<PackageTemplateGenerationService>();
-builder.Services.AddHostedService<NearExpiryNudgeSweepService>();
+// From Phase 3 on, the Api host is the single place background jobs and migrations/seeding run —
+// running them in both hosts would sweep orders and generate templates twice. Defaults to false here; the Api's own config defaults it to
+// true, so plain `dotnet run` in each project does the right thing without any env var set.
+if (builder.Configuration.GetValue("BackgroundJobs:Enabled", false))
+{
+    builder.Services.AddHostedService<OrderLifecycleSweepService>();
+    builder.Services.AddHostedService<PackageTemplateGenerationService>();
+    builder.Services.AddHostedService<NearExpiryNudgeSweepService>();
+}
 
 var app = builder.Build();
 
@@ -192,13 +198,9 @@ var app = builder.Build();
 // covers the UseExceptionHandler re-execution below.
 app.UseSerilogRequestLogging();
 
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<EcoMealDbContext>();
-    await dbContext.Database.MigrateAsync();
-
-    await DbSeeder.SeedAsync(scope.ServiceProvider, app.Configuration);
-}
+// Migrations and seeding now run only in the Api host (see the BackgroundJobs:Enabled comment
+// above) — Web assumes the schema already exists, which in practice means starting the Api host
+// at least once (or alongside Web) before this one serves its first request.
 
 if (!app.Environment.IsDevelopment())
 {

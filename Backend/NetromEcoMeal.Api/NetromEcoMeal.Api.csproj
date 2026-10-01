@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>NetromEcoMeal.Api</RootNamespace>
+        <UserSecretsId>7e0f5a2d-3b9a-4c7e-9b2f-1a6d4e8c5f30</UserSecretsId>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\NetromEcoMeal.BusinessLogic\NetromEcoMeal.BusinessLogic.csproj" />
+      <ProjectReference Include="..\NetromEcoMeal.DataAccess\NetromEcoMeal.DataAccess.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
+      <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+      <!-- Microsoft.AspNetCore.OpenApi 10.0.9 still pulls the vulnerable Microsoft.OpenApi 2.0.0
+           (GHSA-v5pm-xwqc-g5wc) transitively — pin the patched version directly. -->
+      <PackageReference Include="Microsoft.OpenApi" Version="2.12.2" />
+      <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.1.7" />
+      <PackageReference Include="OllamaSharp" Version="5.4.30" />
+      <PackageReference Include="QRCoder" Version="1.8.0" />
+      <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+      <PackageReference Include="Serilog.Enrichers.Environment" Version="3.0.1" />
+      <PackageReference Include="Serilog.Enrichers.Thread" Version="4.0.0" />
+    </ItemGroup>
+
+</Project>
