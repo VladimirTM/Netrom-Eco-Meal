@@ -21,6 +21,18 @@ public class PaginatedList<T>
         TotalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
     }
 
+    private PaginatedList(List<T> items, int totalCount, int pageIndex, int totalPages, bool _)
+    {
+        Items = items;
+        TotalCount = totalCount;
+        PageIndex = pageIndex;
+        TotalPages = totalPages;
+    }
+
+    // Maps a page's items to DTOs while keeping the original PageIndex/TotalCount/TotalPages.
+    public PaginatedList<TResult> MapItems<TResult>(Func<T, TResult> map) =>
+        new(Items.Select(map).ToList(), TotalCount, PageIndex, TotalPages, true);
+
     public static async Task<PaginatedList<T>> CreateAsync(IQueryable<T> source, int pageIndex, int pageSize)
     {
         pageIndex = Math.Max(1, pageIndex);
