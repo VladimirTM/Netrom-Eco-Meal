@@ -1,0 +1,4474 @@
+/* ── Design tokens ── */
+/* Two brand hues doing real work — herb-green for "fresh/rescued," rescue-orange for
+   "reduced, closing soon" — on a warm paper ground instead of a cool mint one. --em-ink
+   is tinted toward forest rather than neutral gray, so body copy reads as part of the same
+   family as the headlines instead of generic UI gray. */
+:root {
+    --em-forest:     #0e2117;
+    --em-forest-mid: #1c3f28;
+    --em-leaf:       #2f9e5c;
+    --em-leaf-mid:   #1f8a4c;
+    --em-leaf-dark:  #1b7a44;
+    --em-paper:      #f5efe2;
+    --em-surface:    var(--em-paper);
+    --em-ink:        #1b2a1f;
+    --em-text:       var(--em-ink);
+    --em-muted:      #6f6656;
+    --em-muted-soft: rgba(111, 102, 86, 0.1);
+    --em-leaf-darker: #166534;
+    --em-cream:      #fffaf2;
+
+    /* Semantic layer — reach for these instead of a hardcoded hex, so dark mode only redefines tokens here. */
+    --em-bg:             var(--em-paper);
+    --em-surface-raised: #ffffff;
+    --em-border:         #e3ddd0;
+    --em-border-strong:  #cbc2ac;
+    --em-text-muted:     var(--em-muted);
+    --em-text-inverse:   #ffffff;
+
+    /* Theme-invariant "solid" pairs, for solid-fill buttons/badges with white text on top —
+       dark mode brightens the on-surface accents, so solid fills use these instead. */
+    --em-leaf-solid:      #2f9e5c;
+    --em-leaf-mid-solid:  #1f8a4c;
+    --em-leaf-dark-solid: #1b7a44;
+    --em-rescue-solid:    #d9702f;
+    --em-info-solid:      #3f6d99;
+    --em-danger-solid:    #c9503f;
+    --em-muted-solid:     #6f6656;
+    /* Same idea in reverse — dark ink text for a badge that always sits on a fixed near-white
+       chip (e.g. floating over a photo) regardless of theme. --em-ink flips light in dark mode. */
+    --em-ink-solid:       #1b2a1f;
+
+    /* Gold — reserved for "you earned this" moments (loyalty, streaks, rank #1); darkened off
+       the sampled logo pixel to clear 4.5:1 on --em-paper. */
+    --em-gold:      #a3811a;
+    --em-gold-dark: #7a5f12;
+    --em-gold-soft: rgba(163, 129, 26, 0.16);
+    --em-bronze:    #92400e;
+
+    /* Status accents — distinct hues for multi-state badges/stat cards, hand-warmed off the
+       raw Tailwind defaults they replaced. */
+    --em-info:         #3f6d99;
+    --em-info-soft:    rgba(63, 109, 153, 0.1);
+    --em-violet:       #7d5fb0;
+    --em-violet-soft:  rgba(125, 95, 176, 0.1);
+    --em-danger:       #c9503f;
+    --em-danger-dark:  #9c3a2c;
+    --em-danger-soft:  #fbe9e6;
+    --em-warning:      #f59e0b;
+    --em-warning-dark: #b45309;
+    --em-warning-soft: #fef3c7;
+
+    --bs-primary: #1f8a4c;
+    --bs-primary-rgb: 31, 138, 76;
+    --bs-link-color: #1f8a4c;
+    --bs-link-color-rgb: 31, 138, 76;
+    --bs-link-hover-color: #1b7a44;
+    --bs-link-hover-color-rgb: 27, 122, 68;
+
+    /* Rescue-orange — a "reduced for quick sale" sticker color, not a decorative accent:
+       urgency badges, the hero stamp, and anything meaning "closing soon." */
+    --em-rescue:      #d9702f;
+    --em-rescue-dark: #b85a22;
+    --em-rescue-soft: rgba(217, 112, 47, 0.16);
+
+    --em-font-display: 'Fraunces', Georgia, 'Iowan Old Style', serif;
+    --em-font-body: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+    --em-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+    --em-shadow-sm: 0 1px 2px rgba(14, 33, 23, 0.05);
+    --em-shadow-md: 0 1px 2px rgba(14, 33, 23, 0.05), 0 10px 26px rgba(14, 33, 23, 0.07);
+    --em-shadow-lg: 0 4px 10px rgba(14, 33, 23, 0.06), 0 20px 40px rgba(14, 33, 23, 0.12);
+}
+
+/* ── Dark palette (UI revamp Phase 3) ── */
+/* Every accent is WCAG-contrast-checked against both dark surfaces, not inverted — the
+   --em-*-solid tokens above still cover the solid-fill role. */
+:root[data-theme="dark"] {
+    --em-ink:   #f0ece0;
+    --em-muted: #a8a399;
+    --em-muted-soft: rgba(168, 163, 153, 0.14);
+
+    --em-bg:             #0e2117;
+    --em-surface:        #0e2117;
+    --em-surface-raised: #1c3f28;
+    --em-border:         rgba(255, 255, 255, 0.10);
+    --em-border-strong:  rgba(255, 255, 255, 0.18);
+
+    --em-leaf:      #63b684;
+    --em-leaf-mid:  #6db28a;
+    --em-leaf-dark: #76af8e;
+    --em-rescue:      #e08c58;
+    --em-rescue-dark: #d7a485;
+
+    /* The logo's own light gold reads better here than Phase 1's darkened derivative, once
+       the surface is dark instead of paper. */
+    --em-gold:      #d8d028;
+    --em-gold-dark: #d8d028;
+    --em-bronze:    #c89f86;
+
+    --em-info:         #8ba7c1;
+    --em-violet:       #b19fcf;
+    --em-danger:       #db8d82;
+    --em-danger-dark:  #d7b0aa;
+    --em-danger-soft:  rgba(219, 141, 130, 0.18);
+    --em-warning-dark: #e1ba9c;
+    --em-warning-soft: rgba(245, 158, 11, 0.18);
+
+    /* A flat black shadow reads as no shadow at all this dark — a hairline light border
+       carries elevation instead. */
+    --em-shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.06);
+    --em-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 8px 20px rgba(0, 0, 0, 0.45);
+    --em-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.10), 0 16px 34px rgba(0, 0, 0, 0.55);
+
+    /* Unlike text-muted, --bs-secondary doesn't adapt to color-scheme — left
+       .btn-outline-secondary (used app-wide) too low-contrast against our dark surfaces. */
+    --bs-secondary: #98a1a8;
+    --bs-secondary-rgb: 152, 161, 168;
+
+    color-scheme: dark;
+}
+
+html, body {
+    font-family: var(--em-font-body);
+    background-color: var(--em-surface);
+    color: var(--em-ink);
+    overscroll-behavior-y: none;
+}
+
+/* ── Neutral "info" pill (AuditLog/Impact/Packages/Reports/Users) ──
+   Replaces `bg-light text-muted border`: bg-light stays fixed near-white in dark mode while
+   text-muted adapts, pairing them into near-invisible light-on-light text. */
+.em-badge-neutral {
+    background: var(--em-surface-raised);
+    color: var(--em-text-muted);
+    border-color: var(--em-border-strong) !important;
+}
+
+/* ── Bootstrap checkbox/switch controls (Impact opt-in, BusinessForm/PackageForm/Packages) ──
+   Bootstrap's checked-state fill is compiled from its own Sass variable at build time, so it stays
+   the stock blue even though --bs-primary is overridden to the brand green everywhere else. */
+.form-check-input:checked {
+    background-color: var(--bs-primary);
+    border-color: var(--bs-primary);
+}
+
+h1, h2, h3, h4, h5, h6,
+.font-display {
+    font-family: var(--em-font-display);
+    font-optical-sizing: auto;
+    letter-spacing: -0.01em;
+}
+
+.font-mono {
+    font-family: var(--em-font-mono);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* ── Shared card shell (UI revamp Phase 5) ── */
+/* One surface/radius/shadow/hover-lift definition instead of `.order-ticket`, `.biz-card`,
+   `.impact-row`, and `.impact-optin-card` each hand-tuning their own near-duplicate (14px vs
+   16px radius, a token shadow vs a bespoke rgba one). Grouped onto the existing selectors below
+   rather than renaming them in every .razor file — the payoff (one place to restyle for both
+   themes) doesn't require a markup churn. */
+.order-ticket,
+.biz-card,
+.impact-row,
+.impact-optin-card {
+    background: var(--em-surface-raised);
+    border-radius: 16px;
+    box-shadow: var(--em-shadow-md);
+}
+
+.impact-row,
+.impact-optin-card {
+    border-radius: 12px;
+    box-shadow: var(--em-shadow-sm);
+}
+
+.order-ticket,
+.biz-card,
+.order-ticket-clickable {
+    animation: card-rise 0.35s ease-out both;
+}
+
+.biz-card:hover,
+.order-ticket-clickable:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--em-shadow-lg);
+}
+
+@keyframes card-rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .order-ticket, .biz-card, .order-ticket-clickable { animation: none; }
+    .biz-card:hover, .order-ticket-clickable:hover { transform: none; }
+}
+
+/* ── Shared pill shape (UI revamp Phase 5) ── */
+/* One shape for every label/status/tag badge — a new one only ever needs a 2-line color rule
+   now, not another hand-rolled padding/radius/font-size. `.em-pill` is for a genuinely new badge;
+   the existing named classes below (`.role-badge`, `.diet-tag`, ...) are grouped into the same
+   shape rule so today's 100+ call sites didn't need touching one by one. */
+.em-pill,
+.role-badge,
+.business-type-badge,
+.package-type-badge,
+.order-status-badge,
+.biz-card-live-badge,
+.biz-card-rating-badge,
+.biz-card-closed-badge,
+.biz-modal-open-badge,
+.diet-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.em-pill--sm,
+.biz-card-closed-badge,
+.diet-tag {
+    padding: 0.18rem 0.55rem;
+    font-size: 0.66rem;
+}
+
+.em-pill--uppercase,
+.order-status-badge,
+.biz-card-closed-badge {
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.em-pill--interactive,
+.role-badge {
+    border: none;
+    cursor: pointer;
+    transition: filter 0.15s;
+}
+
+.em-pill--interactive:hover:not(:disabled),
+.role-badge:hover:not(:disabled) {
+    filter: brightness(0.95);
+}
+
+.em-pill--interactive:disabled,
+.role-badge:disabled {
+    cursor: default;
+    opacity: 0.65;
+}
+
+.em-pill--leaf    { background: rgba(31, 138, 76, 0.1);    color: var(--em-leaf-dark); }
+.em-pill--info    { background: var(--em-info-soft);       color: var(--em-info); }
+.em-pill--violet  { background: var(--em-violet-soft);     color: var(--em-violet); }
+.em-pill--rescue  { background: var(--em-rescue-soft);     color: var(--em-rescue); }
+.em-pill--danger  { background: var(--em-danger-soft);     color: var(--em-danger-dark); }
+.em-pill--warning { background: var(--em-warning-soft);    color: var(--em-warning-dark); }
+.em-pill--muted   { background: var(--em-muted-soft);      color: var(--em-text-muted); }
+.em-pill--dark    { background: rgba(14, 33, 23, 0.72);    color: var(--em-text-inverse); }
+.em-pill--surface { background: rgba(255, 255, 255, 0.92); color: var(--em-text); }
+.em-pill--glass   { background: rgba(255, 255, 255, 0.15); }
+
+/* ── Empty-state icon (UI revamp Phase 6) ── */
+/* One "nothing here yet" treatment — a soft warm-tinted circle instead of a bare grey glyph.
+   Shared by every `home-empty`/`orders-empty`/`cart-empty`/`NotFoundPanel` call site. */
+.em-empty-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 1rem;
+    border-radius: 50%;
+    background: var(--em-muted-soft);
+    color: var(--em-muted);
+    font-size: 1.6rem;
+    animation: card-rise 0.35s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .em-empty-icon { animation: none; }
+}
+
+/* ── Buttons ── */
+.btn {
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    transition: transform 0.1s ease, box-shadow 0.15s ease, background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.btn:active {
+    transform: scale(0.97);
+}
+
+.btn-primary {
+    /* The *-solid tokens, not the plain --em-leaf-* ones — those brighten in dark mode for
+       on-surface text/accent use and were never meant to sit under white button text: dark mode
+       previously rendered white-on-#6db28a here at 2.5:1, well under the 4.5:1 AA text minimum
+       (light mode's white-on-#1f8a4c was marginal too, at 4.38:1). --em-leaf-darker isn't
+       redefined per-theme, so it's already theme-invariant and safe to keep for the active state. */
+    --bs-btn-bg: var(--em-leaf-mid-solid);
+    --bs-btn-border-color: var(--em-leaf-mid-solid);
+    --bs-btn-hover-bg: var(--em-leaf-dark-solid);
+    --bs-btn-hover-border-color: var(--em-leaf-dark-solid);
+    --bs-btn-active-bg: var(--em-leaf-darker);
+    --bs-btn-active-border-color: var(--em-leaf-darker);
+    --bs-btn-focus-shadow-rgb: 31, 138, 76;
+    --bs-btn-disabled-bg: var(--em-leaf-mid-solid);
+    --bs-btn-disabled-border-color: var(--em-leaf-mid-solid);
+    color: var(--em-text-inverse);
+}
+
+.btn-outline-primary {
+    --bs-btn-color: var(--em-leaf-mid);
+    --bs-btn-border-color: var(--em-leaf-mid);
+    --bs-btn-hover-color: var(--em-text-inverse);
+    --bs-btn-hover-bg: var(--em-leaf-mid);
+    --bs-btn-hover-border-color: var(--em-leaf-mid);
+    --bs-btn-active-color: var(--em-text-inverse);
+    --bs-btn-active-bg: var(--em-leaf-mid);
+    --bs-btn-active-border-color: var(--em-leaf-mid);
+    --bs-btn-focus-shadow-rgb: 31, 138, 76;
+}
+
+/* bootstrap.min.css seeds .btn-outline-secondary's own --bs-btn-* variables from a literal
+   #6c757d baked in at build time — it never reads the app's --bs-secondary custom property, so
+   the dark-mode :root[data-theme="dark"] redefinition of --bs-secondary above (intended to fix
+   exactly this) silently never took effect. Re-pointing the button's own variables at
+   --bs-secondary here (3.59:1 -> 6.41:1 in dark mode) is what actually wires it up. */
+.btn-outline-secondary {
+    --bs-btn-color: var(--bs-secondary);
+    --bs-btn-border-color: var(--bs-secondary);
+    --bs-btn-hover-color: var(--em-text-inverse);
+    --bs-btn-hover-bg: var(--bs-secondary);
+    --bs-btn-hover-border-color: var(--bs-secondary);
+    --bs-btn-active-color: var(--em-text-inverse);
+    --bs-btn-active-bg: var(--bs-secondary);
+    --bs-btn-active-border-color: var(--bs-secondary);
+    --bs-btn-focus-shadow-rgb: var(--bs-secondary-rgb);
+    /* Bootstrap's own --bs-btn-disabled-color/-border-color are baked-in #6c757d literals too,
+       same as the idle-state ones above — missing these left every disabled outline-secondary
+       button (pagination's "Prev" on page 1, "Write it for me" before a name is typed, etc.)
+       still rendering at the old 3.59:1 in dark mode even after the idle/hover/active fix above. */
+    --bs-btn-disabled-color: var(--bs-secondary);
+    --bs-btn-disabled-border-color: var(--bs-secondary);
+}
+
+.btn:focus, .btn:active:focus {
+    box-shadow: 0 0 0 0.15rem rgba(31, 138, 76, 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .btn:active { transform: none; }
+}
+
+/* ── Sidebar nav ── */
+.sidebar-brand {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.brand-logo {
+    width: 96px;
+    height: 96px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.nav-section-label {
+    color: rgba(255, 255, 255, 0.32);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.75rem 0.75rem 0.25rem;
+}
+
+.sidebar .nav-link {
+    color: rgba(255, 255, 255, 0.6);
+    border-radius: 8px;
+    padding: 0.55rem 0.85rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+    margin-bottom: 2px;
+}
+
+.sidebar .nav-link:hover {
+    color: var(--em-text-inverse);
+    background-color: rgba(255, 255, 255, 0.07);
+}
+
+.sidebar .nav-link.active {
+    color: var(--em-text-inverse);
+    background-color: rgba(47, 158, 92, 0.18);
+    box-shadow: inset 3px 0 0 var(--em-leaf);
+    font-weight: 700;
+}
+
+/* ── Content ── */
+.content {
+    max-width: 1400px;
+}
+
+/* ── Stat card accents ── */
+.card-accent-green  { border-top: 3px solid var(--em-leaf-mid); }
+.card-accent-blue   { border-top: 3px solid var(--em-info); }
+.card-accent-amber  { border-top: 3px solid var(--em-warning); }
+.card-accent-purple { border-top: 3px solid var(--em-violet); }
+.card-accent-red    { border-top: 3px solid var(--em-danger); }
+
+.bg-sky-subtle    { background-color: rgba(14, 165, 233, 0.1); }
+.text-sky         { color: var(--em-info); }
+.bg-purple-subtle { background-color: rgba(139, 92, 246, 0.1); }
+.text-purple      { color: var(--em-violet); }
+
+/* ── Table ── */
+.table > thead > tr > th {
+    background-color: var(--em-surface-raised);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+}
+
+/* ── Badges — shape lives in the shared .em-pill rule above; each class here is just a color. ── */
+.business-type-badge { background-color: var(--em-info-soft); color: var(--em-info); }
+.package-type-badge  { background-color: rgba(31, 138, 76, 0.1); color: var(--em-leaf-dark); }
+
+/* ── Role badges ── */
+.role-badge-admin           { background-color: var(--em-violet-soft); color: var(--em-violet); }
+.role-badge-businessmanager { background-color: var(--em-info-soft);   color: var(--em-info); }
+.role-badge-customer        { background-color: rgba(31, 138, 76, 0.1); color: var(--em-leaf-dark); }
+.role-badge-unassigned      { background-color: rgba(107, 114, 128, 0.1); color: var(--em-text-muted); }
+
+.role-option-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.role-dropdown-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+}
+
+.role-dropdown {
+    /* fixed, not absolute, so it escapes ancestor clipping; top/left set by positionDropdown() in site.js */
+    position: fixed;
+    z-index: 21;
+    background: var(--em-surface-raised);
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 28px rgba(0, 0, 0, 0.14);
+    padding: 0.4rem;
+    min-width: 190px;
+    max-width: 260px;
+    max-height: min(320px, calc(100vh - 16px));
+    overflow-y: auto;
+    animation: role-dropdown-in 0.12s ease-out;
+}
+
+@keyframes role-dropdown-in {
+    from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .role-dropdown { animation: none; }
+}
+
+.role-option {
+    width: 100%;
+    border: none;
+    background: none;
+    text-align: left;
+    padding: 0.5rem 0.6rem;
+    border-radius: 7px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: var(--em-text);
+    transition: background-color 0.12s;
+}
+
+.role-option:hover {
+    background-color: var(--em-surface);
+}
+
+/* ── Form focus ── */
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--em-leaf-mid);
+    box-shadow: 0 0 0 0.2rem rgba(31, 138, 76, 0.15);
+}
+
+/* ── Login page ── */
+.login-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--em-surface);
+    background-image:
+        radial-gradient(ellipse 55% 55% at 15% 65%, rgba(31, 138, 76, 0.10) 0%, transparent 100%),
+        radial-gradient(ellipse 45% 45% at 85% 20%, rgba(217, 112, 47, 0.07) 0%, transparent 100%);
+    padding: 2rem 1rem;
+}
+
+.login-card {
+    background: var(--em-surface-raised);
+    border-radius: 18px;
+    box-shadow: var(--em-shadow-lg);
+    padding: 2.5rem 2.25rem;
+    width: 100%;
+    max-width: 400px;
+    animation: login-card-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes login-card-in {
+    from { opacity: 0; transform: translateY(14px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.login-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+}
+
+.login-logo {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.login-brand-name {
+    font-family: var(--em-font-display);
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--em-text);
+    line-height: 1.2;
+}
+
+.login-brand-sub {
+    font-size: 0.72rem;
+    color: var(--em-muted);
+    line-height: 1.4;
+}
+
+.login-heading {
+    font-family: var(--em-font-display);
+    font-size: 1.55rem;
+    font-weight: 700;
+    color: var(--em-text);
+    margin-bottom: 1.5rem;
+}
+
+.login-footer-link {
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--em-muted);
+    margin: 1.5rem 0 0;
+}
+
+.login-footer-link a {
+    color: var(--em-leaf-dark);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.login-footer-link a:hover {
+    text-decoration: underline;
+}
+
+/* ── Sidebar user footer ── */
+.sidebar-footer {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.85rem 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.sidebar-user-avatar {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: rgba(47, 158, 92, 0.16);
+    color: var(--em-leaf);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.8rem;
+}
+
+.sidebar-user-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.sidebar-user-email {
+    color: var(--em-text-inverse);
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-user-role {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.68rem;
+    line-height: 1.3;
+}
+
+.sidebar-logout-btn {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: none;
+    background: none;
+    color: rgba(255, 255, 255, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.sidebar-logout-btn:hover {
+    background-color: rgba(248, 113, 113, 0.12);
+    color: var(--em-danger);
+}
+
+/* ── Blazor error banner (shared across layouts, must not be CSS-isolation-scoped) ── */
+#blazor-error-ui {
+    color-scheme: light;
+    background: var(--em-warning-soft);
+    border-top: 1px solid var(--em-warning);
+    bottom: 0;
+    box-sizing: border-box;
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+:root[data-theme="dark"] #blazor-error-ui {
+    color-scheme: dark;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}
+
+/* ── Misc ── */
+h1:focus {
+    outline: none;
+}
+
+.valid.modified:not([type=checkbox]) {
+    outline: 1px solid var(--em-leaf-mid);
+}
+
+.invalid {
+    outline: 1px solid var(--em-danger);
+}
+
+.validation-message {
+    color: var(--em-danger);
+}
+
+.blazor-error-boundary {
+    background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNDkiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIG92ZXJmbG93PSJoaWRkZW4iPjxkZWZzPjxjbGlwUGF0aCBpZD0iY2xpcDAiPjxyZWN0IHg9IjIzNSIgeT0iNTEiIHdpZHRoPSI1NiIgaGVpZ2h0PSI0OSIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMCkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0yMzUgLTUxKSI+PHBhdGggZD0iTTI2My41MDYgNTFDMjY0LjcxNyA1MSAyNjUuODEzIDUxLjQ4MzcgMjY2LjYwNiA1Mi4yNjU4TDI2Ny4wNTIgNTIuNzk4NyAyNjcuNTM5IDUzLjYyODMgMjkwLjE4NSA5Mi4xODMxIDI5MC41NDUgOTIuNzk1IDI5MC42NTYgOTIuOTk2QzI5MC44NzcgOTMuNTEzIDI5MSA5NC4wODE1IDI5MSA5NC42NzgyIDI5MSA5Ny4wNjUxIDI4OS4wMzggOTkgMjg2LjYxNyA5OUwyNDAuMzgzIDk5QzIzNy45NjMgOTkgMjM2IDk3LjA2NTEgMjM2IDk0LjY3ODIgMjM2IDk0LjM3OTkgMjM2LjAzMSA5NC4wODg2IDIzNi4wODkgOTMuODA3MkwyMzYuMzM4IDkzLjAxNjIgMjM2Ljg1OCA5Mi4xMzE0IDI1OS40NzMgNTMuNjI5NCAyNTkuOTYxIDUyLjc5ODUgMjYwLjQwNyA1Mi4yNjU4QzI2MS4yIDUxLjQ4MzcgMjYyLjI5NiA1MSAyNjMuNTA2IDUxWk0yNjMuNTg2IDY2LjAxODNDMjYwLjczNyA2Ni4wMTgzIDI1OS4zMTMgNjcuMTI0NSAyNTkuMzEzIDY5LjMzNyAyNTkuMzEzIDY5LjYxMDIgMjU5LjMzMiA2OS44NjA4IDI1OS4zNzEgNzAuMDg4N0wyNjEuNzk1IDg0LjAxNjEgMjY1LjM4IDg0LjAxNjEgMjY3LjgyMSA2OS43NDc1QzI2Ny44NiA2OS43MzA5IDI2Ny44NzkgNjkuNTg3NyAyNjcuODc5IDY5LjMxNzkgMjY3Ljg3OSA2Ny4xMTgyIDI2Ni40NDggNjYuMDE4MyAyNjMuNTg2IDY2LjAxODNaTTI2My41NzYgODYuMDU0N0MyNjEuMDQ5IDg2LjA1NDcgMjU5Ljc4NiA4Ny4zMDA1IDI1OS43ODYgODkuNzkyMSAyNTkuNzg2IDkyLjI4MzcgMjYxLjA0OSA5My41Mjk1IDI2My41NzYgOTMuNTI5NSAyNjYuMTE2IDkzLjUyOTUgMjY3LjM4NyA5Mi4yODM3IDI2Ny4zODcgODkuNzkyMSAyNjcuMzg3IDg3LjMwMDUgMjY2LjExNiA4Ni4wNTQ3IDI2My41NzYgODYuMDU0N1oiIGZpbGw9IiNGRkU1MDAiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjwvZz48L3N2Zz4=) no-repeat 1rem/1.8rem, var(--em-danger-dark);
+    padding: 1rem 1rem 1rem 3.7rem;
+    color: var(--em-text-inverse);
+}
+
+.blazor-error-boundary::after {
+    content: "An error has occurred."
+}
+
+.darker-border-checkbox.form-check-input {
+    border-color: var(--em-border-strong);
+}
+
+.form-floating > .form-control-plaintext::placeholder,
+.form-floating > .form-control::placeholder {
+    color: var(--bs-secondary-color);
+    text-align: end;
+}
+
+.form-floating > .form-control-plaintext:focus::placeholder,
+.form-floating > .form-control:focus::placeholder {
+    text-align: start;
+}
+
+/* ── Public shell ── */
+.public-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.public-header {
+    background-color: rgba(14, 33, 23, 0.92);
+    background-image: radial-gradient(ellipse 70% 100% at 50% -20%, rgba(47, 158, 92, 0.18) 0%, transparent 70%);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.public-header-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0.85rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.public-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.public-brand-logo {
+    width: 64px;
+    height: 64px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.public-brand-name {
+    font-family: var(--em-font-display);
+    color: var(--em-text-inverse);
+    font-weight: 700;
+    font-size: 1.15rem;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+}
+
+/* The icon row keeps growing as features ship (broke again at 768px after the 11-icon fix only
+   covered <=576px), so this scroll-within-itself behavior is unconditional — a no-op wherever
+   the row already fits. Only cosmetic shrinking below stays size-tier-specific. */
+.public-header-inner {
+    flex-wrap: nowrap;
+}
+
+.public-header-inner .public-brand {
+    flex-shrink: 0;
+}
+
+.public-header-inner .d-flex.gap-2 {
+    flex-wrap: nowrap;
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    /* Fades the trailing edge as a swipe hint; harmless no-op without mask-image support.
+       JS toggles .at-scroll-end (see site.js) once fully scrolled, clearing the fade. */
+    mask-image: linear-gradient(to right, var(--em-text) calc(100% - 20px), transparent);
+    -webkit-mask-image: linear-gradient(to right, var(--em-text) calc(100% - 20px), transparent);
+    padding-right: 8px;
+    /* overflow-x: auto clips overflow-y too, slicing the top off .notif-badge/.public-cart-badge
+       (top:-5px). Padding + matching negative margin gives them room without shifting the icons. */
+    padding-top: 6px;
+    margin-top: -6px;
+}
+
+.public-header-inner .d-flex.gap-2.at-scroll-end {
+    mask-image: none;
+    -webkit-mask-image: none;
+}
+
+.public-header-inner .d-flex.gap-2::-webkit-scrollbar {
+    display: none;
+}
+
+.public-cart-btn {
+    flex-shrink: 0;
+}
+
+.public-header-logout {
+    flex-shrink: 0;
+}
+
+@media (max-width: 576px) {
+    .public-header-inner {
+        padding: 0.7rem 1rem;
+        gap: 0.5rem;
+    }
+
+    .public-brand-logo {
+        width: 48px;
+        height: 48px;
+    }
+
+    .public-brand-name {
+        font-size: 0.85rem;
+    }
+
+    .public-header-btn {
+        height: 32px;
+        padding: 0 0.7rem;
+        font-size: 0.78rem;
+        border-radius: 8px;
+    }
+
+    .public-header-inner .d-flex.gap-2 {
+        gap: 0.3rem !important;
+    }
+
+    .public-cart-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 0.85rem;
+        border-radius: 8px;
+    }
+
+    .public-header-logout {
+        width: 30px;
+        height: 30px;
+        flex-shrink: 0;
+    }
+}
+
+.public-header-logout {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border-radius: 8px;
+    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.public-header-logout:hover {
+    background-color: rgba(248, 113, 113, 0.16);
+    color: var(--em-danger);
+}
+
+.public-main {
+    flex: 1;
+}
+
+.public-footer {
+    background-color: var(--em-forest);
+    padding: 2.5rem 1.5rem 2rem;
+    margin-top: 3rem;
+}
+
+.public-footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.public-footer-logo {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+}
+
+.public-footer-brand {
+    font-family: var(--em-font-display);
+    color: var(--em-text-inverse);
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.public-footer-tagline {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 0.85rem;
+    margin: 0.75rem 0 0.4rem;
+}
+
+.public-footer-copy {
+    color: rgba(255, 255, 255, 0.32);
+    font-size: 0.76rem;
+    margin: 0;
+}
+
+/* ── Home hero ── */
+.home-hero {
+    background-color: var(--em-surface);
+    background-image:
+        radial-gradient(ellipse 55% 65% at 12% 0%, rgba(31, 138, 76, 0.12) 0%, transparent 100%),
+        radial-gradient(ellipse 45% 55% at 90% 10%, rgba(217, 112, 47, 0.10) 0%, transparent 100%);
+    padding: 4.5rem 1.5rem 3rem;
+}
+
+.home-hero-inner {
+    max-width: 720px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+/* Staggered rise — eyebrow, headline, sub and stats land in sequence rather than all at once. */
+.home-hero-eyebrow,
+.home-hero-title,
+.home-hero-sub,
+.home-stats {
+    animation: hero-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.home-hero-eyebrow { animation-delay: 0s; }
+.home-hero-title   { animation-delay: 0.07s; }
+.home-hero-sub     { animation-delay: 0.16s; }
+.home-stats        { animation-delay: 0.26s; }
+
+@keyframes hero-rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .home-hero-eyebrow, .home-hero-title, .home-hero-sub, .home-stats { animation: none; }
+}
+
+.home-hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(31, 138, 76, 0.12);
+    color: var(--em-leaf-dark);
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    margin-bottom: 1.5rem;
+}
+
+.home-hero-title {
+    font-weight: 700;
+    font-size: clamp(2.5rem, 5.5vw, 4rem);
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    color: var(--em-text);
+    margin-bottom: 1.35rem;
+}
+
+/* The signature mark: "rescued" reads as ink stamped onto the page at a slight angle —
+   an asymmetric border-radius fakes an imperfect stamp outline without a raster asset. */
+.home-hero-highlight {
+    position: relative;
+    display: inline-block;
+    color: var(--em-cream);
+    padding: 0.06em 0.28em 0.1em;
+    z-index: 0;
+}
+
+.home-hero-highlight::before {
+    content: "";
+    position: absolute;
+    inset: 0.1em -0.1em 0em;
+    background: var(--em-rescue-solid);
+    border-radius: 0.9em 0.3em 0.8em 0.35em / 0.55em 0.85em 0.5em 0.9em;
+    transform: rotate(-2.5deg);
+    box-shadow: 0 10px 22px -6px rgba(184, 90, 34, 0.45);
+    z-index: -1;
+}
+
+.home-hero-sub {
+    font-size: 1.1rem;
+    line-height: 1.6;
+    color: var(--em-muted);
+    max-width: 560px;
+    margin: 0 auto 2.5rem;
+}
+
+.home-stats {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2.5rem;
+}
+
+.home-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.home-stat-value {
+    font-family: var(--em-font-display);
+    font-size: 2.1rem;
+    font-weight: 600;
+    color: var(--em-leaf-dark);
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+
+.home-stat-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--em-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 0.3rem;
+}
+
+/* ── Home browse ── */
+.home-browse {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem 1rem;
+}
+
+.home-ai-search {
+    margin-bottom: 1rem;
+}
+
+.home-ai-search .input-group {
+    max-width: 640px;
+}
+
+.home-ai-search-btn {
+    white-space: nowrap;
+}
+
+/* The example placeholder is intentionally long (it's showing off what the AI search
+   understands) — without this it hard-clips mid-word with no "…" once the input is narrower
+   than the full string, instead of trailing off legibly. text-overflow only takes effect
+   with overflow+white-space set explicitly, not just on ::placeholder. */
+.home-ai-search-input {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* Default-visible row: search, Filters trigger, map toggle — everything else moved into
+   .home-filters-panel, an .em-popover instance. */
+.home-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.home-search {
+    max-width: 340px;
+    flex: 1 1 240px;
+}
+
+.home-filters-panel {
+    width: 360px;
+}
+
+.home-filters-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--em-leaf-solid);
+    color: var(--em-text-inverse);
+    font-size: 0.68rem;
+    font-weight: 800;
+    line-height: 18px;
+}
+
+.home-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.home-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: var(--em-surface-raised);
+    border: 1.5px solid var(--em-border);
+    color: var(--em-text);
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.home-chip:hover {
+    border-color: var(--em-text-muted);
+}
+
+.home-chip-active,
+.home-chip-active:hover {
+    background: var(--em-muted-solid);
+    border-color: var(--em-muted-solid);
+    color: var(--em-text-inverse);
+}
+
+.home-results-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.home-sort-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.home-empty {
+    text-align: center;
+    padding: 4rem 1rem;
+}
+
+.home-map-wrap {
+    overflow: hidden;
+}
+
+.home-map {
+    height: 480px;
+    width: 100%;
+}
+
+/* ── Impact leaderboard (/impact) ── */
+.impact-hero {
+    background-color: var(--em-surface);
+    background-image:
+        radial-gradient(ellipse 55% 65% at 12% 0%, rgba(31, 138, 76, 0.12) 0%, transparent 100%),
+        radial-gradient(ellipse 45% 55% at 90% 10%, rgba(217, 112, 47, 0.10) 0%, transparent 100%);
+    padding: 3.5rem 1.5rem 2.5rem;
+}
+
+.impact-hero-inner {
+    max-width: 640px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.impact-body {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 3rem;
+}
+
+.impact-optin-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.impact-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.impact-row {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.75rem 1.1rem;
+}
+
+.impact-row-me {
+    outline: 2px solid var(--em-leaf-mid);
+    outline-offset: -2px;
+}
+
+.impact-rank {
+    flex-shrink: 0;
+    width: 1.75rem;
+    text-align: center;
+    font-weight: 700;
+    color: var(--em-muted);
+}
+
+.impact-rank-gold   { color: var(--em-gold-dark); }
+.impact-rank-silver { color: var(--em-text-muted); }
+.impact-rank-bronze { color: var(--em-bronze); }
+
+.impact-avatar {
+    flex-shrink: 0;
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(31, 138, 76, 0.12);
+    color: var(--em-leaf-dark);
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.impact-name {
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+    color: var(--em-text);
+}
+
+.impact-kg {
+    flex-shrink: 0;
+    font-weight: 700;
+    color: var(--em-leaf-dark);
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+    .home-hero { padding: 3rem 1.25rem 2.5rem; }
+    .home-stats { gap: 1.5rem; }
+    .home-stat-value { font-size: 1.5rem; }
+    .home-browse { padding: 2rem 1.25rem 1rem; }
+}
+
+/* ── Cart button + badge (public header) ── */
+.public-cart-btn {
+    position: relative;
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    border-radius: 10px;
+    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--em-text-inverse);
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s;
+}
+
+.public-cart-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+/* ── Sign in / Create account (public header, logged-out) ── */
+.public-header-btn {
+    height: 38px;
+    padding: 0 1rem;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 600;
+    white-space: nowrap;
+    text-decoration: none;
+    transition: background-color 0.15s, border-color 0.15s;
+}
+
+.public-header-btn-ghost {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.16);
+    color: var(--em-text-inverse);
+}
+
+.public-header-btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.16);
+    color: var(--em-text-inverse);
+}
+
+.public-header-btn-primary {
+    background: var(--bs-primary);
+    color: var(--em-text-inverse);
+}
+
+.public-header-btn-primary:hover {
+    background: var(--em-leaf-dark-solid);
+    color: var(--em-text-inverse);
+}
+
+.public-cart-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--em-rescue);
+    color: var(--em-forest);
+    font-size: 0.66rem;
+    font-weight: 800;
+    line-height: 18px;
+    text-align: center;
+    box-shadow: 0 0 0 2px var(--em-forest);
+}
+
+/* ── Cart panel ── */
+.cart-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(14, 33, 23, 0.45);
+    z-index: 45;
+    animation: cart-backdrop-in 0.2s ease-out;
+}
+
+.cart-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 400px;
+    background: var(--em-surface-raised);
+    z-index: 46;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -12px 0 40px rgba(0, 0, 0, 0.18);
+    animation: cart-panel-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes cart-backdrop-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes cart-panel-in {
+    from { transform: translateX(100%); }
+    to   { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cart-backdrop, .cart-panel { animation: none; }
+}
+
+.cart-panel-header {
+    background: var(--em-forest);
+    background-image: radial-gradient(ellipse 70% 100% at 100% -20%, rgba(47, 158, 92, 0.18) 0%, transparent 70%);
+    color: var(--em-text-inverse);
+    padding: 1.5rem 1.5rem 1.25rem;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-shrink: 0;
+}
+
+.cart-panel-title {
+    font-size: 1.15rem;
+    font-weight: 800;
+    margin: 0 0 0.3rem;
+}
+
+.cart-panel-subtitle {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.65);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.cart-panel-close {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    border-radius: 8px;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--em-text-inverse);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s;
+}
+
+.cart-panel-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.cart-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.25rem 1.5rem;
+}
+
+.cart-empty,
+.cart-confirmation {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: var(--em-muted);
+    padding: 2rem 1rem;
+}
+
+.cart-confirmation > i {
+    font-size: 2.5rem;
+    color: var(--em-leaf-mid);
+    margin-bottom: 0.75rem;
+}
+
+/* PaymentCancel.razor's "nothing was charged" icon isn't a success state — needs its own
+   selector to beat the rule above, which every other `.cart-confirmation` caller wants green. */
+.cart-confirmation > i.text-muted {
+    color: var(--em-muted);
+}
+
+.cart-confirmation h3 {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--em-text);
+    margin-bottom: 0.4rem;
+}
+
+.cart-confirmation p {
+    font-size: 0.85rem;
+    margin-bottom: 1.5rem;
+}
+
+.cart-confirmation-impact {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem !important;
+    font-weight: 600;
+    color: var(--em-leaf-dark);
+    background: var(--em-rescue-soft);
+    padding: 0.5rem 0.85rem;
+    border-radius: 999px;
+    margin-top: -0.75rem;
+}
+
+.cart-confirmation-impact i {
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+.cart-line {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem 0;
+    border-bottom: 1px solid var(--em-border);
+}
+
+.cart-line:first-child {
+    padding-top: 0;
+}
+
+.cart-line-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.cart-line-name {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--em-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cart-line-price {
+    font-size: 0.76rem;
+    color: var(--em-muted);
+    margin-top: 0.1rem;
+}
+
+.cart-line-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--em-surface);
+    border-radius: 999px;
+    padding: 0.2rem;
+    flex-shrink: 0;
+}
+
+.cart-step-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: none;
+    background: var(--em-surface-raised);
+    color: var(--em-leaf-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    transition: opacity 0.15s;
+}
+
+.cart-step-btn:disabled {
+    opacity: 0.4;
+}
+
+.cart-line-qty {
+    min-width: 1.1rem;
+    text-align: center;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--em-text);
+}
+
+.cart-line-remove {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: none;
+    color: var(--em-border-strong);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s;
+}
+
+.cart-line-remove:hover {
+    color: var(--em-danger);
+}
+
+.cart-panel-footer {
+    flex-shrink: 0;
+    padding: 1.1rem 1.5rem 1.4rem;
+    border-top: 1px solid var(--em-border);
+}
+
+.cart-panel-total {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--em-muted);
+    margin-bottom: 0.85rem;
+}
+
+.cart-panel-total-value {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--em-text);
+}
+
+.rescue-circle-starter {
+    background: var(--em-surface-raised);
+    border: 1px solid var(--em-border);
+    border-radius: 12px;
+    padding: 0.85rem 1rem;
+}
+
+/* ── Toast ── */
+.toast-pill {
+    position: fixed;
+    bottom: 1.75rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--em-forest);
+    color: var(--em-text-inverse);
+    padding: 0.65rem 1.25rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    max-width: min(420px, calc(100vw - 2rem));
+    animation: toast-in-out 3.2s ease forwards;
+    pointer-events: none;
+}
+
+.toast-pill i {
+    color: var(--em-leaf);
+    flex-shrink: 0;
+}
+
+@keyframes toast-in-out {
+    0%   { opacity: 0; transform: translate(-50%, 10px); }
+    10%  { opacity: 1; transform: translate(-50%, 0); }
+    88%  { opacity: 1; transform: translate(-50%, 0); }
+    100% { opacity: 0; transform: translate(-50%, 10px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toast-pill { animation: none; }
+}
+
+@media (max-width: 480px) {
+    .cart-panel { max-width: 100%; }
+}
+
+/* ── Orders hero ── */
+.orders-hero {
+    background-color: var(--em-surface);
+    background-image:
+        radial-gradient(ellipse 50% 60% at 10% 0%, rgba(31, 138, 76, 0.09) 0%, transparent 100%),
+        radial-gradient(ellipse 40% 50% at 92% 15%, rgba(217, 112, 47, 0.07) 0%, transparent 100%);
+    padding: 3rem 1.5rem 2.5rem;
+}
+
+.orders-hero-inner {
+    max-width: 720px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.orders-hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(31, 138, 76, 0.1);
+    color: var(--em-leaf-dark);
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    margin-bottom: 1.25rem;
+}
+
+.orders-hero-title {
+    font-size: clamp(1.9rem, 4vw, 2.6rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--em-text);
+    margin-bottom: 0.6rem;
+}
+
+.orders-hero-sub {
+    font-size: 0.98rem;
+    line-height: 1.6;
+    color: var(--em-muted);
+    max-width: 480px;
+    margin: 0 auto 2rem;
+}
+
+.orders-stats {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2.5rem;
+}
+
+.orders-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.orders-stat-value {
+    font-size: 1.7rem;
+    font-weight: 800;
+    color: var(--em-leaf-dark);
+    line-height: 1.1;
+}
+
+.orders-stat-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--em-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: 0.25rem;
+}
+
+@media (max-width: 640px) {
+    .orders-hero { padding: 2.25rem 1.25rem 2rem; }
+    .orders-stats { gap: 1.5rem; }
+    .orders-stat-value { font-size: 1.35rem; }
+}
+
+/* ── Orders list ── */
+.orders-list-section {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 3rem;
+}
+
+.orders-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.orders-chip {
+    display: inline-flex;
+    align-items: center;
+    background: var(--em-surface-raised);
+    border: 1.5px solid var(--em-border);
+    color: var(--em-text);
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.orders-chip:hover {
+    border-color: var(--em-text-muted);
+}
+
+.orders-chip-active,
+.orders-chip-active:hover {
+    /* Was var(--em-forest), which in dark mode equals --em-surface (.orders-hero's own
+       background) — the "active" pill vanished. This is a solid fill made for exactly that. */
+    background: var(--em-leaf-mid-solid);
+    border-color: var(--em-leaf-mid-solid);
+    color: var(--em-text-inverse);
+}
+
+.orders-empty {
+    text-align: center;
+    padding: 4rem 1rem;
+    color: var(--em-muted);
+}
+
+.orders-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+/* ── Order ticket (signature element) ── */
+.order-ticket {
+    display: flex;
+    align-items: stretch;
+}
+
+.order-ticket-main {
+    flex: 1;
+    min-width: 0;
+    padding: 1.35rem 1.5rem;
+    border-radius: 16px 0 0 16px;
+    overflow: hidden;
+}
+
+.order-ticket-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.order-ticket-business {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--em-text);
+}
+
+.order-ticket-business i {
+    color: var(--em-leaf-dark);
+    margin-right: 0.4rem;
+}
+
+.order-ticket-address {
+    font-size: 0.78rem;
+    color: var(--em-muted);
+    margin-top: 0.2rem;
+}
+
+.order-ticket-address i {
+    margin-right: 0.3rem;
+}
+
+.order-status-badge {
+    flex-shrink: 0;
+}
+
+.order-status-pending   { background: var(--em-rescue-soft); color: var(--em-rescue); }
+.order-status-confirmed { background: var(--em-info-soft);   color: var(--em-info); }
+.order-status-completed { background: rgba(31, 138, 76, 0.1); color: var(--em-leaf-dark); }
+.order-status-cancelled { background: var(--em-danger-soft); color: var(--em-danger-dark); }
+.order-status-noshow    { background: rgba(107, 114, 128, 0.1); color: var(--em-text-muted); }
+
+.order-multi-pass-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    margin-left: 0.4rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--em-muted);
+}
+
+.order-ticket-items {
+    padding: 0.15rem 0 0.85rem;
+}
+
+.order-ticket-line {
+    display: flex;
+    align-items: baseline;
+    gap: 0.55rem;
+    padding: 0.3rem 0;
+    font-size: 0.86rem;
+}
+
+.order-ticket-line-qty {
+    color: var(--em-leaf-dark);
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.order-ticket-line-name {
+    flex: 1;
+    min-width: 0;
+    color: var(--em-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.order-ticket-line-price {
+    color: var(--em-muted);
+    flex-shrink: 0;
+}
+
+.order-ticket-footer {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-top: 0.85rem;
+    border-top: 1px dashed var(--em-border);
+}
+
+.order-ticket-pickup {
+    font-size: 0.78rem;
+    color: var(--em-muted);
+}
+
+.order-ticket-pickup i {
+    margin-right: 0.3rem;
+}
+
+.order-ticket-total {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--em-muted);
+}
+
+.order-ticket-total-value {
+    font-family: var(--em-font-display);
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--em-text);
+}
+
+.order-ticket-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.6rem;
+}
+
+.order-ticket-impact {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--em-leaf-dark);
+    background: var(--em-rescue-soft);
+    padding: 0.5rem 0.85rem;
+    border-radius: 999px;
+    margin-top: 0.85rem;
+}
+
+/* ImpactEquivalencyStats.razor — reused on the order receipt (OrderDetailModal) and /impact. */
+.impact-equivalency {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+}
+
+.impact-equivalency-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--em-leaf-dark);
+    background: var(--em-rescue-soft);
+    padding: 0.4rem 0.75rem;
+    border-radius: 999px;
+}
+
+.order-ticket-seam {
+    position: relative;
+    width: 0;
+    flex-shrink: 0;
+    border-left: 2px dashed rgba(14, 33, 23, 0.15);
+}
+
+/* Forest-tinted for light paper reads as dark-on-dark here — both border sides (border-top
+   on the pass/mobile variants) need a light tint instead. */
+:root[data-theme="dark"] .order-ticket-seam {
+    border-left-color: rgba(255, 255, 255, 0.18);
+    border-top-color: rgba(255, 255, 255, 0.18);
+}
+
+.order-ticket-seam::before,
+.order-ticket-seam::after {
+    content: "";
+    position: absolute;
+    left: -11px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--em-surface);
+}
+
+.order-ticket-seam::before { top: 14px; }
+.order-ticket-seam::after { bottom: 14px; }
+
+.order-ticket-stub {
+    flex-shrink: 0;
+    width: 128px;
+    border-radius: 0 16px 16px 0;
+    background: var(--em-forest);
+    background-image: radial-gradient(ellipse 100% 80% at 50% 0%, rgba(47, 158, 92, 0.28) 0%, transparent 70%);
+    color: var(--em-text-inverse);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem 0.75rem;
+    text-align: center;
+}
+
+.order-ticket-stub-label {
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+/* Monospace, like the code printed on a real receipt stub. */
+.order-ticket-stub-number {
+    font-family: var(--em-font-mono);
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    margin: 0.2rem 0 0.4rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.order-ticket-stub-hint {
+    font-size: 0.64rem;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.order-ticket-clickable {
+    cursor: pointer;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.order-ticket-clickable:focus-visible {
+    outline: 2px solid var(--em-leaf-dark);
+    outline-offset: 3px;
+}
+
+/* ── Pickup pass (single-order QR page) — reuses the ticket/stub shell, stacked and enlarged ── */
+.pickup-pass-page {
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 1.75rem 1.5rem 4rem;
+}
+
+/* ── Account settings (name/password) ── */
+.account-settings-page {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+}
+
+.order-ticket--pass {
+    flex-direction: column;
+    animation: card-rise 0.35s ease-out both;
+}
+
+.order-ticket--pass .order-ticket-main {
+    border-radius: 16px 16px 0 0;
+}
+
+.order-ticket--pass .order-ticket-seam {
+    width: auto;
+    height: 0;
+    border-left: none;
+    border-top: 2px dashed rgba(14, 33, 23, 0.15);
+}
+
+.order-ticket--pass .order-ticket-seam::before,
+.order-ticket--pass .order-ticket-seam::after {
+    top: -11px;
+    left: 14px;
+}
+
+.order-ticket--pass .order-ticket-seam::after {
+    left: auto;
+    right: 14px;
+}
+
+.order-ticket-stub--pass {
+    width: auto;
+    border-radius: 0 0 16px 16px;
+    padding: 1.75rem 1.5rem 2rem;
+    gap: 0.6rem;
+}
+
+.order-ticket-stub-qr {
+    background: var(--em-surface-raised);
+    border-radius: 14px;
+    padding: 0.9rem;
+    width: 100%;
+    max-width: 220px;
+    margin: 0.5rem 0;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.order-ticket-stub-qr svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.order-ticket-stub-pass-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--em-text-inverse);
+}
+
+/* ── Multiple pickup passes: switcher tabs above the ticket, split control below it ── */
+.pickup-pass-switcher {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 0.6rem;
+}
+
+.pickup-pass-tab {
+    border: 1px solid var(--em-border);
+    background: var(--em-surface-raised);
+    color: var(--em-muted);
+    border-radius: 999px;
+    padding: 0.35rem 0.9rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.pickup-pass-tab.active {
+    background: var(--em-forest);
+    border-color: var(--em-forest);
+    color: var(--em-text-inverse);
+}
+
+.pickup-pass-switcher-hint {
+    font-size: 0.76rem;
+    color: var(--em-muted);
+    margin-bottom: 1rem;
+}
+
+.pickup-pass-split {
+    margin-top: 1.25rem;
+    text-align: center;
+}
+
+.pickup-pass-split-toggle {
+    background: none;
+    border: none;
+    color: var(--em-leaf-dark);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.pickup-pass-split-toggle:hover {
+    text-decoration: underline;
+}
+
+.pickup-pass-split-form {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.pickup-pass-split-form label {
+    font-size: 0.78rem;
+    color: var(--em-muted);
+    margin: 0;
+}
+
+.pickup-pass-split-form select {
+    width: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .order-ticket { animation: none; }
+    .order-ticket-clickable { transition: none; }
+}
+
+@media (max-width: 560px) {
+    .order-ticket {
+        flex-direction: column;
+    }
+
+    .order-ticket-main {
+        border-radius: 16px 16px 0 0;
+    }
+
+    .order-ticket-seam {
+        width: auto;
+        height: 0;
+        border-left: none;
+        border-top: 2px dashed rgba(14, 33, 23, 0.15);
+    }
+
+    .order-ticket-seam::before,
+    .order-ticket-seam::after {
+        top: -11px;
+        left: 14px;
+    }
+
+    .order-ticket-seam::after {
+        left: auto;
+        right: 14px;
+    }
+
+    .order-ticket-stub {
+        width: auto;
+        flex-direction: row;
+        justify-content: center;
+        gap: 0.6rem;
+        border-radius: 0 0 16px 16px;
+        padding: 0.75rem 1rem;
+    }
+
+    .order-ticket-stub-number {
+        margin: 0;
+    }
+}
+
+/* ── Packages bulk-action toolbar ── */
+.bulk-toolbar {
+    border-left: 3px solid var(--em-leaf-mid);
+}
+
+/* ── Confirm dialog ── */
+.confirm-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(14, 33, 23, 0.45);
+    z-index: 55;
+    animation: cart-backdrop-in 0.2s ease-out;
+}
+
+.confirm-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--em-surface-raised);
+    border-radius: 16px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 20px 50px rgba(0, 0, 0, 0.2);
+    padding: 1.75rem;
+    width: calc(100% - 2rem);
+    max-width: 380px;
+    max-height: calc(100vh - 3rem);
+    overflow-y: auto;
+    z-index: 56;
+    animation: confirm-dialog-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.confirm-dialog-title {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--em-text);
+    margin-bottom: 0.5rem;
+}
+
+.confirm-dialog-message {
+    font-size: 0.88rem;
+    color: var(--em-muted);
+    line-height: 1.5;
+    margin-bottom: 1.5rem;
+}
+
+.confirm-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6rem;
+}
+
+@keyframes confirm-dialog-in {
+    from { opacity: 0; transform: translate(-50%, -46%) scale(0.97); }
+    to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .confirm-backdrop, .confirm-dialog { animation: none; }
+}
+
+/* ── Filter / export popover (UI revamp Phase 4) ── */
+/* Same centered-overlay shell as .confirm-dialog/.notif-panel, generalized for a sheet of form
+   fields — Home's Filters panel and Manage Orders' Export panel both build on this. */
+.em-popover-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(14, 33, 23, 0.45);
+    animation: cart-backdrop-in 0.2s ease-out;
+}
+
+.em-popover {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 56;
+    width: 380px;
+    max-width: calc(100% - 2rem);
+    max-height: calc(100vh - 3rem);
+    background: var(--em-surface-raised);
+    border-radius: 16px;
+    box-shadow: var(--em-shadow-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: confirm-dialog-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .em-popover-backdrop, .em-popover { animation: none; }
+}
+
+.em-popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1.1rem;
+    background: var(--em-forest);
+    color: var(--em-text-inverse);
+    font-family: var(--em-font-display);
+    font-weight: 700;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+}
+
+.em-popover-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.8rem;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.em-popover-close:hover {
+    background: rgba(255, 255, 255, 0.22);
+    color: var(--em-text-inverse);
+}
+
+.em-popover-body {
+    padding: 1.1rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.em-popover-toggle-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.em-popover-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.85rem 1.1rem;
+    border-top: 1px solid var(--em-border);
+    flex-shrink: 0;
+}
+
+.orders-export-panel {
+    width: 320px;
+}
+
+/* ── Manager order actions ── */
+/* Confirm/Complete are tinted to preview the status badge color they'll produce; Cancel stays quiet as the exit branch. */
+.order-action-group {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.order-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border: 1.5px solid transparent;
+    white-space: nowrap;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.order-action-confirm {
+    color: var(--em-info);
+    border-color: rgba(37, 99, 235, 0.35);
+    background: rgba(37, 99, 235, 0.07);
+}
+.order-action-confirm:hover {
+    background: var(--em-info-solid);
+    border-color: var(--em-info-solid);
+    color: var(--em-text-inverse);
+}
+
+.order-action-complete {
+    color: var(--em-leaf-mid);
+    border-color: rgba(31, 138, 76, 0.35);
+    background: rgba(31, 138, 76, 0.07);
+}
+.order-action-complete:hover {
+    background: var(--em-leaf-mid-solid);
+    border-color: var(--em-leaf-mid-solid);
+    color: var(--em-text-inverse);
+}
+
+.order-action-cancel {
+    color: var(--em-muted);
+    border-color: transparent;
+    background: transparent;
+    font-weight: 600;
+    padding: 0.35rem 0.5rem;
+}
+.order-action-cancel:hover {
+    color: var(--em-danger);
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.order-action-noshow {
+    color: var(--em-text-muted);
+    border-color: rgba(100, 116, 139, 0.35);
+    background: rgba(100, 116, 139, 0.07);
+}
+.order-action-noshow:hover {
+    background: var(--em-muted-solid);
+    border-color: var(--em-muted-solid);
+    color: var(--em-text-inverse);
+}
+
+.order-action-empty {
+    color: var(--em-muted);
+    font-size: 0.78rem;
+}
+
+/* Forest rather than green/blue — those already mean Complete/Confirm; this one leads to the
+   stub's own dark-forest pickup pass, not another status transition. */
+.order-action-qr {
+    color: var(--em-forest);
+    border-color: rgba(14, 33, 23, 0.25);
+    background: rgba(14, 33, 23, 0.05);
+    text-decoration: none;
+}
+.order-action-qr:hover {
+    background: var(--em-forest);
+    border-color: var(--em-forest);
+    color: var(--em-text-inverse);
+}
+
+/* Forest text on a dark surface is dark-on-dark — this ghost-button needs light tints
+   instead; the solid-fill hover above is unaffected. */
+:root[data-theme="dark"] .order-action-qr {
+    color: var(--em-text);
+    border-color: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.order-action-reorder {
+    color: var(--em-leaf-dark);
+    border-color: rgba(27, 122, 68, 0.3);
+    background: rgba(27, 122, 68, 0.07);
+}
+.order-action-reorder:hover:not(:disabled) {
+    background: var(--em-leaf-dark-solid);
+    border-color: var(--em-leaf-dark-solid);
+    color: var(--em-text-inverse);
+}
+.order-action-reorder:disabled {
+    opacity: 0.7;
+    cursor: default;
+}
+
+.order-row-clickable {
+    cursor: pointer;
+}
+
+/* ── Dashboard trend chart (last 14 days) ── */
+.dash-trend-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+.dash-trend-row:last-child {
+    margin-bottom: 0;
+}
+
+.dash-trend-label {
+    flex-shrink: 0;
+    width: 70px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--em-muted);
+}
+
+.dash-trend-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.25rem;
+    height: 64px;
+    flex: 1;
+}
+
+.dash-trend-bar-wrap {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    flex: 1;
+    height: 100%;
+    border-radius: 4px;
+}
+
+.dash-trend-bar-wrap:focus-visible {
+    outline: 2px solid var(--em-leaf-mid);
+    outline-offset: 2px;
+}
+
+/* A faint column behind today's bar, so "where am I in the last 14 days" doesn't require
+   counting bars or reading the axis. */
+.dash-trend-bar-wrap-today::before {
+    content: "";
+    position: absolute;
+    inset: 0 1px;
+    background: rgba(31, 138, 76, 0.08);
+    border-radius: 4px;
+}
+
+.dash-trend-bar {
+    position: relative;
+    width: 100%;
+    min-height: 3px;
+    border-radius: 3px 3px 0 0;
+    transition: height 0.2s ease, filter 0.15s ease;
+}
+
+.dash-trend-bar-orders {
+    background: var(--em-leaf-mid);
+}
+
+.dash-trend-bar-kg {
+    background: var(--em-rescue);
+}
+
+.dash-trend-bar-hours {
+    background: var(--em-violet);
+}
+
+.dash-trend-bar-wrap:hover .dash-trend-bar,
+.dash-trend-bar-wrap:focus-visible .dash-trend-bar {
+    filter: brightness(1.12);
+}
+
+/* Custom tooltip — replaces a native title="" attribute, which only ever shows up after an
+   inconsistent OS-controlled hover delay (or not at all on touch). This appears immediately
+   and reliably on hover *or* keyboard focus, anchored to the top of the bar's own column so
+   it lands at the same height regardless of how tall that day's bar is. */
+.dash-trend-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translate(-50%, -2px);
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+    background: var(--em-forest);
+    color: var(--em-text-inverse);
+    white-space: nowrap;
+    padding: 0.4rem 0.65rem;
+    border-radius: 8px;
+    box-shadow: var(--em-shadow-md);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.dash-trend-tooltip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: var(--em-forest);
+}
+
+.dash-trend-bar-wrap:hover .dash-trend-tooltip,
+.dash-trend-bar-wrap:focus-visible .dash-trend-tooltip {
+    opacity: 1;
+    transform: translate(-50%, -8px);
+}
+
+.dash-trend-chart > .dash-trend-bar-wrap:first-child .dash-trend-tooltip {
+    left: 0;
+    transform: translate(0, -2px);
+}
+
+.dash-trend-chart > .dash-trend-bar-wrap:first-child:hover .dash-trend-tooltip,
+.dash-trend-chart > .dash-trend-bar-wrap:first-child:focus-visible .dash-trend-tooltip {
+    transform: translate(0, -8px);
+}
+
+.dash-trend-chart > .dash-trend-bar-wrap:first-child .dash-trend-tooltip::after {
+    left: 14px;
+    transform: none;
+}
+
+.dash-trend-chart > .dash-trend-bar-wrap:last-child .dash-trend-tooltip {
+    left: auto;
+    right: 0;
+    transform: translate(0, -2px);
+}
+
+.dash-trend-chart > .dash-trend-bar-wrap:last-child:hover .dash-trend-tooltip,
+.dash-trend-chart > .dash-trend-bar-wrap:last-child:focus-visible .dash-trend-tooltip {
+    transform: translate(0, -8px);
+}
+
+.dash-trend-chart > .dash-trend-bar-wrap:last-child .dash-trend-tooltip::after {
+    left: auto;
+    right: 14px;
+    transform: none;
+}
+
+.dash-trend-tooltip-date {
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.dash-trend-tooltip-value {
+    font-family: var(--em-font-mono);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dash-trend-tooltip { transition: none; }
+}
+
+/* ── Dashboard trend chart axis row ── */
+.dash-trend-axis-row {
+    margin-top: -0.5rem;
+    margin-bottom: 0;
+}
+
+.dash-trend-axis-tick {
+    flex: 1;
+    text-align: center;
+    font-size: 0.64rem;
+    font-weight: 500;
+    color: var(--em-muted);
+    white-space: nowrap;
+}
+
+.dash-trend-axis-today {
+    color: var(--em-leaf-dark);
+    font-weight: 700;
+}
+
+/* ── Star rating ── */
+.star-rating-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.star-rating {
+    position: relative;
+    display: inline-block;
+    line-height: 1;
+}
+
+.star-rating-track,
+.star-rating-fill {
+    display: flex;
+    gap: 1px;
+}
+
+.star-rating-track i {
+    color: var(--em-border);
+}
+
+.star-rating-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.star-rating-fill i {
+    color: var(--em-rescue);
+}
+
+.star-rating-value {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: inherit;
+}
+
+.star-rating-input {
+    display: inline-flex;
+    gap: 0.15rem;
+}
+
+.star-rating-btn {
+    border: none;
+    background: none;
+    padding: 0.1rem;
+    line-height: 1;
+    color: var(--em-border-strong);
+    cursor: pointer;
+    transition: transform 0.1s, color 0.15s;
+}
+
+.star-rating-btn i.bi-star-fill {
+    color: var(--em-rescue);
+}
+
+.star-rating-btn:hover {
+    transform: scale(1.08);
+}
+
+/* ── Business grid (home) ── */
+.biz-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    padding-bottom: 1rem;
+}
+
+.biz-card {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    border: none;
+    overflow: hidden;
+    text-align: left;
+    padding: 0;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.biz-card:focus-visible {
+    outline: 2px solid var(--em-leaf-mid);
+    outline-offset: 2px;
+}
+
+.biz-card-media {
+    position: relative;
+    height: 160px;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    flex-shrink: 0;
+}
+
+/* Hidden by default — site.js's EcoMeal.media.checkPlaceholders reveals it once there's
+   genuinely nothing to show (unset or unreachable Business.ImageUrl). */
+.biz-card-media-placeholder-icon {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.5rem;
+    color: rgba(255, 255, 255, 0.3);
+    pointer-events: none;
+}
+
+.biz-card-media.biz-image-failed .biz-card-media-placeholder-icon {
+    display: flex;
+}
+
+.biz-card-live-badge {
+    position: absolute;
+    top: 0.75rem;
+    left: 0.75rem;
+    background: rgba(14, 33, 23, 0.72);
+    color: var(--em-text-inverse);
+}
+
+.biz-card-live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--em-leaf);
+    box-shadow: 0 0 0 2px rgba(47, 158, 92, 0.35);
+}
+
+/* Phase 12 — tells a viewer the "What's available" list on BusinessDetail.razor updates on its
+   own (PackageStockBroadcaster), not just on refresh. Reuses .biz-card-live-dot's pulse styling. */
+.biz-live-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--em-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-left: auto;
+}
+
+.biz-card-rating-badge {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    gap: 0.3rem;
+    background: rgba(255, 255, 255, 0.92);
+    /* Fixed near-white background regardless of theme (it floats over a photo), so its text
+       must stay a fixed dark ink too — var(--em-text) flips light in dark mode and disappears. */
+    color: var(--em-ink-solid);
+}
+
+.biz-card-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    padding: 1.1rem 1.25rem 1.3rem;
+}
+
+.biz-card-type {
+    color: var(--em-leaf-dark);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.biz-card-closed-badge {
+    color: var(--em-danger-dark);
+    background: var(--em-danger-soft);
+}
+
+.biz-card-name {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--em-text);
+    margin: 0.3rem 0 0.35rem;
+}
+
+.biz-card-address {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    color: var(--em-muted);
+    margin-bottom: 0.5rem;
+}
+
+.biz-card-distance {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--em-leaf-dark);
+    margin-bottom: 0.5rem;
+}
+
+.biz-card-desc {
+    font-size: 0.85rem;
+    color: var(--em-muted);
+    line-height: 1.5;
+    margin-bottom: 1rem;
+    flex: 1;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.biz-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding-top: 0.85rem;
+    border-top: 1px dashed var(--em-border);
+}
+
+.biz-card-from {
+    font-family: var(--em-font-display);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--em-leaf-dark);
+}
+
+.biz-card-from-muted {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--em-muted);
+}
+
+.biz-card-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--em-text);
+    transition: transform 0.15s, color 0.15s;
+}
+
+.biz-card:hover .biz-card-cta {
+    color: var(--em-leaf-dark);
+    transform: translateX(2px);
+}
+
+.home-pagination {
+    margin-top: 0.5rem;
+}
+
+.home-pagination nav {
+    border-top: none !important;
+    padding: 0 !important;
+}
+
+@media (max-width: 640px) {
+    .biz-grid {
+        grid-template-columns: 1fr;
+        gap: 1.1rem;
+    }
+}
+
+/* ── Business detail page ── */
+.biz-page {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 1.75rem 1.5rem 4rem;
+}
+
+.biz-page-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--em-muted);
+    text-decoration: none;
+    margin-bottom: 1.1rem;
+    transition: color 0.15s;
+}
+
+.biz-page-back:hover {
+    color: var(--em-leaf-dark);
+}
+
+.biz-page-card {
+    background: var(--em-surface-raised);
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.biz-modal-close {
+    position: absolute;
+    top: 0.85rem;
+    right: 0.85rem;
+    z-index: 2;
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: none;
+    background: rgba(14, 33, 23, 0.55);
+    color: var(--em-text-inverse);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s;
+}
+
+.biz-modal-close:hover {
+    background: rgba(14, 33, 23, 0.75);
+}
+
+.biz-modal-loading {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem;
+}
+
+.biz-modal-hero {
+    flex-shrink: 0;
+    height: 260px;
+    background-color: var(--em-forest);
+    /* Two background layers: the darkening gradient always covers the hero, while the photo
+       is stretched to fill the section exactly (100% 100%), no cropping and no letterboxing. */
+    background-size: cover, 100% 100%;
+    background-repeat: no-repeat, no-repeat;
+    background-position: center, center;
+    display: flex;
+    align-items: flex-end;
+}
+
+.biz-modal-hero-overlay {
+    width: 100%;
+    padding: 1.5rem 3rem 1.25rem 1.75rem;
+    color: var(--em-text-inverse);
+}
+
+.biz-modal-eyebrow {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.biz-modal-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin: 0.25rem 0 0.5rem;
+}
+
+.biz-modal-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.9rem;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.biz-modal-address i {
+    margin-right: 0.3rem;
+}
+
+.biz-modal-open-badge {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.biz-modal-open-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.biz-modal-open-badge-open .biz-modal-open-dot {
+    background: var(--em-leaf);
+    box-shadow: 0 0 0 2px rgba(47, 158, 92, 0.35);
+}
+
+.biz-modal-open-badge-closed .biz-modal-open-dot {
+    background: var(--em-danger);
+    box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.35);
+}
+
+.biz-modal-closure-notice {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--em-danger-dark);
+    background: var(--em-danger-soft);
+    border-radius: 10px;
+    padding: 0.65rem 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.biz-hours-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.biz-hours-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--em-muted);
+    padding: 0.3rem 0.6rem;
+    border-radius: 8px;
+}
+
+.biz-hours-row-today {
+    background: var(--em-surface);
+    color: var(--em-text);
+    font-weight: 700;
+}
+
+.biz-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem 1.75rem 2rem;
+}
+
+.biz-modal-desc {
+    font-size: 0.92rem;
+    line-height: 1.6;
+    color: var(--em-muted);
+    margin: 0;
+}
+
+.biz-modal-inline-toast {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    background: var(--em-forest);
+    color: var(--em-text-inverse);
+    padding: 0.55rem 1rem;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    animation: inline-toast-fade 3.2s ease forwards;
+}
+
+.biz-modal-inline-toast i {
+    color: var(--em-leaf);
+}
+
+@keyframes inline-toast-fade {
+    0%   { opacity: 0; transform: translateY(-4px); }
+    8%   { opacity: 1; transform: translateY(0); }
+    88%  { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+.biz-modal-divider {
+    border-top: 1px dashed var(--em-border);
+    margin: 1.5rem 0;
+}
+
+.biz-modal-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--em-text);
+    margin-bottom: 1rem;
+}
+
+.biz-modal-section-title i {
+    color: var(--em-leaf-dark);
+}
+
+.biz-modal-empty {
+    font-size: 0.85rem;
+    color: var(--em-muted);
+    padding: 0.5rem 0 1rem;
+    margin: 0;
+}
+
+.biz-modal-review-hint {
+    font-size: 0.85rem;
+    color: var(--em-muted);
+    background: var(--em-surface);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1.25rem;
+}
+
+/* ── Packages inside the business modal ── */
+.biz-pkg-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.biz-pkg-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.95rem 0.6rem;
+    margin: 0 -0.6rem;
+    border-bottom: 1px dashed var(--em-border);
+}
+
+.biz-pkg-row:last-child {
+    border-bottom: none;
+}
+
+.biz-pkg-row-clickable {
+    cursor: pointer;
+    border-radius: 10px;
+    transition: background-color 0.15s;
+}
+
+.biz-pkg-row-clickable:hover {
+    background: var(--em-surface);
+}
+
+.biz-pkg-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.biz-pkg-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--em-text);
+    /* .biz-pkg-info already sets min-width: 0 so the flex item itself can shrink, but that alone
+       doesn't stop a single unbroken "word" (an extreme package name with no spaces) from still
+       visually painting past the column and over .biz-pkg-side's price/qty next to it. */
+    overflow-wrap: break-word;
+}
+
+.biz-pkg-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    font-size: 0.76rem;
+    color: var(--em-muted);
+    margin: 0.2rem 0 0.35rem;
+}
+
+.biz-pkg-type {
+    color: var(--em-leaf-dark);
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.68rem;
+    letter-spacing: 0.03em;
+}
+
+.biz-pkg-desc {
+    font-size: 0.82rem;
+    color: var(--em-muted);
+    line-height: 1.45;
+    margin: 0;
+}
+
+.biz-pkg-side {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.35rem;
+    min-width: 92px;
+}
+
+.biz-pkg-price {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--em-leaf-dark);
+}
+
+.biz-pkg-qty {
+    font-size: 0.72rem;
+    color: var(--em-muted);
+}
+
+.biz-pkg-add-btn {
+    border: none;
+    border-radius: 8px;
+    background: var(--em-leaf-mid-solid);
+    color: var(--em-text-inverse);
+    font-size: 0.76rem;
+    font-weight: 700;
+    padding: 0.35rem 0.7rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    transition: background-color 0.15s;
+}
+
+.biz-pkg-add-btn:hover:not(:disabled) {
+    background: var(--em-leaf-dark-solid);
+}
+
+.biz-pkg-add-btn:disabled {
+    background: var(--em-border);
+    color: var(--em-muted);
+    cursor: default;
+}
+
+/* ── Reviews inside the business modal ── */
+.biz-review-form {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+    background: var(--em-surface);
+    border-radius: 14px;
+    padding: 1.1rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.biz-review-form-label {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--em-text);
+}
+
+.biz-review-textarea {
+    width: 100%;
+    resize: vertical;
+    font-size: 0.85rem;
+}
+
+.biz-review-package-select {
+    width: auto;
+    max-width: 100%;
+}
+
+.biz-review-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+}
+
+.biz-review-card {
+    display: flex;
+    gap: 0.85rem;
+}
+
+.biz-review-avatar {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: rgba(47, 158, 92, 0.14);
+    color: var(--em-leaf-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.82rem;
+}
+
+.biz-review-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.biz-review-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.biz-review-name {
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: var(--em-text);
+}
+
+.biz-review-date {
+    font-size: 0.72rem;
+    color: var(--em-muted);
+    white-space: nowrap;
+}
+
+.biz-review-comment {
+    font-size: 0.84rem;
+    color: var(--em-muted);
+    line-height: 1.55;
+    margin: 0.35rem 0 0;
+}
+
+/* ── Package detail modal (drills down from the business modal) ── */
+.pkg-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(14, 33, 23, 0.55);
+    z-index: 51;
+    animation: cart-backdrop-in 0.2s ease-out;
+}
+
+.pkg-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: calc(100% - 2rem);
+    max-width: 640px;
+    max-height: calc(100vh - 3rem);
+    background: var(--em-surface-raised);
+    border-radius: 20px;
+    overflow: hidden;
+    overflow-y: auto;
+    z-index: 52;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 20px 60px rgba(0, 0, 0, 0.25);
+    animation: confirm-dialog-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pkg-modal-hero {
+    height: 300px;
+    background-color: var(--em-forest);
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.pkg-modal-body {
+    padding: 1.75rem 2.25rem 2.25rem;
+}
+
+.pkg-modal-title {
+    font-size: 1.65rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--em-text);
+    margin: 0.25rem 0 0.35rem;
+}
+
+.pkg-modal-price {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--em-leaf-dark);
+    margin-bottom: 0.85rem;
+}
+
+.pkg-modal-facts {
+    display: flex;
+    flex-direction: column;
+    gap: 0.95rem;
+    background: var(--em-surface);
+    border-radius: 14px;
+    padding: 1.15rem 1.3rem;
+    margin: 1.4rem 0 1.75rem;
+}
+
+.pkg-modal-fact {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    font-size: 0.92rem;
+}
+
+.pkg-modal-fact i {
+    color: var(--em-leaf-dark);
+    margin-top: 0.15rem;
+}
+
+.pkg-modal-fact-label {
+    font-size: 0.7rem;
+    color: var(--em-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.pkg-modal-fact-value {
+    font-weight: 700;
+    color: var(--em-text);
+}
+
+.pkg-modal-add-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.65rem 1rem;
+    font-weight: 700;
+}
+
+/* ── Order detail modal (click any order/ticket row) — same shell as the package modal, own
+   namespace since it's a different entity, not a drill-down from it ── */
+.order-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(14, 33, 23, 0.55);
+    z-index: 51;
+    animation: cart-backdrop-in 0.2s ease-out;
+}
+
+.order-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: calc(100% - 2rem);
+    max-width: 560px;
+    max-height: calc(100vh - 3rem);
+    background: var(--em-surface-raised);
+    border-radius: 20px;
+    overflow-y: auto;
+    z-index: 52;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 20px 60px rgba(0, 0, 0, 0.25);
+    animation: confirm-dialog-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.order-modal-body {
+    padding: 1.75rem 2rem 2rem;
+}
+
+.order-modal-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.order-modal-top .biz-modal-eyebrow {
+    color: var(--em-leaf-dark);
+}
+
+.order-modal-total {
+    padding-top: 0.85rem;
+    margin-top: 0.4rem;
+    border-top: 1px dashed var(--em-border);
+}
+
+/* Entrance animation for full-bleed mobile sheets (.pkg-modal/.order-modal below 640px) —
+   no self-relative translate, since those are pinned to top:0;left:0 rather than centered. */
+@keyframes mobile-sheet-in {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .biz-card { animation: none; }
+    .biz-card:hover { transform: none; }
+    .biz-modal-inline-toast { animation: none; }
+    .pkg-modal-backdrop, .pkg-modal { animation: none; }
+    .order-modal-backdrop, .order-modal { animation: none; }
+}
+
+@media (max-width: 640px) {
+    .biz-page {
+        padding: 1rem 0 3rem;
+    }
+
+    .biz-page-card {
+        border-radius: 0;
+    }
+
+    .biz-modal-hero {
+        height: 160px;
+    }
+
+    .biz-modal-body {
+        padding: 1.25rem 1.25rem 1.75rem;
+    }
+
+    /* Full-bleed sheets on mobile: top/left/transform are reset to 0/0/none here, so they
+       can't share the desktop confirm-dialog-in keyframe — its translate(-50%, -50%) assumes
+       the top:50%;left:50% centering trick and would fight this reset, leaving the modal
+       stuck translated up-and-left by half its own size instead of filling the viewport. */
+    .pkg-modal, .order-modal {
+        top: 0;
+        left: 0;
+        transform: none;
+        width: 100%;
+        height: 100%;
+        max-height: 100vh;
+        max-width: none;
+        border-radius: 0;
+        animation: mobile-sheet-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .pkg-modal-hero {
+        height: 180px;
+    }
+
+    .biz-pkg-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .biz-pkg-side {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        min-width: 0;
+    }
+}
+
+/* Re-assert after the max-width block above, which re-declares `animation` for these same
+   elements and would otherwise win by source order and undo this opt-out on narrow screens. */
+@media (max-width: 640px) and (prefers-reduced-motion: reduce) {
+    .pkg-modal, .order-modal { animation: none; }
+}
+
+/* ── Manager pickup scanner ── */
+.scan-page {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 3rem;
+}
+
+.scan-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.scan-hint {
+    font-size: 0.88rem;
+    color: var(--em-muted);
+    margin: 0;
+}
+
+.scan-viewfinder {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    background: var(--em-forest);
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.12);
+    margin-bottom: 1.5rem;
+}
+
+.scan-viewfinder video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.scan-idle-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse 70% 60% at 50% 40%, rgba(47, 158, 92, 0.12) 0%, transparent 70%);
+}
+
+.scan-frame-guide {
+    position: absolute;
+    inset: 12% 14%;
+    pointer-events: none;
+}
+
+.scan-corner {
+    position: absolute;
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--em-leaf);
+}
+
+.scan-corner-tl { top: 0; left: 0; border-right: none; border-bottom: none; border-radius: 8px 0 0 0; }
+.scan-corner-tr { top: 0; right: 0; border-left: none; border-bottom: none; border-radius: 0 8px 0 0; }
+.scan-corner-bl { bottom: 0; left: 0; border-right: none; border-top: none; border-radius: 0 0 0 8px; }
+.scan-corner-br { bottom: 0; right: 0; border-left: none; border-top: none; border-radius: 0 0 8px 0; }
+
+.scan-back-link {
+    display: flex;
+    justify-content: center;
+    margin-top: 1rem;
+}
+
+.scan-manual {
+    border-top: 1px dashed var(--em-border);
+    padding-top: 1.25rem;
+}
+
+.scan-manual-label {
+    font-size: 0.85rem;
+    color: var(--em-muted);
+    margin-bottom: 0.6rem;
+}
+
+.scan-manual-form {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.scan-manual-results {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.scan-manual-results li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    background: var(--em-surface);
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+}
+
+.scan-manual-pass-picker {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+/* ── Pickup validation page ── */
+.validate-page {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 3rem;
+}
+
+.validate-card {
+    border-radius: 20px;
+    padding: 1.75rem 2rem 2rem;
+}
+
+.validate-total {
+    padding: 0.85rem 0;
+    margin: 0.5rem 0 1.25rem;
+    border-top: 1px dashed var(--em-border);
+    border-bottom: 1px dashed var(--em-border);
+}
+
+.validate-confirm-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 0.85rem 1rem;
+    font-size: 0.85rem;
+}
+
+.validate-scan-next {
+    display: block;
+    text-align: center;
+    margin-top: 1.1rem;
+    font-size: 0.82rem;
+    color: var(--em-muted);
+}
+
+.validate-scan-next:hover {
+    color: var(--em-leaf-dark);
+}
+
+@media (max-width: 480px) {
+    .scan-viewfinder {
+        border-radius: 16px;
+    }
+}
+
+/* ── Notification bell ── */
+.sidebar-notif-btn {
+    position: relative;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: none;
+    background: none;
+    color: rgba(255, 255, 255, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.sidebar-notif-btn:hover {
+    background-color: rgba(47, 158, 92, 0.12);
+    color: var(--em-leaf);
+}
+
+.notif-bell-btn {
+    position: relative;
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    border-radius: 10px;
+    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--em-text-inverse);
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s;
+}
+
+.notif-bell-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.notif-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--em-danger-solid);
+    color: var(--em-text-inverse);
+    font-size: 0.62rem;
+    font-weight: 800;
+    line-height: 18px;
+    text-align: center;
+    box-shadow: 0 0 0 2px var(--em-forest);
+}
+
+.sidebar-notif-btn .notif-badge {
+    box-shadow: 0 0 0 2px var(--em-forest-mid);
+}
+
+/* Transparent click-outside-to-close layer — same role as .role-dropdown-backdrop, its own
+   class only because the panel it pairs with isn't an AnchoredDropdown. */
+.notif-panel-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(14, 33, 23, 0.45);
+    animation: cart-backdrop-in 0.2s ease-out;
+}
+
+/* Centered like ConfirmDialog/ReportDialog, not anchored near the trigger — the trigger sits in
+   a cramped corner in both layouts, and a trigger-relative position is what kept re-clipping
+   against the sidebar's edge across several earlier fixes. Centering plus a viewport-fraction
+   max-height (with internal scroll) can't clip against any edge, on any screen size. Rendered from
+   NotificationPanel.razor at the layout's top level, NOT nested in .sidebar/.public-header — see
+   FRONTEND_ARCHITECTURE.md §4 for why (position: sticky always creates a stacking context, which
+   traps a fixed-position descendant's paint order under <main> regardless of z-index). */
+.notif-panel {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 56;
+    width: 400px;
+    max-width: calc(100% - 2rem);
+    max-height: calc(100vh - 3rem);
+    background: var(--em-surface-raised);
+    border-radius: 16px;
+    box-shadow: var(--em-shadow-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: notif-panel-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes notif-panel-in {
+    from { opacity: 0; transform: translate(-50%, -46%) scale(0.97); }
+    to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .notif-panel-backdrop, .notif-panel { animation: none; }
+}
+
+.notif-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1.1rem;
+    background: var(--em-forest);
+    color: var(--em-text-inverse);
+    font-family: var(--em-font-display);
+    font-weight: 700;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+}
+
+.notif-panel-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+}
+
+.notif-mark-all {
+    border: none;
+    background: none;
+    color: rgba(255, 255, 255, 0.75);
+    font-family: var(--em-font-body);
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0;
+}
+
+.notif-mark-all:hover {
+    color: var(--em-text-inverse);
+    text-decoration: underline;
+}
+
+.notif-push-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.85rem;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.notif-push-toggle:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.22);
+    color: var(--em-text-inverse);
+}
+
+.notif-push-toggle:disabled {
+    opacity: 0.6;
+}
+
+.notif-push-toggle-on {
+    background: var(--em-leaf-solid);
+    color: var(--em-text-inverse);
+}
+
+/* The panel had no visible dismiss affordance — closing relied entirely on clicking the
+   (invisible) backdrop, unlike the cart panel right next to it in the same header. */
+.notif-panel-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.8rem;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.notif-panel-close:hover {
+    background: rgba(255, 255, 255, 0.22);
+    color: var(--em-text-inverse);
+}
+
+.notif-push-error {
+    padding: 0.6rem 1.1rem;
+    background: var(--em-rescue-soft);
+    color: var(--em-rescue-dark);
+    font-size: 0.78rem;
+    flex-shrink: 0;
+}
+
+.notif-panel-list {
+    overflow-y: auto;
+}
+
+.notif-empty {
+    padding: 2.25rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    text-align: center;
+    color: var(--em-muted);
+    font-size: 0.85rem;
+}
+
+.notif-empty i {
+    font-size: 1.4rem;
+    color: var(--em-leaf);
+}
+
+.notif-item {
+    display: block;
+    width: 100%;
+    border: none;
+    border-left: 3px solid transparent;
+    background: none;
+    padding: 0.75rem 1.1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--em-border);
+    transition: background-color 0.15s, border-color 0.15s;
+}
+
+.notif-item:last-child {
+    border-bottom: none;
+}
+
+.notif-item:hover {
+    background-color: var(--em-surface);
+}
+
+.notif-item-unread {
+    border-left-color: var(--em-rescue);
+}
+
+.notif-item-message {
+    display: block;
+    font-size: 0.82rem;
+    color: var(--em-text);
+    line-height: 1.4;
+}
+
+.notif-item-unread .notif-item-message {
+    font-weight: 700;
+}
+
+.notif-item-time {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.7rem;
+    color: var(--em-muted);
+}
+
+/* ── Favorites ── */
+.biz-card-fav-btn {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(14, 33, 23, 0.55);
+    color: var(--em-text-inverse);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    transition: background-color 0.15s, transform 0.1s;
+    z-index: 2;
+}
+
+.biz-card-fav-btn:hover {
+    background: rgba(14, 33, 23, 0.75);
+    transform: scale(1.06);
+}
+
+.biz-card-fav-btn.biz-card-fav-active {
+    color: var(--em-danger);
+}
+
+.biz-card-fav-btn.biz-card-fav-active i {
+    font-weight: 900;
+}
+
+/* When a rating badge is already showing top-right, push the heart down beside it. */
+.biz-card-media:has(.biz-card-rating-badge) .biz-card-fav-btn {
+    top: 2.6rem;
+}
+
+.biz-modal-fav-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--em-text-inverse);
+    border-radius: 999px;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    transition: background-color 0.15s;
+}
+
+.biz-modal-fav-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.biz-modal-fav-btn.biz-modal-fav-active {
+    background: rgba(248, 113, 113, 0.85);
+    border-color: rgba(248, 113, 113, 0.85);
+}
+
+.home-fav-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: 1px solid var(--em-border);
+    background: var(--em-surface-raised);
+    color: var(--em-text);
+    border-radius: 10px;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.home-fav-toggle i {
+    color: var(--em-danger);
+}
+
+.home-fav-toggle.home-fav-toggle-active {
+    background: rgba(248, 113, 113, 0.1);
+    border-color: rgba(248, 113, 113, 0.35);
+    color: var(--em-danger-dark);
+}
+
+/* ── Dietary tag badges — also reused as-is for a review's "which package" pill (BusinessDetail.razor),
+   an identical shape that used to be its own .biz-review-package-tag class. ── */
+.diet-tag {
+    background: rgba(31, 138, 76, 0.1);
+    color: var(--em-leaf-dark);
+}
+
+.diet-tag-allergen {
+    background: var(--em-warning-soft);
+    color: var(--em-warning-dark);
+}
+
+.diet-tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.pkg-form-tag-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.5rem;
+}
+
+.pkg-form-tag-check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.65rem;
+    border: 1px solid var(--em-border);
+    border-radius: 8px;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.pkg-form-tag-check input {
+    cursor: pointer;
+}
+
+/* Shared by PackageForm.razor and BusinessForm.razor's photo upload field. */
+.form-image-preview {
+    width: 84px;
+    height: 84px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid var(--em-border);
+    flex-shrink: 0;
+}
+
+/* ── AI budget/basket planner (BasketPlanner.razor, Phase 4) ── */
+.planner-hero {
+    background-color: var(--em-surface);
+    background-image:
+        radial-gradient(ellipse 50% 60% at 10% 0%, rgba(31, 138, 76, 0.09) 0%, transparent 100%),
+        radial-gradient(ellipse 40% 50% at 92% 15%, rgba(217, 112, 47, 0.07) 0%, transparent 100%);
+    padding: 3rem 1.5rem 2.5rem;
+}
+
+.planner-hero-inner {
+    max-width: 720px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.planner-hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(31, 138, 76, 0.1);
+    color: var(--em-leaf-dark);
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    margin-bottom: 1.25rem;
+}
+
+.planner-hero-title {
+    font-size: clamp(1.9rem, 4vw, 2.6rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--em-text);
+    margin-bottom: 0.6rem;
+}
+
+.planner-hero-sub {
+    font-size: 0.98rem;
+    line-height: 1.6;
+    color: var(--em-muted);
+    max-width: 560px;
+    margin: 0 auto;
+}
+
+.planner-form-section,
+.planner-result-section {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 1.5rem 1.5rem 0;
+}
+
+.planner-result-section {
+    padding-bottom: 2.5rem;
+}
+
+.planner-form-card,
+.planner-result-card {
+    background: var(--em-surface-raised);
+    border-radius: 16px;
+    box-shadow: var(--em-shadow-md);
+    padding: 1.5rem;
+}
+
+.planner-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.planner-form-label {
+    flex: 1;
+    min-width: 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--em-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.planner-form-hint {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--em-muted);
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.planner-plan-btn {
+    margin-top: 1.25rem;
+    width: 100%;
+    padding: 0.7rem;
+}
+
+.planner-explanation {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    background: rgba(31, 138, 76, 0.08);
+    color: var(--em-text);
+    border-radius: 12px;
+    padding: 0.9rem 1.1rem;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    margin-bottom: 1.25rem;
+}
+
+.planner-explanation i {
+    color: var(--em-leaf-dark);
+    margin-top: 0.15rem;
+    flex-shrink: 0;
+}
+
+.planner-empty {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    color: var(--em-muted);
+}
+
+.planner-empty i {
+    font-size: 2rem;
+    color: var(--em-border-strong);
+    display: block;
+    margin-bottom: 0.75rem;
+}
+
+.planner-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.planner-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--em-border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.planner-item-approved {
+    border-color: var(--em-leaf);
+    background: rgba(31, 138, 76, 0.05);
+}
+
+.planner-item input[type="checkbox"] {
+    margin-top: 0.3rem;
+    flex-shrink: 0;
+}
+
+.planner-item-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.planner-item-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.planner-item-name {
+    font-weight: 700;
+    color: var(--em-text);
+}
+
+.planner-item-price {
+    font-weight: 700;
+    color: var(--em-text);
+    white-space: nowrap;
+}
+
+.planner-item-business {
+    font-size: 0.8rem;
+    color: var(--em-muted);
+    margin-top: 0.15rem;
+}
+
+.planner-item-business i {
+    margin-right: 0.3rem;
+}
+
+.planner-item-reason {
+    font-size: 0.84rem;
+    color: var(--em-muted);
+    font-style: italic;
+    margin-top: 0.35rem;
+}
+
+.planner-result-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--em-border);
+}
+
+.planner-approved-total {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--em-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.planner-approved-total-value {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: var(--em-text);
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+/* ── Dashboard shell (ported from Blazor's MainLayout.razor.css / NavMenu.razor.css) ── */
+.page {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+}
+
+.page > main {
+    flex: 1;
+    background-color: var(--em-bg);
+    min-width: 0;
+}
+
+.page > .sidebar {
+    background-color: var(--em-forest);
+}
+
+@media (min-width: 641px) {
+    .page {
+        flex-direction: row;
+        height: 100vh;
+        height: 100dvh;
+        overflow: hidden;
+    }
+
+    .page > main {
+        overflow-y: auto;
+    }
+
+    .page > .sidebar {
+        width: 240px;
+        height: 100vh;
+        height: 100dvh;
+        position: sticky;
+        top: 0;
+        display: flex;
+        flex-direction: column;
+    }
+}
+
+/* React drives the mobile nav's open/closed state directly, so this is the state-driven
+   equivalent of NavMenu.razor.css's checkbox-hack (:checked ~ .nav-scrollable). */
+.navbar-toggler {
+    appearance: none;
+    cursor: pointer;
+    width: 3.5rem;
+    height: 2.5rem;
+    color: var(--em-text-inverse);
+    position: absolute;
+    top: 0.5rem;
+    right: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+}
+
+.navbar-toggler[aria-expanded="true"] {
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+.sidebar-brand {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    background: radial-gradient(ellipse 90% 80% at 50% -5%, rgba(47, 158, 92, 0.18) 0%, transparent 70%);
+}
+
+.nav-item {
+    margin-bottom: 2px;
+}
+
+.nav-item .nav-link {
+    color: rgba(255, 255, 255, 0.6);
+    background: none;
+    border: none;
+    border-radius: 8px;
+    padding: 0.55rem 0.85rem;
+    display: flex;
+    align-items: center;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.nav-item a.nav-link.active {
+    background-color: rgba(47, 158, 92, 0.14);
+    color: var(--em-text-inverse);
+    font-weight: 600;
+    box-shadow: inset 3px 0 0 var(--em-leaf);
+}
+
+.nav-item .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.07);
+    color: var(--em-text-inverse);
+}
+
+.nav-scrollable {
+    display: none;
+}
+
+.nav-scrollable.nav-scrollable-open {
+    display: block;
+}
+
+@media (min-width: 641px) {
+    .navbar-toggler {
+        display: none;
+    }
+
+    .nav-scrollable {
+        display: block;
+        flex: 1;
+        overflow-y: auto;
+    }
+}
