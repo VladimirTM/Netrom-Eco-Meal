@@ -32,4 +32,19 @@ export const businessesApi = {
   getAll: (publicOnly = false): Promise<BusinessDto[]> => http.get<BusinessDto[]>(`/businesses/all${toQuery({ publicOnly })}`),
 
   getById: (id: string): Promise<BusinessDto> => http.get<BusinessDto>(`/businesses/${id}`),
+
+  apply: (data: BusinessApplyRequest): Promise<BusinessDto> => http.post<BusinessDto>("/businesses/apply", data),
 };
+
+export interface BusinessApplyRequest {
+  name: string;
+  description: string;
+  address: string;
+  imageUrl: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  businessTypeId: string;
+  brandId: string | null;
+  loyaltyPunchThreshold: number | null;
+  loyaltyDiscountAmount: number | null;
+}

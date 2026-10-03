@@ -11,17 +11,22 @@ import { reviewsApi } from "../../api/clients/ReviewsApiClient";
 import type { BusinessDto } from "../../api/models/Business";
 import type { LoyaltyProgress } from "../../api/models/Loyalty";
 import type { KitchenTipDto, PackageDto, ReviewContextDto, ReviewDto } from "../../api/models/Package";
+import { standingOrdersApi } from "../../api/clients/StandingOrdersApiClient";
+import type { StandingOrderDto } from "../../api/models/StandingOrder";
+import ConfirmDialog from "../common/ConfirmDialog";
 import LoadingSpinner from "../common/LoadingSpinner";
 import NotFoundPanel from "../common/NotFoundPanel";
 import PackageDetailModal from "../common/PackageDetailModal";
 import ReportDialog from "../common/ReportDialog";
 import StarRating from "../common/StarRating";
 import { useAuth } from "../../context/AuthContext/auth-context";
+import { useCart } from "../../context/CartContext/cart-context";
 import { useTimeZone } from "../../context/TimeZoneContext/timezone-context";
+import { useToast } from "../../context/ToastContext/toast-context";
 import { useStockHub } from "../../hooks/useStockHub";
 import { activeClosure, formatHoursRow, isOpenNow, todayDayName, WEEK_ORDER } from "../../utils/businessHoursStatus";
+import { ALL_DIETARY_TAGS, isAllergen } from "../../utils/dietaryTags";
 import { formatCurrency } from "../../utils/currency";
-import { isAllergen } from "../../utils/dietaryTags";
 import { getInitial } from "../../utils/textHelpers";
 import { formatDateOnly, formatLocalDate } from "../../utils/dates";
 import { availableQuantity } from "../../utils/packageAvailability";
@@ -39,6 +44,8 @@ function heroStyle(imageUrl: string | null): React.CSSProperties {
 function BusinessDetail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const cart = useCart();
+  const { showToast } = useToast();
   const timeZone = useTimeZone();
   const isCustomer = user?.role === "Customer";
 
@@ -63,6 +70,15 @@ function BusinessDetail() {
   const [newTipText, setNewTipText] = useState("");
   const [submittingTip, setSubmittingTip] = useState(false);
   const [tipError, setTipError] = useState<string | null>(null);
+
+  const [pendingAddPackage, setPendingAddPackage] = useState<PackageDto | null>(null);
+
+  const [myStandingOrders, setMyStandingOrders] = useState<StandingOrderDto[]>([]);
+  const [newStandingPackageTypeId, setNewStandingPackageTypeId] = useState("");
+  const [newStandingDietaryTag, setNewStandingDietaryTag] = useState("");
+  const [newStandingBudget, setNewStandingBudget] = useState(20);
+  const [savingStandingOrder, setSavingStandingOrder] = useState(false);
+  const [standingOrderError, setStandingOrderError] = useState<string | null>(null);
 
   const [reportOpen, setReportOpen] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
@@ -114,6 +130,8 @@ function BusinessDetail() {
       if (isCustomer) {
         const progress = await loyaltyApi.getMyProgress(id);
         if (!cancelled) setLoyaltyProgress(progress);
+        const standingOrders = await standingOrdersApi.getMine();
+        if (!cancelled) setMyStandingOrders(standingOrders);
       }
 
       const [businessReviews, context, tips] = await Promise.all([
@@ -159,6 +177,59 @@ function BusinessDetail() {
   async function toggleFavorite() {
     if (!id) return;
     setIsFavorite(await favoritesApi.toggle(id));
+  }
+
+  const businessPackageTypes = Array.from(new Map(packages.map((p) => [p.packageTypeId, p.packageTypeName])).entries()).sort((a, b) =>
+    a[1].localeCompare(b[1]),
+  );
+  const myStandingOrder = myStandingOrders.find((s) => s.businessId === id) ?? null;
+
+  function addPackageToBasket(pkg: PackageDto) {
+    if (!business) return;
+    if (cart.wouldReplaceCart(business.id)) {
+      setPendingAddPackage(pkg);
+      return;
+    }
+    cart.addItem(business.id, business.name, pkg, 1);
+    showToast(`Added ${pkg.name} to your basket.`, "success");
+  }
+
+  function confirmAddPackage() {
+    const pkg = pendingAddPackage;
+    setPendingAddPackage(null);
+    if (!pkg || !business) return;
+    cart.addItem(business.id, business.name, pkg, 1);
+    showToast(`Added ${pkg.name} to your basket.`, "success");
+  }
+
+  async function createStandingOrderAsync() {
+    if (!id) return;
+    setSavingStandingOrder(true);
+    setStandingOrderError(null);
+    try {
+      const created = await standingOrdersApi.create(id, newStandingPackageTypeId || null, newStandingDietaryTag || null, newStandingBudget);
+      setMyStandingOrders((prev) => [...prev, created]);
+    } catch (error) {
+      setStandingOrderError(error instanceof Error ? error.message : "Couldn't save that standing order.");
+    } finally {
+      setSavingStandingOrder(false);
+    }
+  }
+
+  async function toggleStandingOrderAsync() {
+    if (!myStandingOrder) return;
+    setSavingStandingOrder(true);
+    await standingOrdersApi.update(myStandingOrder.id, myStandingOrder.maxWeeklySpend, !myStandingOrder.isActive);
+    setMyStandingOrders((prev) => prev.map((s) => (s.id === myStandingOrder.id ? { ...s, isActive: !s.isActive } : s)));
+    setSavingStandingOrder(false);
+  }
+
+  async function deleteStandingOrderAsync() {
+    if (!myStandingOrder) return;
+    setSavingStandingOrder(true);
+    await standingOrdersApi.remove(myStandingOrder.id);
+    setMyStandingOrders((prev) => prev.filter((s) => s.id !== myStandingOrder.id));
+    setSavingStandingOrder(false);
   }
 
   async function submitReview() {
@@ -323,7 +394,7 @@ function BusinessDetail() {
             ) : (
               <div className="biz-pkg-list">
                 {packages.map((pkg) => {
-                  const available = availableQuantity(pkg.quantity, reservedByPackage[pkg.id] ?? 0);
+                  const available = availableQuantity(pkg.quantity, reservedByPackage[pkg.id] ?? 0, cart.inBasketQuantity(pkg.id));
                   const closingSoon = closingSoonLabel(pkg.pickupEnd);
                   return (
                     <div className="biz-pkg-row biz-pkg-row-clickable" key={pkg.id} onClick={() => setSelectedPackage(pkg)}>
@@ -357,6 +428,19 @@ function BusinessDetail() {
                       <div className="biz-pkg-side">
                         <div className="biz-pkg-price">{formatCurrency(pkg.price)}</div>
                         <div className="biz-pkg-qty">{available} left</div>
+                        {isCustomer && (
+                          <button
+                            type="button"
+                            className="biz-pkg-add-btn"
+                            disabled={available <= 0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addPackageToBasket(pkg);
+                            }}
+                          >
+                            <i className="bi bi-bag-plus" /> Add
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -364,6 +448,93 @@ function BusinessDetail() {
               </div>
             )}
           </section>
+
+          {isCustomer && (
+            <>
+              <div className="biz-modal-divider" />
+
+              <section className="biz-modal-section">
+                <h3 className="biz-modal-section-title">
+                  <i className="bi bi-arrow-repeat" /> Standing order
+                </h3>
+
+                {myStandingOrder === null ? (
+                  <>
+                    <p className="biz-modal-review-hint">
+                      Save your usual here — we&apos;ll add it to your basket and notify you the moment it&apos;s back, up to a weekly budget
+                      you set.
+                    </p>
+                    <div className="row g-2 align-items-end">
+                      <div className="col-sm-4">
+                        <label className="form-label small">
+                          Package type <span className="text-muted">(optional)</span>
+                        </label>
+                        <select className="form-select form-select-sm" value={newStandingPackageTypeId} onChange={(e) => setNewStandingPackageTypeId(e.target.value)}>
+                          <option value="">Any type</option>
+                          {businessPackageTypes.map(([typeId, typeName]) => (
+                            <option value={typeId} key={typeId}>
+                              {typeName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-sm-4">
+                        <label className="form-label small">
+                          Dietary tag <span className="text-muted">(optional)</span>
+                        </label>
+                        <select className="form-select form-select-sm" value={newStandingDietaryTag} onChange={(e) => setNewStandingDietaryTag(e.target.value)}>
+                          <option value="">Any</option>
+                          {ALL_DIETARY_TAGS.map((tag) => (
+                            <option value={tag} key={tag}>
+                              {tag}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-sm-3">
+                        <label className="form-label small">Weekly budget</label>
+                        <div className="input-group input-group-sm">
+                          <input
+                            type="number"
+                            min={1}
+                            step={0.5}
+                            className="form-control"
+                            value={newStandingBudget}
+                            onChange={(e) => setNewStandingBudget(Number(e.target.value))}
+                          />
+                          <span className="input-group-text">lei</span>
+                        </div>
+                      </div>
+                      <div className="col-sm-1">
+                        <button type="button" className="btn btn-primary btn-sm w-100" disabled={savingStandingOrder} onClick={() => void createStandingOrderAsync()}>
+                          {savingStandingOrder ? <span className="spinner-border spinner-border-sm" role="status" /> : <span>Save</span>}
+                        </button>
+                      </div>
+                    </div>
+                    {standingOrderError && <div className="text-danger small mt-1">{standingOrderError}</div>}
+                  </>
+                ) : (
+                  <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div className="small">
+                      <strong>{myStandingOrder.packageTypeName ?? "Any package"}</strong>
+                      {myStandingOrder.dietaryTag ? ` · ${myStandingOrder.dietaryTag}` : ""} — up to {formatCurrency(myStandingOrder.maxWeeklySpend)}/week
+                      <span className={`badge ms-2 ${myStandingOrder.isActive ? "bg-success" : "bg-secondary"}`}>
+                        {myStandingOrder.isActive ? "Active" : "Paused"}
+                      </span>
+                    </div>
+                    <div className="d-flex gap-2">
+                      <button type="button" className="btn btn-outline-secondary btn-sm" disabled={savingStandingOrder} onClick={() => void toggleStandingOrderAsync()}>
+                        {myStandingOrder.isActive ? "Pause" : "Resume"}
+                      </button>
+                      <button type="button" className="btn btn-outline-danger btn-sm" disabled={savingStandingOrder} onClick={() => void deleteStandingOrderAsync()}>
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
+            </>
+          )}
 
           <div className="biz-modal-divider" />
 
@@ -491,7 +662,9 @@ function BusinessDetail() {
 
       <PackageDetailModal
         pkg={selectedPackage}
-        availableQuantity={selectedPackage ? availableQuantity(selectedPackage.quantity, reservedByPackage[selectedPackage.id] ?? 0) : 0}
+        availableQuantity={
+          selectedPackage ? availableQuantity(selectedPackage.quantity, reservedByPackage[selectedPackage.id] ?? 0, cart.inBasketQuantity(selectedPackage.id)) : 0
+        }
         ratingAverage={selectedPackage ? packageRatingAverage(selectedPackage.id) : 0}
         reviewCount={selectedPackage ? packageReviews(selectedPackage.id).length : 0}
         onClose={() => setSelectedPackage(null)}
@@ -506,6 +679,17 @@ function BusinessDetail() {
           setReportOpen(false);
           setReportTipId(null);
         }}
+      />
+
+      <ConfirmDialog
+        isOpen={pendingAddPackage !== null}
+        title="Start a new basket?"
+        message={`Your basket has items from ${cart.businessName}. Adding ${pendingAddPackage?.name ?? "this package"} will clear it and start a new one.`}
+        confirmLabel="Start new basket"
+        cancelLabel="Keep current basket"
+        confirmClass="btn-primary"
+        onConfirm={confirmAddPackage}
+        onCancel={() => setPendingAddPackage(null)}
       />
     </div>
   );

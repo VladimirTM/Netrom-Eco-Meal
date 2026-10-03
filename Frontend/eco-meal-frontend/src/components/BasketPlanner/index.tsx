@@ -2,10 +2,15 @@ import { useState } from "react";
 import { aiApi } from "../../api/clients/AiApiClient";
 import type { BasketPlanDto } from "../../api/models/Ai";
 import { ApiError } from "../../api/base/http";
+import ConfirmDialog from "../common/ConfirmDialog";
+import { useCart } from "../../context/CartContext/cart-context";
+import { useToast } from "../../context/ToastContext/toast-context";
 import { ALLERGEN_TAGS, ALL_DIETARY_TAGS } from "../../utils/dietaryTags";
 import { formatCurrency } from "../../utils/currency";
 
 function BasketPlanner() {
+  const cart = useCart();
+  const { showToast } = useToast();
   const [peopleCount, setPeopleCount] = useState(4);
   const [budget, setBudget] = useState<number | undefined>(30);
   const [dietaryTag, setDietaryTag] = useState("");
@@ -14,8 +19,31 @@ function BasketPlanner() {
   const [error, setError] = useState<string | null>(null);
   const [plan, setPlan] = useState<BasketPlanDto | null>(null);
   const [approved, setApproved] = useState<Set<string>>(new Set());
+  const [pendingReplace, setPendingReplace] = useState(false);
 
-  const approvedTotal = plan ? plan.items.filter((i) => approved.has(i.package.id)).reduce((sum, i) => sum + i.lineTotal, 0) : 0;
+  const approvedItems = plan ? plan.items.filter((i) => approved.has(i.package.id)) : [];
+  const approvedTotal = approvedItems.reduce((sum, i) => sum + i.lineTotal, 0);
+
+  // The planner always proposes a basket from a single kitchen (its own prompt's own rule), so
+  // only one replace-check is needed: against whatever's already in the cart.
+  function addApprovedToBasket() {
+    if (approvedItems.length === 0) return;
+    const { businessId, businessName } = approvedItems[0].package;
+    if (cart.wouldReplaceCart(businessId)) {
+      setPendingReplace(true);
+      return;
+    }
+    for (const item of approvedItems) cart.addItem(businessId, businessName, item.package, item.quantity);
+    showToast(`Added ${approvedItems.length} item${approvedItems.length === 1 ? "" : "s"} to your basket.`, "success");
+  }
+
+  function confirmReplace() {
+    setPendingReplace(false);
+    if (approvedItems.length === 0) return;
+    const { businessId, businessName } = approvedItems[0].package;
+    for (const item of approvedItems) cart.addItem(businessId, businessName, item.package, item.quantity);
+    showToast(`Added ${approvedItems.length} item${approvedItems.length === 1 ? "" : "s"} to your basket.`, "success");
+  }
 
   async function planBasket() {
     if (planning || !budget || budget <= 0 || peopleCount < 1) return;
@@ -169,9 +197,7 @@ function BasketPlanner() {
                     <span>Approved total</span>
                     <span className="planner-approved-total-value">{formatCurrency(approvedTotal)}</span>
                   </div>
-                  {/* "Add approved to basket" needs CartContext, which is Phase 6 scope — the planner itself (propose + approve/reject +
-                      total) is fully live; only the final add-to-cart hop is deferred. */}
-                  <button type="button" className="btn btn-primary" disabled title="Basket arrives in Phase 6">
+                  <button type="button" className="btn btn-primary" disabled={approvedItems.length === 0} onClick={addApprovedToBasket}>
                     <i className="bi bi-bag-plus me-2" />
                     Add approved to basket
                   </button>
@@ -181,6 +207,17 @@ function BasketPlanner() {
           </div>
         </section>
       )}
+
+      <ConfirmDialog
+        isOpen={pendingReplace}
+        title="Start a new basket?"
+        message={`Your basket has items from ${cart.businessName}. Adding this plan will clear it and start a new one.`}
+        confirmLabel="Start new basket"
+        cancelLabel="Keep current basket"
+        confirmClass="btn-primary"
+        onConfirm={confirmReplace}
+        onCancel={() => setPendingReplace(false)}
+      />
     </>
   );
 }

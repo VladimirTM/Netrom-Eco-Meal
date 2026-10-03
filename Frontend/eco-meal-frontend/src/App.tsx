@@ -3,6 +3,8 @@ import AuthProvider from "./context/AuthContext/AuthProvider";
 import ThemeProvider from "./context/ThemeContext/ThemeProvider";
 import ToastProvider from "./context/ToastContext/ToastProvider";
 import TimeZoneProvider from "./context/TimeZoneContext/TimeZoneProvider";
+import CartProvider from "./context/CartContext/CartProvider";
+import NotificationProvider from "./context/NotificationContext/NotificationProvider";
 import ScrollAndFocusManager from "./routes/ScrollAndFocusManager";
 import RequireRole from "./routes/RequireRole";
 import EmptyLayout from "./layouts/EmptyLayout";
@@ -24,6 +26,17 @@ import Impact from "./components/Impact";
 import BasketPlanner from "./components/BasketPlanner";
 import Dashboard from "./components/Dashboard";
 import NotFound from "./components/NotFound";
+import PaymentReturn from "./components/PaymentReturn";
+import PaymentCancel from "./components/PaymentCancel";
+import Orders from "./components/Orders";
+import OrderPickupPass from "./components/OrderPickupPass";
+import TripPlanner from "./components/TripPlanner";
+import RescueCircleList from "./components/RescueCircleList";
+import RescueCircleInvite from "./components/RescueCircleInvite";
+import RescueCircleReturn from "./components/RescueCircleReturn";
+import StandingOrders from "./components/StandingOrders";
+import Referrals from "./components/Referrals";
+import BusinessApply from "./components/BusinessApply";
 
 function AppRoutes() {
   return (
@@ -36,6 +49,33 @@ function AppRoutes() {
         <Route path="/account/resend-confirmation" element={<ResendConfirmation />} />
         <Route path="/account/forgot-password" element={<ForgotPassword />} />
         <Route path="/account/reset-password" element={<ResetPassword />} />
+
+        {/* Stripe redirect targets — CheckoutService.cs/RescueCircleService.cs build these exact
+            paths into their success_url/cancel_url, so they must not change. */}
+        <Route
+          path="/checkout/return"
+          element={
+            <RequireRole roles={["Customer"]}>
+              <PaymentReturn />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/checkout/cancel"
+          element={
+            <RequireRole roles={["Customer"]}>
+              <PaymentCancel />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/circles/return"
+          element={
+            <RequireRole roles={["Customer"]}>
+              <RescueCircleReturn />
+            </RequireRole>
+          }
+        />
       </Route>
 
       {/* Public-facing shell — anonymous visitors and customers. */}
@@ -62,6 +102,72 @@ function AppRoutes() {
             </RequireRole>
           }
         />
+
+        <Route
+          path="/orders"
+          element={
+            <RequireRole roles={["Customer"]}>
+              <Orders />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/orders/pickup/:id"
+          element={
+            <RequireRole roles={["Customer"]}>
+              <OrderPickupPass />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/trip-planner"
+          element={
+            <RequireRole roles={["Customer"]}>
+              <TripPlanner />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/circles"
+          element={
+            <RequireRole roles={["Customer"]}>
+              <RescueCircleList />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/circles/:circleId"
+          element={
+            <RequireRole roles={["Customer"]}>
+              <RescueCircleInvite />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/standing-orders"
+          element={
+            <RequireRole roles={["Customer"]}>
+              <StandingOrders />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/referrals"
+          element={
+            <RequireRole roles={["Customer"]}>
+              <Referrals />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/businesses/apply"
+          element={
+            <RequireRole roles={["Customer", "BusinessManager"]}>
+              <BusinessApply />
+            </RequireRole>
+          }
+        />
+
         <Route path="/not-found" element={<NotFound />} />
         <Route path="*" element={<NotFound />} />
       </Route>
@@ -86,8 +192,12 @@ function App() {
       <ThemeProvider>
         <TimeZoneProvider>
           <ToastProvider>
-            <ScrollAndFocusManager />
-            <AppRoutes />
+            <CartProvider>
+              <NotificationProvider>
+                <ScrollAndFocusManager />
+                <AppRoutes />
+              </NotificationProvider>
+            </CartProvider>
           </ToastProvider>
         </TimeZoneProvider>
       </ThemeProvider>

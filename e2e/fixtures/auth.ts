@@ -16,27 +16,40 @@ async function fillReliably(locator: Locator, value: string) {
   }
 }
 
-// Login.razor is a plain HTML form POST (not client-rendered), same shape the React app's own
-// login page will keep — user-visible label/role selectors only, per Phase 0's rule.
+// Login.razor was a plain HTML form POST (not client-rendered); the React login page (Phase 4) is
+// a controlled form submitted via fetch instead — no native `action` attribute to find, so the two
+// targets need different submission strategies. Callers stay unchanged either way — user-visible
+// label/role selectors only, per Phase 0's rule.
 //
-// Repeat visits to /account/login within one browser context intermittently and unpredictably
-// clear the Email field between our fill() and the submit click (reproduced with retry-and-verify
-// fills, reordered fields, and autocomplete disabled — none fully eliminated it, most likely some
-// Chromium autofill/bfcache interaction specific to this environment). Setting both fields' values
-// directly and submitting the form via JS sidesteps the browser's normal focus/blur/autofill
-// pipeline entirely, which the UI-driven approach could not reliably avoid.
+// Blazor-specific repeat-visit flake (observed only against Blazor): repeat visits to
+// /account/login within one browser context intermittently and unpredictably clear the Email field
+// between our fill() and the submit click (reproduced with retry-and-verify fills, reordered
+// fields, and autocomplete disabled — none fully eliminated it, most likely some Chromium
+// autofill/bfcache interaction specific to this environment). Setting both fields' values directly
+// and submitting the form via JS sidesteps the browser's normal focus/blur/autofill pipeline
+// entirely, which the UI-driven approach could not reliably avoid. The React login page hasn't
+// shown this flake, so it uses plain fill+click.
 export async function login(page: Page, email: string, password: string) {
   await page.goto('/account/login');
   await expect(page.getByLabel('Email')).toBeVisible();
-  await page.evaluate(
-    ([email, password]) => {
-      const form = document.querySelector('form[action="api/auth/login"]') as HTMLFormElement;
-      (form.querySelector('#login-email') as HTMLInputElement).value = email;
-      (form.querySelector('#login-password') as HTMLInputElement).value = password;
-      form.requestSubmit();
-    },
-    [email, password],
-  );
+
+  const blazorForm = page.locator('form[action="api/auth/login"]');
+  if ((await blazorForm.count()) > 0) {
+    await page.evaluate(
+      ([email, password]) => {
+        const form = document.querySelector('form[action="api/auth/login"]') as HTMLFormElement;
+        (form.querySelector('#login-email') as HTMLInputElement).value = email;
+        (form.querySelector('#login-password') as HTMLInputElement).value = password;
+        form.requestSubmit();
+      },
+      [email, password],
+    );
+  } else {
+    await fillReliably(page.getByLabel('Email'), email);
+    await fillReliably(page.getByLabel('Password'), password);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+  }
+
   // A failed login re-renders the same /account/login with ?error=; success redirects away.
   await page.waitForURL((url) => !url.pathname.startsWith('/account/login'));
 }

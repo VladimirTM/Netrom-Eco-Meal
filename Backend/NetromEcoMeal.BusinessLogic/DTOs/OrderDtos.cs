@@ -3,7 +3,11 @@ using NetromEcoMeal.Services.Interfaces;
 
 namespace NetromEcoMeal.DTOs;
 
-public record OrderLineDto(Guid PackageId, string PackageName, int Quantity, decimal UnitPrice);
+// WeightKg lets the frontend compute per-order/hero "kg saved" stats itself (Orders.razor's own
+// formula: Completed orders' Sum(Quantity * Package.WeightKg)) without a dedicated endpoint.
+// PickupStart/PickupEnd let it compute the same "widest span across all lines" pickup-window label
+// Orders.razor/OrderPickupPass.razor show, without a dedicated endpoint either.
+public record OrderLineDto(Guid PackageId, string PackageName, int Quantity, decimal UnitPrice, decimal WeightKg, DateTime PickupStart, DateTime PickupEnd);
 
 public record PickupPassDto(Guid Id, string Label, DateTime CreatedAt, DateTime? RedeemedAt);
 
@@ -17,7 +21,9 @@ public record OrderDto(
     public static OrderDto FromEntity(Order o) => new(
         o.Id, o.OrderNumber, o.BusinessId, o.Business?.Name ?? "", o.UserId, o.User?.Name ?? "",
         o.Status?.Name ?? "", o.CreatedAt, o.LogisticsNote,
-        o.OrderPackages.Select(op => new OrderLineDto(op.PackageId, op.Package?.Name ?? "", op.Quantity, op.Package?.Price ?? 0m)).ToList(),
+        o.OrderPackages.Select(op => new OrderLineDto(
+            op.PackageId, op.Package?.Name ?? "", op.Quantity, op.Package?.Price ?? 0m, op.Package?.WeightKg ?? 0m,
+            op.Package?.PickupStart ?? o.CreatedAt, op.Package?.PickupEnd ?? o.CreatedAt)).ToList(),
         o.OrderPackages.Sum(op => op.Quantity * (op.Package?.Price ?? 0m)),
         o.PickupPasses.Select(p => new PickupPassDto(p.Id, p.Label, p.CreatedAt, p.RedeemedAt)).ToList(),
         o.Payment is null ? null : new PaymentDto(o.Payment.Id, o.Payment.Amount, o.Payment.Currency, o.Payment.Status, o.Payment.CreatedAt, o.Payment.RefundedAt));

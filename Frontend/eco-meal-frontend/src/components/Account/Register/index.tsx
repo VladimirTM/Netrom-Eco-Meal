@@ -17,18 +17,18 @@ function Register() {
   const [referralCode, setReferralCode] = useState(searchParams.get("ref") ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    setInfo(null);
 
     try {
       const response = await authApi.register({ name, email, password, referralCode });
       if (response.info) {
-        setInfo(response.info);
+        // Confirmation required — Login already knows how to show an ?info= banner (see its own
+        // `info` param handling), so land there instead of leaving the user stuck on this page.
+        navigate(`/account/login?info=${encodeURIComponent(response.info)}`, { replace: true });
         return;
       }
       login(response.token!, response.user!);
@@ -53,68 +53,74 @@ function Register() {
 
         <h1 className="login-heading">Create account</h1>
 
-        {info ? (
-          <div className="alert alert-success py-2 small mb-3" role="alert">{info}</div>
-        ) : (
-          <form onSubmit={handleSubmit}>
-            <div className="mb-3">
-              <label className="form-label fw-semibold" htmlFor="register-name">Full name</label>
-              <input
-                id="register-name"
-                className="form-control"
-                type="text"
-                required
-                placeholder="Jane Doe"
-                autoComplete="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
+        <form onSubmit={handleSubmit}>
+          <div className="mb-3">
+            <label className="form-label fw-semibold" htmlFor="register-name">
+              Full name
+            </label>
+            <input
+              id="register-name"
+              className="form-control"
+              type="text"
+              required
+              placeholder="Jane Doe"
+              autoComplete="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="mb-3">
+            <label className="form-label fw-semibold" htmlFor="register-email">
+              Email
+            </label>
+            <input
+              id="register-email"
+              className="form-control"
+              type="email"
+              required
+              placeholder="you@example.com"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div className="mb-4">
+            <label className="form-label fw-semibold" htmlFor="register-password">
+              Password
+            </label>
+            <input
+              id="register-password"
+              className="form-control"
+              type="password"
+              required
+              placeholder="••••••••"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          <div className="mb-4">
+            <label className="form-label fw-semibold" htmlFor="register-referral">
+              Referral code <span className="text-muted fw-normal">(optional)</span>
+            </label>
+            <input
+              id="register-referral"
+              className="form-control"
+              type="text"
+              placeholder="Got a code from a friend?"
+              value={referralCode}
+              onChange={(e) => setReferralCode(e.target.value)}
+            />
+          </div>
+          {error && (
+            <div className="alert alert-danger py-2 small mb-3" role="alert">
+              {error}
             </div>
-            <div className="mb-3">
-              <label className="form-label fw-semibold" htmlFor="register-email">Email</label>
-              <input
-                id="register-email"
-                className="form-control"
-                type="email"
-                required
-                placeholder="you@example.com"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div className="mb-4">
-              <label className="form-label fw-semibold" htmlFor="register-password">Password</label>
-              <input
-                id="register-password"
-                className="form-control"
-                type="password"
-                required
-                placeholder="••••••••"
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <div className="mb-4">
-              <label className="form-label fw-semibold" htmlFor="register-referral">
-                Referral code <span className="text-muted fw-normal">(optional)</span>
-              </label>
-              <input
-                id="register-referral"
-                className="form-control"
-                type="text"
-                placeholder="Got a code from a friend?"
-                value={referralCode}
-                onChange={(e) => setReferralCode(e.target.value)}
-              />
-            </div>
-            {error && <div className="alert alert-danger py-2 small mb-3" role="alert">{error}</div>}
-            <button className="btn btn-primary w-100 py-2 fw-semibold" type="submit" disabled={busy}>
-              {busy ? "Creating account…" : "Create account"}
-            </button>
-          </form>
-        )}
+          )}
+          <button className="btn btn-primary w-100 py-2 fw-semibold" type="submit" disabled={busy}>
+            {busy ? "Creating account…" : "Create account"}
+          </button>
+        </form>
 
         <p className="login-footer-link">
           Already have an account? <Link to="/account/login">Sign in</Link>

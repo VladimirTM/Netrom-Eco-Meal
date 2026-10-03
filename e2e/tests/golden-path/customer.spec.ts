@@ -42,7 +42,9 @@ test.describe('Customer golden path', () => {
     await page.goto(`/businesses/${seededBusinesses.poartaDeAurBakery}`);
     await page.locator('.biz-pkg-row', { hasText: 'Golden Goal Bread Bag' }).getByRole('button', { name: 'Add' }).click();
     await page.getByRole('button', { name: 'Open your basket' }).click();
-    await expect(page.getByText('Poarta de Aur Bakery', { exact: true })).toBeVisible();
+    // Scoped to the basket panel itself — the business page's own <h1> behind it repeats the
+    // same name as plain text, so an unscoped getByText matches both.
+    await expect(page.getByRole('complementary').getByText('Poarta de Aur Bakery', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Close basket' }).click();
 
     // Single-business basket rule: adding from a different business prompts to replace it.
@@ -53,7 +55,7 @@ test.describe('Customer golden path', () => {
 
     // Checkout the replaced basket with the Stripe test card.
     await page.getByRole('button', { name: 'Open your basket' }).click();
-    await expect(page.getByText('Stadionul de Gusturi', { exact: true })).toBeVisible();
+    await expect(page.getByRole('complementary').getByText('Stadionul de Gusturi', { exact: true })).toBeVisible();
     const orderNumber = await payWithStripeTestCard(page, accounts.customer.email);
 
     // The new order shows up in /orders. The seed data has other Stadionul de Gusturi orders
@@ -71,7 +73,9 @@ test.describe('Customer golden path', () => {
     // Open the pickup pass for the seeded Confirmed order (VAR Bistro), which the seed data
     // splits into 3 passes — exercises the pass switcher too. Filter to the Confirmed tab first:
     // with enough repeat runs, pagination alone could push it past an unfiltered first page.
-    await page.getByRole('button', { name: 'Confirmed' }).click();
+    // exact:true — each order ticket is itself role="button" and its accessible name (the whole
+    // card's text) contains "Confirmed" too, which an unscoped substring match would also hit.
+    await page.getByRole('button', { name: 'Confirmed', exact: true }).click();
     const confirmedTicket = page.locator('.order-ticket', { hasText: 'VAR Bistro' }).first();
     await confirmedTicket.getByRole('link', { name: 'Show QR code' }).click();
     await page.waitForURL(/\/orders\/pickup\//);

@@ -2,10 +2,13 @@ import { useState } from "react";
 import { reportsApi } from "../../../api/clients/ReportsApiClient";
 import type { PackageDto } from "../../../api/models/Package";
 import { useAuth } from "../../../context/AuthContext/auth-context";
+import { useCart } from "../../../context/CartContext/cart-context";
 import { useTimeZone } from "../../../context/TimeZoneContext/timezone-context";
+import { useToast } from "../../../context/ToastContext/toast-context";
 import { formatCurrency } from "../../../utils/currency";
 import { isAllergen } from "../../../utils/dietaryTags";
 import { formatPickupWindow } from "../../../utils/packagePickup";
+import ConfirmDialog from "../ConfirmDialog";
 import ReportDialog from "../ReportDialog";
 import StarRating from "../StarRating";
 
@@ -17,15 +20,17 @@ interface PackageDetailModalProps {
   onClose: () => void;
 }
 
-// Ports PackageDetailModal.razor. "Add to basket" is Phase 6 scope (it needs CartContext, which
-// doesn't exist yet) — this shows the same facts/report flow Phase 5 owns and leaves the
-// available-quantity line to double as the add-to-cart button's eventual home.
+// Ports PackageDetailModal.razor, plus the "add to basket" control.
 function PackageDetailModal({ pkg, availableQuantity, ratingAverage, reviewCount, onClose }: PackageDetailModalProps) {
   const { user } = useAuth();
+  const cart = useCart();
+  const { showToast } = useToast();
   const timeZone = useTimeZone();
   const [reportOpen, setReportOpen] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
   const [reportSent, setReportSent] = useState(false);
+  const [addQuantity, setAddQuantity] = useState(1);
+  const [pendingReplace, setPendingReplace] = useState(false);
 
   // React's documented "adjusting state when a prop changes" pattern — a fresh package selection
   // resets any leftover report state from the previous one, without a useEffect roundtrip.
@@ -36,11 +41,13 @@ function PackageDetailModal({ pkg, availableQuantity, ratingAverage, reviewCount
       setReportOpen(false);
       setReportSent(false);
     }
+    setAddQuantity(1);
   }
 
   if (!pkg) return null;
 
   const heroStyle = pkg.imageUrl ? { backgroundImage: `url('${pkg.imageUrl}')` } : undefined;
+  const clampedAddQuantity = Math.max(1, Math.min(addQuantity, Math.max(1, availableQuantity)));
 
   async function submitReport(reason: string) {
     if (!pkg || !reason.trim()) return;
@@ -49,6 +56,23 @@ function PackageDetailModal({ pkg, availableQuantity, ratingAverage, reviewCount
     setReportBusy(false);
     setReportOpen(false);
     setReportSent(true);
+  }
+
+  function addToBasket() {
+    if (!pkg || availableQuantity <= 0) return;
+    if (cart.wouldReplaceCart(pkg.businessId)) {
+      setPendingReplace(true);
+      return;
+    }
+    cart.addItem(pkg.businessId, pkg.businessName, pkg, clampedAddQuantity);
+    showToast(`Added ${pkg.name} to your basket.`, "success");
+  }
+
+  function confirmReplace() {
+    setPendingReplace(false);
+    if (!pkg) return;
+    cart.addItem(pkg.businessId, pkg.businessName, pkg, clampedAddQuantity);
+    showToast(`Added ${pkg.name} to your basket.`, "success");
   }
 
   return (
@@ -107,6 +131,35 @@ function PackageDetailModal({ pkg, availableQuantity, ratingAverage, reviewCount
           </div>
 
           {user?.role === "Customer" && (
+            <>
+              {availableQuantity > 0 ? (
+                <div className="d-flex align-items-center gap-2 mb-3">
+                  <div className="cart-line-controls">
+                    <button type="button" className="cart-step-btn" disabled={clampedAddQuantity <= 1} onClick={() => setAddQuantity((q) => q - 1)}>
+                      <i className="bi bi-dash" />
+                    </button>
+                    <span className="cart-line-qty">{clampedAddQuantity}</span>
+                    <button
+                      type="button"
+                      className="cart-step-btn"
+                      disabled={clampedAddQuantity >= availableQuantity}
+                      onClick={() => setAddQuantity((q) => q + 1)}
+                    >
+                      <i className="bi bi-plus" />
+                    </button>
+                  </div>
+                  <button type="button" className="btn btn-primary flex-grow-1" onClick={addToBasket}>
+                    <i className="bi bi-bag-plus me-2" />
+                    Add to basket
+                  </button>
+                </div>
+              ) : (
+                <p className="text-muted small text-center mb-3">Sold out for now.</p>
+              )}
+            </>
+          )}
+
+          {user?.role === "Customer" && (
             <button type="button" className="btn btn-link btn-sm w-100 text-muted" onClick={() => setReportOpen(true)}>
               <i className="bi bi-flag" /> Report this package
             </button>
@@ -126,6 +179,17 @@ function PackageDetailModal({ pkg, availableQuantity, ratingAverage, reviewCount
         busy={reportBusy}
         onSubmit={submitReport}
         onCancel={() => setReportOpen(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={pendingReplace}
+        title="Start a new basket?"
+        message={`Your basket has items from ${cart.businessName}. Adding ${pkg.name} will clear it and start a new one.`}
+        confirmLabel="Start new basket"
+        cancelLabel="Keep current basket"
+        confirmClass="btn-primary"
+        onConfirm={confirmReplace}
+        onCancel={() => setPendingReplace(false)}
       />
     </>
   );
