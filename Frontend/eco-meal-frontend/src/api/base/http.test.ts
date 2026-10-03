@@ -3,11 +3,13 @@ import { http as mswHttp, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { http, setUnauthorizedHandler, TOKEN_KEY, ApiError } from "./http";
 
-const API_URL = import.meta.env.VITE_API_URL;
-
+// Origin-agnostic ("*/path") rather than built from VITE_API_URL: that env var is only ever set
+// via a local, gitignored .env file (never committed — see .env.example), so a fresh checkout
+// with no .env has it undefined, and axios then sends these as bare relative paths with no origin
+// at all. A handler built from `${undefined}/unauthorized` silently never matches in that case.
 const server = setupServer(
-  mswHttp.get(`${API_URL}/unauthorized`, () => HttpResponse.json({ error: "nope", code: "bad" }, { status: 401 })),
-  mswHttp.get(`${API_URL}/structured-error`, () =>
+  mswHttp.get("*/unauthorized", () => HttpResponse.json({ error: "nope", code: "bad" }, { status: 401 })),
+  mswHttp.get("*/structured-error", () =>
     HttpResponse.json({ error: "Invalid email or password.", code: "invalid_credentials" }, { status: 401 }),
   ),
 );

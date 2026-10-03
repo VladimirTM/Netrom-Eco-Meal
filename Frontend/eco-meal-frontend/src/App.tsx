@@ -17,6 +17,11 @@ import ResetPassword from "./components/Account/ResetPassword";
 import AccountSettings from "./components/Account/AccountSettings";
 import AccessDenied from "./components/Account/AccessDenied";
 import Home from "./components/Home";
+import BusinessDetail from "./components/BusinessDetail";
+import Brands from "./components/Brands";
+import BrandDetail from "./components/BrandDetail";
+import Impact from "./components/Impact";
+import BasketPlanner from "./components/BasketPlanner";
 import Dashboard from "./components/Dashboard";
 import NotFound from "./components/NotFound";
 
@@ -36,6 +41,18 @@ function AppRoutes() {
       {/* Public-facing shell — anonymous visitors and customers. */}
       <Route element={<PublicLayout />}>
         <Route path="/" element={<Home />} />
+        <Route path="/businesses/:id" element={<BusinessDetail />} />
+        <Route path="/brands" element={<Brands />} />
+        <Route path="/brands/:id" element={<BrandDetail />} />
+        <Route path="/impact" element={<Impact />} />
+        <Route
+          path="/plan-basket"
+          element={
+            <RequireRole roles={["Customer"]}>
+              <BasketPlanner />
+            </RequireRole>
+          }
+        />
         <Route path="/account/access-denied" element={<AccessDenied />} />
         <Route
           path="/account/settings"

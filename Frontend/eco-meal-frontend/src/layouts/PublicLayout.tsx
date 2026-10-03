@@ -5,11 +5,12 @@ import ThemeToggle from "../components/common/ThemeToggle";
 const currentYear = new Date().getFullYear();
 
 // Mirrors Blazor's PublicLayout.razor — the customer-facing header/footer shell. Feature icons
-// (impact, brands, basket, notifications, ...) are added as their own phases bring in the pages
-// behind them; for now this only wires up the chrome every later page will sit inside of.
+// (cart, notifications, orders, ...) are added as their own phases bring in the pages behind
+// them; Phase 5 adds impact/brands/plan-basket, the three it owns.
 function PublicLayout() {
   const { user, isAuthenticated, logout } = useAuth();
   const isStaff = user?.role === "Admin" || user?.role === "BusinessManager";
+  const isCustomer = user?.role === "Customer";
 
   return (
     <div className="public-shell">
@@ -22,6 +23,17 @@ function PublicLayout() {
 
           {isAuthenticated ? (
             <div className="d-flex align-items-center gap-2">
+              <Link to="/impact" className="public-cart-btn" title="Community impact leaderboard" aria-label="Community impact leaderboard">
+                <i className="bi bi-trophy" />
+              </Link>
+              <Link to="/brands" className="public-cart-btn" title="Browse brands" aria-label="Browse brands">
+                <i className="bi bi-diagram-3" />
+              </Link>
+              {isCustomer && (
+                <Link to="/plan-basket" className="public-cart-btn" title="Plan a basket with AI" aria-label="Plan a basket with AI">
+                  <i className="bi bi-stars" />
+                </Link>
+              )}
               {isStaff && (
                 <Link to="/dashboard" className="public-cart-btn" title="Dashboard" aria-label="Dashboard">
                   <i className="bi bi-house-door" />
@@ -37,6 +49,12 @@ function PublicLayout() {
             </div>
           ) : (
             <div className="d-flex align-items-center gap-2">
+              <Link to="/impact" className="public-cart-btn" title="Community impact leaderboard" aria-label="Community impact leaderboard">
+                <i className="bi bi-trophy" />
+              </Link>
+              <Link to="/brands" className="public-cart-btn" title="Browse brands" aria-label="Browse brands">
+                <i className="bi bi-diagram-3" />
+              </Link>
               <ThemeToggle triggerClass="public-cart-btn" />
               <Link to="/account/login" className="public-header-btn public-header-btn-ghost">
                 Sign in

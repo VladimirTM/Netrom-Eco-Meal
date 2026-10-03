@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
+using NetromEcoMeal.Api.Hubs;
 using NetromEcoMeal.Api.Middleware;
 using NetromEcoMeal.Api.Services;
 using NetromEcoMeal.Database;
@@ -60,6 +61,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllers()
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddOpenApi();
+builder.Services.AddSignalR();
 
 // Mirrors Web's PublicImpactWidget policy (ImpactController's widget route opts in explicitly) —
 // everything else goes through FrontendPolicy below.
@@ -148,9 +150,7 @@ builder.Services.AddScoped<IBrandRepository, BrandRepository>();
 builder.Services.AddScoped<IBrandService, BrandService>();
 builder.Services.AddScoped<IWebhookIntakeService, WebhookIntakeService>();
 builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
-// Real-time push over /hubs/stock is Phase 5's job — this interim
-// no-op just lets PackageService/OrderService resolve in the meantime.
-builder.Services.AddSingleton<IPackageStockNotifier, NullPackageStockNotifier>();
+builder.Services.AddSingleton<IPackageStockNotifier, SignalRPackageStockNotifier>();
 
 // Background jobs and migrations/seeding now run in exactly one host (the Api), never both —
 // running them in Web too would sweep orders and generate templates twice. Web's own
@@ -183,6 +183,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
         options.Events = new JwtBearerEvents
         {
+            // A browser's native WebSocket API can't set an Authorization header on the
+            // handshake request, so @microsoft/signalr instead appends the token as
+            // ?access_token=... — read it from there for hub requests only, never for ordinary
+            // REST calls (which still require the real header).
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(accessToken) && context.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+                    context.Token = accessToken;
+
+                return Task.CompletedTask;
+            },
             // JWTs can't be revoked directly — reject any token whose security_stamp claim no
             // longer matches the DB, so a password change invalidates every previously-issued
             // token immediately.
@@ -281,6 +293,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<StockHub>("/hubs/stock");
 
 app.Run();
 
