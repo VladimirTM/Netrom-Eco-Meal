@@ -38,6 +38,7 @@ function makeAuth(overrides: Partial<AuthContextValue>): AuthContextValue {
     loading: false,
     login: () => {},
     logout: () => {},
+    consumeSuppressGuardRedirect: () => false,
     refreshUser: async () => {},
     ...overrides,
   };
@@ -70,5 +71,14 @@ describe("RequireRole", () => {
     renderWithAuth(makeAuth({ loading: true }));
 
     expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  it("skips its own redirect when a caller already consumed the suppress flag", () => {
+    // Mirrors AccountSettings calling logout({redirectTo}): it already navigated away itself,
+    // so RequireRole must not also fire a competing `?returnUrl=` redirect over it.
+    renderWithAuth(makeAuth({ consumeSuppressGuardRedirect: () => true }));
+
+    expect(screen.queryByText(/Login page/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Dashboard content")).not.toBeInTheDocument();
   });
 });

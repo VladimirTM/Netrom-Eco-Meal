@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { businessesApi } from "../../api/clients/BusinessesApiClient";
 import { ordersApi } from "../../api/clients/OrdersApiClient";
 import type { OrderDto } from "../../api/models/Order";
@@ -25,12 +25,12 @@ function TripPlanner() {
   const [locating, setLocating] = useState(true);
   const [locationDenied, setLocationDenied] = useState(false);
   const { locate } = useGeolocation();
-  const mapContainerRef = useRef<HTMLDivElement>(null);
 
-  useLeafletMap(
-    mapContainerRef,
-    stops.map((s, i) => ({ id: s.businessId, name: `${i + 1}. ${s.businessName}`, lat: s.lat, lng: s.lng })),
+  const stopMarkers = useMemo(
+    () => stops.map((s, i) => ({ id: s.businessId, name: `${i + 1}. ${s.businessName}`, lat: s.lat, lng: s.lng })),
+    [stops],
   );
+  const mapContainerRef = useLeafletMap(stopMarkers);
 
   async function buildStops(startLat: number | null, startLng: number | null, loadedOrders: OrderDto[]) {
     const active = loadedOrders.filter((o) => o.status === "Pending" || o.status === "Confirmed");

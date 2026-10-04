@@ -128,6 +128,10 @@ public class BusinessService(
         if (removed)
         {
             var business = await businessRepository.GetByIdAsync(businessId);
+            // Unlike AddStaffAsync, the DELETE route this backs has no request body to carry a
+            // display name from the client — look it up here instead of falling back to a raw
+            // GUID in the audit trail.
+            userName ??= (await userManager.FindByIdAsync(userId))?.Name;
             await auditLogService.LogAsync(AuditActions.BusinessStaffRemoved, AuditTargetTypes.Business, businessId.ToString(),
                 business?.Name ?? businessId.ToString(), $"Removed {userName ?? userId} from staff");
         }

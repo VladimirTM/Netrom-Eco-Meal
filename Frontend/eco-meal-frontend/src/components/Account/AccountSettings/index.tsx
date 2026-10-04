@@ -1,12 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext/auth-context";
 import { authApi } from "../../../api/clients/AuthApiClient";
 import { ApiError } from "../../../api/base/http";
 
 function AccountSettings() {
   const { user, logout, refreshUser } = useAuth();
-  const navigate = useNavigate();
 
   const [name, setName] = useState(user?.name ?? "");
   const [savingName, setSavingName] = useState(false);
@@ -48,12 +46,11 @@ function AccountSettings() {
     setSavingPassword(true);
     try {
       await authApi.changePassword(currentPassword, newPassword);
-      // Changing the password rotates the Identity security stamp (D3) — the current JWT is
-      // rejected by the next request, so sign out and ask for a fresh login rather than leave
-      // the UI sitting on a token the backend will bounce.
-      logout();
-      navigate("/account/login?info=" + encodeURIComponent("Password changed — please sign in again."), {
-        replace: true,
+      // Changing the password rotates the security stamp, so the current JWT is rejected on the
+      // next request — sign out and ask for a fresh login. redirectTo stops RequireRole's own
+      // redirect from dropping the `?info=` message (see consumeSuppressGuardRedirect).
+      logout({
+        redirectTo: "/account/login?info=" + encodeURIComponent("Password changed — please sign in again."),
       });
     } catch (err) {
       setPasswordError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");

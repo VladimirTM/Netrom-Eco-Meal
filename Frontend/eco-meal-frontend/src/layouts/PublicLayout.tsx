@@ -1,6 +1,7 @@
 import { Link, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext/auth-context";
 import { useCart } from "../context/CartContext/cart-context";
+import { useScrollEndClass } from "../hooks/useScrollEndClass";
 import CartPanel from "../components/common/CartPanel";
 import NotificationBell from "../components/common/NotificationBell";
 import NotificationPanel from "../components/common/NotificationPanel";
@@ -12,6 +13,9 @@ const currentYear = new Date().getFullYear();
 function PublicLayout() {
   const { user, isAuthenticated, logout } = useAuth();
   const cart = useCart();
+  // Only one of the two icon rows below is ever mounted at a time (authenticated vs. anonymous),
+  // so sharing one ref/hook instance between them is safe.
+  const iconRowRef = useScrollEndClass<HTMLDivElement>();
   const isStaff = user?.role === "Admin" || user?.role === "BusinessManager";
   const isCustomer = user?.role === "Customer";
   const canApplyAsBusiness = isCustomer || user?.role === "BusinessManager";
@@ -27,7 +31,7 @@ function PublicLayout() {
             </Link>
 
             {isAuthenticated ? (
-              <div className="d-flex align-items-center gap-2">
+              <div className="d-flex align-items-center gap-2" ref={iconRowRef}>
                 <Link to="/impact" className="public-cart-btn" title="Community impact leaderboard" aria-label="Community impact leaderboard">
                   <i className="bi bi-trophy" />
                 </Link>
@@ -75,12 +79,12 @@ function PublicLayout() {
                   <i className="bi bi-person-gear" />
                 </Link>
                 <ThemeToggle triggerClass="public-cart-btn" />
-                <button type="button" className="public-header-logout" title="Sign out" onClick={logout}>
+                <button type="button" className="public-header-logout" title="Sign out" onClick={() => logout()}>
                   <i className="bi bi-box-arrow-right" />
                 </button>
               </div>
             ) : (
-              <div className="d-flex align-items-center gap-2">
+              <div className="d-flex align-items-center gap-2" ref={iconRowRef}>
                 <Link to="/impact" className="public-cart-btn" title="Community impact leaderboard" aria-label="Community impact leaderboard">
                   <i className="bi bi-trophy" />
                 </Link>

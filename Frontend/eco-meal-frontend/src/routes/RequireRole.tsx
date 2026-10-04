@@ -13,12 +13,16 @@ interface RequireRoleProps {
 // Generalizes Blazor's ProtectedRoute/AdminRoute, and Routes.razor's own NotAuthorized branch:
 // signed in but wrong role shows ForbiddenPanel inline, not signed in at all redirects to login.
 function RequireRole({ roles, children }: RequireRoleProps) {
-  const { isAuthenticated, loading, user } = useAuth();
+  const { isAuthenticated, loading, user, consumeSuppressGuardRedirect } = useAuth();
   const location = useLocation();
 
   if (loading) return <LoadingSpinner />;
 
   if (!isAuthenticated) {
+    // A caller already navigated us away via logout({redirectTo}) (e.g. AccountSettings's
+    // "password changed" message) — don't also fire our own redirect over it. See
+    // consumeSuppressGuardRedirect's doc comment on AuthContextValue.
+    if (consumeSuppressGuardRedirect()) return null;
     const returnUrl = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/account/login?returnUrl=${returnUrl}`} replace />;
   }

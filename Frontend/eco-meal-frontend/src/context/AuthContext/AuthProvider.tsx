@@ -11,20 +11,33 @@ function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState<boolean>(() => !!localStorage.getItem(TOKEN_KEY));
   const navigate = useNavigate();
   // Ref so the unauthorized handler (registered once below) always calls the latest logout, not a stale closure.
-  const logoutRef = useRef<() => void>(() => {});
+  const logoutRef = useRef<(opts?: { redirectTo?: string }) => void>(() => {});
+  // Set by logout({redirectTo}) just before it navigates itself; consumed (read + cleared) by
+  // RequireRole so it skips its own competing redirect for that one transition. See the
+  // consumeSuppressGuardRedirect doc comment on AuthContextValue for why this exists.
+  const suppressGuardRedirectRef = useRef(false);
 
-  function logout() {
+  function logout(opts?: { redirectTo?: string }) {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setUser(null);
+    if (opts?.redirectTo) {
+      suppressGuardRedirectRef.current = true;
+      navigate(opts.redirectTo, { replace: true });
+    }
+  }
+
+  function consumeSuppressGuardRedirect() {
+    const value = suppressGuardRedirectRef.current;
+    suppressGuardRedirectRef.current = false;
+    return value;
   }
 
   logoutRef.current = logout;
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
-      logoutRef.current();
-      navigate("/account/login", { replace: true });
+      logoutRef.current({ redirectTo: "/account/login" });
     });
   }, [navigate]);
 
@@ -59,7 +72,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, isAuthenticated: !!user, loading, login, logout, refreshUser: loadUser }}
+      value={{ user, token, isAuthenticated: !!user, loading, login, logout, consumeSuppressGuardRedirect, refreshUser: loadUser }}
     >
       {children}
     </AuthContext.Provider>

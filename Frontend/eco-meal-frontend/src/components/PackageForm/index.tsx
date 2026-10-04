@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError } from "../../api/base/http";
 import { aiApi } from "../../api/clients/AiApiClient";
@@ -71,6 +71,13 @@ function PackageForm() {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // The submit button's own disabled={submitting} isn't enough on its own: several clicks fired
+  // in immediate succession (a fast double-click, or a repeated Enter) all run their synchronous
+  // handler bodies before React commits the first one's setSubmitting(true) and re-renders the
+  // button as disabled — React batches state updates within the current task rather than applying
+  // them between each click. A ref updates immediately, so checking it first makes the guard
+  // synchronous with the very first click regardless of render timing.
+  const submittingRef = useRef(false);
 
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
@@ -236,10 +243,13 @@ function PackageForm() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (submittingRef.current) return;
+
     const fieldErrors = validate();
     setErrors(fieldErrors);
     if (Object.keys(fieldErrors).length > 0) return;
 
+    submittingRef.current = true;
     setSubmitError(null);
     setSubmitting(true);
 
@@ -277,6 +287,7 @@ function PackageForm() {
     } catch (err) {
       setSubmitError(err instanceof ApiError ? err.message : "Couldn't save this package. Please try again.");
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }

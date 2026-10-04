@@ -116,7 +116,7 @@ dashboard sidebar (`/account-settings`), same form either way.
   hashing/roles/tokens) — see D3 in [BACKEND_ARCHITECTURE.md](BACKEND_ARCHITECTURE.md)
 - EF Core + PostgreSQL (Npgsql)
 - Serilog for structured logging (console sink, per-request logging, config-driven levels)
-- QRCoder for server-side pickup QR generation, jsQR (vendored, frontend-side) for camera scanning
+- QRCoder for server-side pickup QR generation, `jsqr` (frontend-side) for camera scanning
 - Stripe Checkout (`Stripe.net`) for payment
 - Web Push (`WebPush`, VAPID-signed) for browser push notifications
 - `Microsoft.Extensions.AI` (`IChatClient`) backed by `OllamaSharp`, against a free, self-hosted
@@ -129,7 +129,7 @@ dashboard sidebar (`/account-settings`), same form either way.
 - Axios (bearer-token interceptor, global 401 → logout) + `@microsoft/signalr`
 - Leaflet + OpenStreetMap tiles (CDN, no API key) for the home page's map view
 - `qrcode` for client-side pickup-pass QR rendering
-- Plain `app.css` design system (tokens, light/dark) — no component library
+- Hand-written `src/index.css` design system (tokens, light/dark) on top of vendored Bootstrap CSS;
 
 ## Running locally
 
@@ -491,3 +491,5 @@ user-visible selectors only (`getByRole`, `getByLabel`, `getByText`):
 cd e2e
 BASE_URL=http://localhost:5173 npx playwright test   # against a locally-running frontend
 ```
+
+See [e2e/README.md](e2e/README.md) for the suite's setup and design notes.

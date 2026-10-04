@@ -82,6 +82,27 @@ public class BusinessServiceTests
     }
 
     [Fact]
+    public async Task RemoveStaffAsync_NoUserNameGiven_ResolvesItForTheAuditLog()
+    {
+        // The DELETE route behind this has no request body to carry a display name (unlike
+        // AddStaffAsync's POST body) — RemoveStaffAsync must look it up itself rather than let
+        // the audit trail fall back to a raw user id.
+        var f = Build(AdminId, Constants.AppRoles.Admin);
+        var businessId = Guid.NewGuid();
+        f.Repo.Setup(r => r.RemoveStaffAsync(businessId, ManagerId)).ReturnsAsync(true);
+        f.UserManager.Setup(m => m.FindByIdAsync(ManagerId)).ReturnsAsync(TestData.User(ManagerId, "Demo Manager"));
+
+        await f.Service.RemoveStaffAsync(businessId, ManagerId);
+
+        f.AuditLog.Verify(a => a.LogAsync(
+            Constants.AuditActions.BusinessStaffRemoved,
+            Constants.AuditTargetTypes.Business,
+            businessId.ToString(),
+            It.IsAny<string>(),
+            It.Is<string>(details => details.Contains("Demo Manager"))), Times.Once);
+    }
+
+    [Fact]
     public async Task IsStaffAsync_DelegatesToRepository()
     {
         var f = Build(AdminId, Constants.AppRoles.Admin);

@@ -14,6 +14,7 @@ function makeAuth(user: UserDto | null): AuthContextValue {
     loading: false,
     login: () => {},
     logout: () => {},
+    consumeSuppressGuardRedirect: () => false,
     refreshUser: async () => {},
   };
 }

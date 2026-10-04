@@ -32,7 +32,7 @@ function Packages() {
   const timeZone = useTimeZone();
   const isAdmin = user?.role === "Admin";
   const isBusinessManager = user?.role === "BusinessManager";
-  const { selectedBusinessId: myBusinessId } = useManagedBusiness();
+  const { selectedBusinessId: myBusinessId, loading: managedBusinessLoading } = useManagedBusiness();
 
   const [paged, setPaged] = useState<PaginatedList<PackageDto> | null>(null);
   const [allBusinesses, setAllBusinesses] = useState<BusinessDto[]>([]);
@@ -119,13 +119,21 @@ function Packages() {
   // Admin sees candidates across every business (mirrors the backend's own null-businessId
   // convention); an unassigned manager gets the same never-matches sentinel loadPage uses. Note
   // this never depends on the admin's own businessFilter dropdown — same as the Blazor page.
+  //
+  // Waits for managedBusinessLoading, same as PackageForm's own loading guard: on first mount (or
+  // right after switching business), myBusinessId is briefly null before
+  // ManagedBusinessProvider's own fetch resolves — firing with the NEVER_MATCH_ID sentinel in that
+  // window hits the server's "only for your own business" check and gets a real 403 for a business
+  // id nobody asked about, surfacing as an uncaught rejection since the real id arrives moments
+  // later anyway.
   useEffect(() => {
     if (!isAdmin && !isBusinessManager) return;
+    if (isBusinessManager && managedBusinessLoading) return;
     const businessId = isBusinessManager ? (myBusinessId ?? NEVER_MATCH_ID) : undefined;
     // oxlint-disable-next-line react/set-state-in-effect
-    packagesApi.getMarkdownCandidates(businessId).then((list) => setMarkdownCandidateIds(new Set(list.map((p) => p.id))));
-    packagesApi.getDonationCandidates(businessId).then((list) => setDonationCandidateIds(new Set(list.map((p) => p.id))));
-  }, [isAdmin, isBusinessManager, myBusinessId]);
+    packagesApi.getMarkdownCandidates(businessId).then((list) => setMarkdownCandidateIds(new Set(list.map((p) => p.id)))).catch(() => {});
+    packagesApi.getDonationCandidates(businessId).then((list) => setDonationCandidateIds(new Set(list.map((p) => p.id)))).catch(() => {});
+  }, [isAdmin, isBusinessManager, myBusinessId, managedBusinessLoading]);
 
   function onSearchInput(value: string) {
     setSearch(value);

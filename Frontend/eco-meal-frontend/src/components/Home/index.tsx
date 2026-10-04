@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { aiApi } from "../../api/clients/AiApiClient";
 import { businessTypesApi } from "../../api/clients/BusinessTypesApiClient";
@@ -76,7 +76,6 @@ function Home() {
 
   const [showMap, setShowMap] = useState(false);
   const [mapBusinesses, setMapBusinesses] = useState<BusinessDto[] | null>(null);
-  const mapContainerRef = useRef<HTMLDivElement | null>(null);
 
   const hasActiveFilters =
     search !== "" ||
@@ -259,7 +258,7 @@ function Home() {
     () => (mapBusinesses ?? []).map((b) => ({ id: b.id, name: b.name, lat: b.latitude!, lng: b.longitude! })),
     [mapBusinesses],
   );
-  useLeafletMap(showMap ? mapContainerRef : { current: null }, mapMarkers, (id) => navigate(`/businesses/${id}`));
+  const mapContainerRef = useLeafletMap(mapMarkers, (id) => navigate(`/businesses/${id}`));
 
   function livePackagesFor(businessId: string): PackageDto[] {
     return (livePackages ?? []).filter((p) => p.businessId === businessId);

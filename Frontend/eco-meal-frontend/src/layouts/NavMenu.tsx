@@ -188,7 +188,7 @@ function NavMenu() {
         </div>
         <NotificationBell triggerClass="sidebar-notif-btn" />
         <ThemeToggle triggerClass="sidebar-notif-btn" />
-        <button type="button" className="sidebar-logout-btn" title="Sign out" aria-label="Sign out" onClick={logout}>
+        <button type="button" className="sidebar-logout-btn" title="Sign out" aria-label="Sign out" onClick={() => logout()}>
           <i className="bi bi-box-arrow-right" />
         </button>
       </div>
