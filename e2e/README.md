@@ -1,31 +1,33 @@
 # Eco Meal — Playwright regression suite
 
-A Playwright suite written against
-**user-visible selectors only** (`getByRole`, `getByLabel`, `getByText`, `getByPlaceholder`), so the
-same spec files can run unchanged against the Blazor app today and the React app from Phase 5
-onward — only `BASE_URL` changes.
+A Playwright suite
+against **user-visible selectors only** (`getByRole`, `getByLabel`, `getByText`,
+`getByPlaceholder`) so the same spec files could run unchanged against the old Blazor app and the
+React app that replaced it — only `BASE_URL` changed. The Blazor app is gone now; these specs run
+against React exclusively.
 
 ## Prerequisites
 
 - The regression stack up via `docker compose -f ../docker-compose.test.yml up --build` (db,
-  Mailpit, Ollama, app on `http://localhost:8081`). Seeded accounts are documented in
-  `fixtures/accounts.ts`.
-- A real Stripe **test-mode** secret key configured in that compose file/environment — the
-  customer and manager golden paths pay with Stripe's `4242 4242 4242 4242` test card against
-  `checkout.stripe.com`, so this needs network access.
+  Mailpit, Ollama, the Api on `http://localhost:8081`, the frontend on `http://localhost:5174`).
+  Seeded accounts are documented in `fixtures/accounts.ts`.
+- A real Stripe **test-mode** secret key (set `STRIPE_SECRET_KEY` in a `.env` next to
+  `docker-compose.test.yml` — see the root `.env.example`) — the customer and manager golden paths
+  pay with Stripe's `4242 4242 4242 4242` test card against `checkout.stripe.com`, so this needs
+  network access.
 - `npm install` and `npx playwright install --with-deps chromium` inside this directory.
 
 ## Running
 
 ```bash
-npm test                                  # everything, against BASE_URL (default http://localhost:8081)
+npm test                                  # everything, against BASE_URL (default http://localhost:5174)
 npx playwright test tests/golden-path     # just the functional/golden-path specs
 npx playwright test tests/visual.spec.ts  # just the visual regression baseline
 npx playwright test --ui                  # interactive
 npm run report                            # open the last HTML report
 ```
 
-Point it at the React app once it exists:
+Point it at the Vite dev server instead of the Dockerized nginx build:
 
 ```bash
 BASE_URL=http://localhost:5173 npm test

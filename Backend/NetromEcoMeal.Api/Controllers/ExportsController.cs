@@ -10,11 +10,9 @@ using NetromEcoMeal.Services.Interfaces;
 
 namespace NetromEcoMeal.Api.Controllers;
 
-// Ported from NetromEcoMeal.Web's OrderExportController, which was already real HTTP (it reads
-// identity off HttpContext.User, not a Blazor circuit) — same CSV shapes and the same
-// admin-sees-everything / manager-scoped-to-their-own-business(es) rule. The frontend downloads
-// through Axios (responseType: 'blob'), not a plain <a href>, since a JWT can't ride along on a
-// browser-navigated link the way Web's auth cookie did (see the migration plan's Phase 7 note).
+// Same CSV shapes and the same admin-sees-everything / manager-scoped-to-their-own-business(es)
+// rule regardless of caller. The frontend downloads through Axios (responseType: 'blob'), not a
+// plain <a href>, since a JWT can't ride along on a browser-navigated link the way a cookie would.
 [Route("api/orders")]
 [ApiController]
 [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.BusinessManager}")]

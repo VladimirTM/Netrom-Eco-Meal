@@ -150,7 +150,7 @@ public class RescueCircleService(
         var fullyPaid = circle.Participants.Count == circle.ParticipantCount && circle.Participants.All(p => p.PaidAt is not null);
         if (fullyPaid)
         {
-            // A summary Payment row so Payments.razor/OrderDetailModal/the CSV export show this
+            // A summary Payment row so Payments.tsx/OrderDetailModal/the CSV export show this
             // order as paid without needing their own Rescue Circle awareness — the actual charges
             // are the per-participant ones above; this one carries no Stripe ids of its own, which
             // is also how OrderService.RefundIfPaidAsync tells a circle order apart from a solo one.

@@ -107,13 +107,15 @@ test.describe('Business manager golden path', () => {
     await page.goto('/orders/manage');
     await expect(page.getByRole('row', { name: new RegExp(`#${orderNumber}\\b`) })).toContainText('Completed');
 
-    // CSV export. The link opens target="_blank", but the server sends the CSV as an attachment,
-    // so Chromium fires a download event rather than actually opening a new page/tab.
+    // CSV export. A JWT can't ride along on a plain <a href> download the way a cookie would, so
+    // this is a real <button> (ExportsApiClient.ts): Axios fetches the CSV as a blob, then
+    // downloadBlob() builds a throwaway <a download> and clicks it — Chromium still fires a real
+    // download event for that synthetic click.
     await page.goto('/orders/manage');
     await page.getByRole('button', { name: 'Export CSV' }).click();
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('link', { name: 'Download CSV' }).click(),
+      page.getByRole('button', { name: 'Download CSV' }).click(),
     ]);
     expect(download.suggestedFilename()).toMatch(/\.csv$/);
   });

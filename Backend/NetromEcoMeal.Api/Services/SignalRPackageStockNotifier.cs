@@ -4,9 +4,8 @@ using NetromEcoMeal.Services.Interfaces;
 
 namespace NetromEcoMeal.Api.Services;
 
-// The real IPackageStockNotifier for the Api host — pushes
-// over /hubs/stock instead of Web's in-process C# event, so a React BusinessDetail page and every
-// other open tab/circuit across both hosts see a stock change without polling or a reload.
+// Pushes stock changes over /hubs/stock so every open BusinessDetail tab subscribed to a
+// business's group updates without polling or a reload.
 public class SignalRPackageStockNotifier(IHubContext<StockHub> hubContext) : IPackageStockNotifier
 {
     public void NotifyBusinessChanged(Guid businessId) =>

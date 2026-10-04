@@ -1,12 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
-// The whole point of Phase 0: these test files must run unchanged against the Blazor app today
-// and against the React app from Phase 5 onward. Only BASE_URL and the two project lists below
-// are expected to change between phases.
+// Specs use user-visible selectors only (getByRole/getByLabel/getByText), so they run
+// unchanged against any frontend — only BASE_URL changes.
 //
-//   BASE_URL=http://localhost:8081 npx playwright test        # Blazor, via docker-compose.test.yml
-//   BASE_URL=http://localhost:5173 npx playwright test        # React, from Phase 4 onward
-const baseURL = process.env.BASE_URL ?? 'http://localhost:8081';
+//   BASE_URL=http://localhost:5174 npx playwright test        # React, via docker-compose.test.yml (nginx)
+//   BASE_URL=http://localhost:5173 npx playwright test        # React, via the Vite dev server
+const baseURL = process.env.BASE_URL ?? 'http://localhost:5174';
 
 const desktopViewport = { width: 1280, height: 900 };
 const mobileViewport = { width: 390, height: 844 };

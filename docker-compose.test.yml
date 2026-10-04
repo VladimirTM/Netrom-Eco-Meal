@@ -37,7 +37,9 @@ services:
     volumes:
       - ecomeal-test-ollama:/root/.ollama
 
-  app:
+  # NetromEcoMeal.Api — owns migrations/seeding, the three
+  # background sweeps, /uploads and the JWT-issuing auth endpoints the frontend below talks to.
+  api:
     build:
       context: ./Backend
       dockerfile: Dockerfile
@@ -49,18 +51,27 @@ services:
       # Requires real email confirmation on self-registration, so the flow is actually visible —
       # the two seeded demo accounts already have EmailConfirmed=true and are unaffected.
       Identity__RequireConfirmedAccount: "true"
-      App__BaseUrl: "http://localhost:8081"
+      # The frontend's own origin (email links, Stripe success/cancel redirects, QR validate
+      # URLs) — not the Api's own origin. Getting this backwards silently 404s every Stripe
+      # checkout redirect.
+      App__BaseUrl: "http://localhost:5174"
+      Frontend__BaseUrl: "http://localhost:5174"
       Email__FromAddress: "no-reply@ecomeal.local"
       Email__FromName: "Eco Meal"
       Email__Smtp__Host: mailpit
       Email__Smtp__Port: "1025"
-      # Empty unless STRIPE_SECRET_KEY is exported in the shell — checkout shows a "payments
-      # aren't configured yet" error until a real Stripe test-mode secret key (sk_test_...) is
-      # supplied. Get one free from https://dashboard.stripe.com/test/apikeys; no live/production
-      # key is ever needed for this app. Never hardcode the real value here — it stays out of the
-      # repo the same way Phase 9 of the migration plan moves it into `.env`.
+      # Empty unless STRIPE_SECRET_KEY is set in a sibling `.env` file (see .env.example) —
+      # checkout shows a "payments aren't configured yet" error until a real Stripe test-mode
+      # secret key (sk_test_...) is supplied. Get one free from
+      # https://dashboard.stripe.com/test/apikeys; no live/production key is ever needed for this
+      # app. Never hardcode the real value here — secrets stay out of the committed compose file.
       Stripe__SecretKey: "${STRIPE_SECRET_KEY:-}"
       Stripe__Currency: "ron"
+      # Same .env convention as Stripe above. The fallback is a committed, clearly-labeled
+      # dev-only value (also the one Api/appsettings.Development.json ships), fine for this
+      # throwaway compose stack — generate a real one (`openssl rand -base64 32`) for anything
+      # beyond local dev/demo use.
+      Jwt__Key: "${JWT_KEY:-dev-only-ecomeal-jwt-signing-key-not-for-prod-use}"
       # A self-generated VAPID key pair (WebPush.VapidHelper.GenerateVapidKeys()) — unlike Stripe/
       # SMTP this needs no external account at all, so it ships pre-configured here for a working
       # web-push demo out of the box. Regenerate your own pair for anything beyond local testing.
@@ -84,6 +95,20 @@ services:
         condition: service_started
       ollama:
         condition: service_started
+
+  # The React SPA, served by nginx. VITE_API_URL is baked into the static bundle at *build* time
+  # (it runs in the browser, outside the Docker network), so it points at the Api's host-published
+  # port, not the `api` service's in-network hostname.
+  frontend:
+    build:
+      context: ./Frontend/eco-meal-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: "http://localhost:8081/api"
+    ports:
+      - "5174:80"
+    depends_on:
+      - api
 
 volumes:
   ecomeal-test-db:

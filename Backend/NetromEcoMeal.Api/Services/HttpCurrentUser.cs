@@ -4,8 +4,7 @@ using NetromEcoMeal.Services.Interfaces;
 
 namespace NetromEcoMeal.Api.Services;
 
-// ICurrentUser for the Api host: reads the JWT-derived ClaimsPrincipal off the current request,
-// the real-HTTP counterpart to Web's CircuitCurrentUser (which reads AuthenticationStateProvider).
+// ICurrentUser for the Api host: reads the JWT-derived ClaimsPrincipal off the current request.
 public class HttpCurrentUser(IHttpContextAccessor httpContextAccessor) : ICurrentUser
 {
     private ClaimsPrincipal? User => httpContextAccessor.HttpContext?.User;

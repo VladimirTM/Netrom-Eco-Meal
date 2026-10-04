@@ -1,6 +1,6 @@
 namespace NetromEcoMeal.Models;
 
-// Structured shape ISearchIntentParser extracts a shopper's free-text query into and Home.razor
+// Structured shape ISearchIntentParser extracts a shopper's free-text query into and Home.tsx
 // applies against BusinessController.GetPagedAsync — the LLM only ever produces this
 // (schema-constrained, then re-validated), so a bad extraction can narrow results but never
 // fabricate one. DietaryTag is nulled out by SearchIntentParser unless it matches one of

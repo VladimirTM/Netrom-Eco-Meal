@@ -150,7 +150,7 @@ public class BusinessesController(IBusinessService businessService) : Controller
     }
 
     // Returns the plaintext key — the caller is expected to show it exactly once (same contract
-    // as today's Dashboard.razor).
+    // as today's Dashboard.tsx).
     [HttpPost("{id:guid}/webhook-key")]
     [Authorize]
     public async Task<ActionResult<string>> GenerateApiKey(Guid id)

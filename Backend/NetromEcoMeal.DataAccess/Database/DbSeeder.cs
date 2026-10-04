@@ -268,7 +268,7 @@ public static class DbSeeder
         DateTime At(int hour, int minute) => today.AddHours(hour).AddMinutes(minute);
 
         // Anchored to "now" instead of a fixed hour, so this one package is always inside
-        // Home.razor's one-hour "closing soon" badge/sort window on a fresh seed, whatever time of
+        // Home.tsx's one-hour "closing soon" badge/sort window on a fresh seed, whatever time of
         // day the app starts — demos Phase 10's countdown badge without waiting around for it.
         var closingSoonDemoStart = DateTime.UtcNow.AddMinutes(-30);
         var closingSoonDemoEnd = DateTime.UtcNow.AddMinutes(25);
@@ -322,8 +322,8 @@ public static class DbSeeder
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000023"), BusinessId = b12, PackageTypeId = mealBox,     Name = "Top Scorer Meal Box",          Description = "The crowd favourite: a grilled meal box that scores every time.",          Price = 10.50m, Quantity = 6,  WeightKg = 1.2m, PickupStart = At(18,  0), PickupEnd = At(21,  0), ImageUrl = "https://loremflickr.com/640/360/football,grill/all?lock=323" },
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000024"), BusinessId = b12, PackageTypeId = surpriseBag, Name = "Stadium Snack Surprise Bag",   Description = "A grab-bag of grilled snacks and sides fresh from the fan zone grill.",    Price =  6.25m, Quantity = 8,  WeightKg = 1.5m, PickupStart = At(19,  0), PickupEnd = At(21, 30), ImageUrl = "https://loremflickr.com/640/360/football,snacks/all?lock=324" },
             // Phase 12 demo: deliberately Quantity = 1 so confirming a single order against it is
-            // enough to watch "1 left" flip to "Sold out" live on another open BusinessDetail.razor
-            // tab (PackageStockBroadcaster) without either tab refreshing.
+            // enough to watch "1 left" flip to "Sold out" live on another open BusinessDetail tab
+            // (the /hubs/stock SignalR push) without either tab refreshing.
             new Package { Id = new Guid("55555555-0000-0000-0000-000000000025"), BusinessId = b1,  PackageTypeId = mealBox,     Name = "Last One Standing Box",        Description = "Down to the final portion of the day — first to confirm gets it.",         Price =  9.25m, Quantity = 1,  WeightKg = 1.2m, PickupStart = At(17,  0), PickupEnd = At(21,  0), ImageUrl = "https://loremflickr.com/640/360/football,lastminute/all?lock=325" },
             // Phase 3 demo: closing soon, stock unclaimed, at a business the demo customer both
             // favorites and has a Completed order from — see nearExpiryNudgeDemoStart/End above.
@@ -610,7 +610,7 @@ public static class DbSeeder
     }
 
     // Demonstrates the Phase 9 self-service application flow — a pending application and a
-    // rejected one so the admin's approval queue (Businesses.razor) isn't empty on a fresh DB.
+    // rejected one so the admin's approval queue (Businesses.tsx) isn't empty on a fresh DB.
     private static async Task SeedApprovalDemoBusinessesAsync(EcoMealDbContext db, string demoCustomerId)
     {
         var pendingId = new Guid("44444444-0000-0000-0000-000000000013");

@@ -24,7 +24,8 @@ using NetromEcoMeal.Services.Payments;
 using OllamaSharp;
 using Serilog;
 
-// Same single-locale convention as the Web host — see that Program.cs's own comment.
+// Single-locale app: prices are always RON, so every ToString("C") call site gets that
+// formatting for free instead of the server's OS culture.
 var romanianCulture = new CultureInfo("ro-RO");
 CultureInfo.DefaultThreadCurrentCulture = romanianCulture;
 CultureInfo.DefaultThreadCurrentUICulture = romanianCulture;
@@ -49,9 +50,12 @@ var ollamaBaseUrl = builder.Configuration["Ollama:BaseUrl"];
 if (!string.IsNullOrWhiteSpace(ollamaBaseUrl))
 {
     var ollamaModelId = builder.Configuration["Ollama:ModelId"] ?? "qwen2.5:7b";
-    // See Web's Program.cs for why this needs its own HttpClient with a generous timeout rather
-    // than the OllamaApiClient(Uri, string) convenience constructor — same CPU-only-inference
-    // reasoning applies to AI calls made through the Api host.
+    // OllamaApiClient(Uri, string) builds its own HttpClient internally with HttpClient's default
+    // 100s Timeout — nowhere near enough for a tool-calling round-trip (search, then a JSON-schema
+    // basket proposal) against this model under CPU-only inference, which alone can take 100s+
+    // just to process one large prompt. Constructing the HttpClient ourselves with a generous
+    // timeout is the only way to give slow local inference room to finish instead of the request
+    // being cancelled mid-generation (surfaced as a raw OperationCanceledException, nothing logged).
     var ollamaHttpClient = new HttpClient { BaseAddress = new Uri(ollamaBaseUrl), Timeout = TimeSpan.FromMinutes(5) };
     builder.Services.AddSingleton<IChatClient>(new OllamaApiClient(ollamaHttpClient, ollamaModelId));
 }
@@ -63,8 +67,9 @@ builder.Services.AddControllers()
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
 
-// Mirrors Web's PublicImpactWidget policy (ImpactController's widget route opts in explicitly) —
-// everything else goes through FrontendPolicy below.
+// ImpactController's widget route opts into this explicitly (it's fetched cross-origin by
+// impact-widget.js, embedded on a business's own website) — everything else goes through
+// FrontendPolicy below.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("PublicImpactWidget", policy => policy.AllowAnyOrigin().WithMethods("GET"));
@@ -81,11 +86,7 @@ builder.Services.AddCors(options =>
 });
 
 var connectionString = builder.Configuration.GetConnectionString("EcoMealContext");
-// NotificationRepository takes IDbContextFactory directly (not the scoped EcoMealDbContext below)
-// regardless of host — see that repository's own comment — so both registrations are needed here
-// too, not just in Web, even though a Web API request has no per-circuit races to avoid.
-builder.Services.AddDbContextFactory<EcoMealDbContext>(options => options.UseNpgsql(connectionString));
-builder.Services.AddScoped<EcoMealDbContext>(sp => sp.GetRequiredService<IDbContextFactory<EcoMealDbContext>>().CreateDbContext());
+builder.Services.AddDbContext<EcoMealDbContext>(options => options.UseNpgsql(connectionString));
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
 {
@@ -152,10 +153,8 @@ builder.Services.AddScoped<IWebhookIntakeService, WebhookIntakeService>();
 builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
 builder.Services.AddSingleton<IPackageStockNotifier, SignalRPackageStockNotifier>();
 
-// Background jobs and migrations/seeding now run in exactly one host (the Api), never both —
-// running them in Web too would sweep orders and generate templates twice. Web's own
-// Program.cs sets BackgroundJobs:Enabled to false; this appsettings.Development.json sets it
-// to true here, and docker-compose.test.yml does the same for each container.
+// On by default. The flag stays so scaling the Api to several replicas doesn't sweep orders and
+// generate templates once per replica.
 if (builder.Configuration.GetValue("BackgroundJobs:Enabled", false))
 {
     builder.Services.AddHostedService<OrderLifecycleSweepService>();
@@ -242,8 +241,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(options => options.SwaggerEndpoint("/openapi/v1.json", "NetromEcoMeal API v1"));
 }
 
-// Migrations and seeding run only here from Phase 3 on — Web's Program.cs stopped calling
-// MigrateAsync/DbSeeder (see that file's own comment).
+// The Api owns migrations and seeding.
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<EcoMealDbContext>();
@@ -269,10 +267,10 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Package/business photos saved by ImageUploadService — same convention as Web's Program.cs:
-// MapStaticAssets only serves the build-time asset manifest, so runtime uploads need their own
-// always-on static-file middleware pointed at the same folder (both hosts share the volume).
-// WebRootPath can be null if the host's content root has no wwwroot folder (e.g. the
+// Package/business photos saved by ImageUploadService — MapStaticAssets only serves the
+// build-time asset manifest, so runtime uploads need their own always-on static-file middleware
+// pointed at the same folder (shared with the host via a Docker volume, so uploads survive an
+// image rebuild). WebRootPath can be null if the host's content root has no wwwroot folder (e.g. the
 // WebApplicationFactory test host, which doesn't publish one) — fall back to content root/wwwroot.
 var webRootPath = app.Environment.WebRootPath;
 if (string.IsNullOrEmpty(webRootPath))
@@ -283,6 +281,17 @@ app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(uploadsPath),
     RequestPath = "/uploads",
+});
+
+// wwwroot/js/impact-widget.js — embedded by businesses on their own sites (D5, the embed URL
+// doesn't change across the cutover). The widget infers its own fetch base URL from the <script>
+// tag's src origin, so serving it from here (rather than the frontend's static assets) keeps that
+// origin equal to the API's — exactly what Dashboard's "Share your impact" snippet already builds
+// (`${apiOrigin}/js/impact-widget.js`).
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(Path.Combine(webRootPath, "js")),
+    RequestPath = "/js",
 });
 
 app.UseCors("FrontendPolicy");

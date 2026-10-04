@@ -19,8 +19,8 @@ public class AuthService(
     IReferralService referralService,
     ICurrentUser currentUser) : IAuthService
 {
-    // Absolute origin needed for email links — a Blazor page has no notion of "the app's public
-    // URL" outside of an active HTTP request, and the background sweep has no request at all.
+    // Absolute origin needed for email links — the frontend's own URL isn't derivable from the
+    // Api's request (different origin entirely), and the background sweep has no request at all.
     private string BaseUrl => (configuration["App:BaseUrl"] ?? "http://localhost:8080").TrimEnd('/');
 
     public async Task<RegisterOutcome> RegisterAsync(RegisterRequest request, string name, string? referralCode = null)
@@ -138,18 +138,14 @@ public class AuthService(
         if (!result.Succeeded)
             return string.Join(" ", result.Errors.Select(e => e.Description));
 
-        // Deliberately no SignInManager.RefreshSignInAsync here — it writes a Set-Cookie header,
-        // which throws when called mid-circuit from an interactive Blazor Server page (the initial
-        // HTTP response has already completed by the time this runs). Not needed anyway: nothing
-        // in this app reads the display name from a cookie claim, only from a fresh DB lookup.
+        // No token refresh needed here: the JWT carries no display-name claim, so nothing reads
+        // a stale name off it — every read goes through a fresh DB lookup instead.
         return null;
     }
 
-    // Takes userId explicitly rather than resolving it via ICurrentUser: unlike every other
-    // method here, this is only ever called from AuthController's real HTTP change-password action
-    // (needed to refresh the auth cookie safely, see that action's own comment) rather than
-    // in-process from a Razor component — and CircuitCurrentUser's AuthenticationStateProvider
-    // throws when resolved outside an actual Blazor circuit's DI scope.
+    // Takes userId explicitly rather than resolving it via ICurrentUser: AuthController's
+    // change-password action already has it off the JWT's own ClaimTypes.NameIdentifier claim
+    // (see that action), so there's nothing for ICurrentUser to add here.
     public async Task<string?> ChangePasswordAsync(string userId, string currentPassword, string newPassword)
     {
         var user = await userManager.FindByIdAsync(userId);

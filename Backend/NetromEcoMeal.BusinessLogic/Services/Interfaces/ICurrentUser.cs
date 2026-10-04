@@ -1,8 +1,7 @@
 namespace NetromEcoMeal.Services.Interfaces;
 
 // Lets services read the caller's identity/role without depending on how that identity was
-// resolved. CircuitCurrentUser (Web) wraps AuthenticationStateProvider for Blazor pages;
-// HttpCurrentUser (Api, Phase 3) will read IHttpContextAccessor.HttpContext.User instead.
+// resolved. HttpCurrentUser (NetromEcoMeal.Api) reads IHttpContextAccessor.HttpContext.User.
 public interface ICurrentUser
 {
     public Task<(bool IsAdmin, string? UserId)> GetCurrentUserAsync();

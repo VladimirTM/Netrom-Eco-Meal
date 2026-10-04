@@ -4,11 +4,12 @@ obj/
 riderModule.iml
 /_ReSharper.Caches/
 
-# Local-only Stripe test key etc — never commit real API keys, even test-mode ones.
-docker-compose.override.yml
+# Local-only secrets (Stripe test key, JWT_KEY) for docker-compose.test.yml — see .env.example.
+# Never commit real API keys, even test-mode ones.
+.env
 
 # Manager-uploaded package/business photos (ImageUploadService) — runtime content, not source.
-/wwwroot/uploads/
+**/wwwroot/uploads/
 
 # Internal planning notes, not meant to ship with the repo.
 /FEATURE_IDEAS.md

@@ -2,7 +2,6 @@ using NetromEcoMeal.Entities;
 
 namespace NetromEcoMeal.Repositories.Interfaces;
 
-// Each method opens its own DbContext via IDbContextFactory instead of the circuit-scoped one.
 public interface INotificationRepository
 {
     public Task<List<Notification>> GetRecentByUserIdAsync(string userId, int take);

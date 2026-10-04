@@ -11,9 +11,6 @@ namespace NetromEcoMeal.Repositories;
 public class PackageRepository(EcoMealDbContext context) : IPackageRepository
 {
     // AsNoTracking on both — pure read/display paths, writes re-fetch via GetByIdAsync/GetByIdsAsync.
-    // Matters for correctness, not just perf: EcoMealDbContext lives for a whole Blazor circuit, so a
-    // tracked re-query returns the same stale instances via EF's identity map — PackageStockBroadcaster's
-    // live reload (BusinessDetail.razor) depends on this returning fresh Quantity every time.
     public async Task<List<Package>> GetAllAsync()
     {
         return await context.Packages.AsNoTracking().Include(p => p.PackageType).Include(p => p.Business).ToListAsync();

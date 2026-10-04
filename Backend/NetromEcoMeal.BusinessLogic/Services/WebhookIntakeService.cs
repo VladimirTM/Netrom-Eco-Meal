@@ -28,7 +28,7 @@ public class WebhookIntakeService(
 
         if (string.IsNullOrWhiteSpace(request.Name))
             throw new ArgumentException("Name is required.");
-        // Same upper bounds PackageForm.razor's PackageFormModel enforces via [Range] — this is
+        // Same upper bounds PackageForm.tsx's PackageFormModel enforces via [Range] — this is
         // the app's other entry point for creating a Package, and used to have no ceiling at
         // all (a POS system could post a 999,999 quantity/price no manager could ever type in).
         if (request.Price is <= 0 or > PackageLimits.MaxPrice)

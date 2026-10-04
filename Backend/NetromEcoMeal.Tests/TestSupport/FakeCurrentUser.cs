@@ -4,7 +4,7 @@ using NetromEcoMeal.Services.Interfaces;
 namespace NetromEcoMeal.Tests.TestSupport;
 
 // Lets tests build an ICurrentUser around a specific signed-in user/roles (or anonymous) without
-// needing a real Blazor auth pipeline or AuthenticationStateProvider.
+// needing a real HTTP request/JWT pipeline.
 public class FakeCurrentUser(string? userId = null, params string[] roles) : ICurrentUser
 {
     public Task<(bool IsAdmin, string? UserId)> GetCurrentUserAsync() =>

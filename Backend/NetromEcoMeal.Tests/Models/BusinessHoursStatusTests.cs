@@ -3,8 +3,8 @@ using NetromEcoMeal.Models;
 
 namespace NetromEcoMeal.Tests.Models;
 
-// Pure-logic coverage for the open/closed calculation shared by Home.razor's card badge and
-// BusinessDetail.razor's hours panel — no DbContext involved, just the Hours/Closures collections
+// Pure-logic coverage for the open/closed calculation shared by Home.tsx's card badge and
+// BusinessDetail.tsx's hours panel — no DbContext involved, just the Hours/Closures collections
 // those pages already have loaded.
 public class BusinessHoursStatusTests
 {

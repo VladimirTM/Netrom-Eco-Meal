@@ -96,7 +96,7 @@ public class WebhookIntakeServiceTests
     [InlineData(0, 1, 1)]        // Price not positive
     [InlineData(1, -1, 1)]       // Negative quantity
     [InlineData(1, 1, 0)]        // WeightKg not positive
-    // Same upper bounds PackageForm.razor's [Range] attributes enforce (Constants.PackageLimits)
+    // Same upper bounds PackageForm.tsx's [Range] attributes enforce (Constants.PackageLimits)
     // — this endpoint used to have no ceiling at all on any of the three.
     [InlineData(10001, 1, 1)]    // Price over the cap
     [InlineData(1, 1001, 1)]     // Quantity over the cap

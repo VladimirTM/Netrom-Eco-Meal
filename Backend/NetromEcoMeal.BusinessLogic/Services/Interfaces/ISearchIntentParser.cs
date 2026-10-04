@@ -2,7 +2,7 @@ using NetromEcoMeal.Models;
 
 namespace NetromEcoMeal.Services.Interfaces;
 
-// Turns a shopper's free-text query into a SearchIntent Home.razor applies against
+// Turns a shopper's free-text query into a SearchIntent Home.tsx applies against
 // BusinessController.GetPagedAsync's existing filters.
 public interface ISearchIntentParser
 {

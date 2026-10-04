@@ -1,9 +1,13 @@
 # Netrom Eco Meal
 
-A Blazor Server app for rescuing surplus food. Restaurants, bakeries, cafes, grocery
-stores and food trucks list surplus packages (surprise bags, meal boxes, bread bags...)
-at a discount, and customers browse, order and pick them up before they'd otherwise go
-to waste.
+An app for rescuing surplus food. Restaurants, bakeries, cafes, grocery stores and food
+trucks list surplus packages (surprise bags, meal boxes, bread bags...) at a discount,
+and customers browse, order and pick them up before they'd otherwise go to waste.
+
+A React + TypeScript SPA (`Frontend/`) talks to a layered ASP.NET Core Web API
+(`Backend/`) over JWT-authenticated REST and a SignalR hub for live stock updates. See
+[BACKEND_ARCHITECTURE.md](BACKEND_ARCHITECTURE.md) and
+[FRONTEND_ARCHITECTURE.md](FRONTEND_ARCHITECTURE.md) for how each half is put together.
 
 Three roles: **Customer** (browses, orders, leaves reviews), **BusinessManager** (manages
 packages and orders for whichever business or businesses they're staff of) and **Admin**
@@ -106,40 +110,65 @@ dashboard sidebar (`/account-settings`), same form either way.
 
 ## Stack
 
-- ASP.NET Core 10 / Blazor Server (interactive server render mode)
+**Backend** (`Backend/NetromEcoMeal.{Api,BusinessLogic,DataAccess,Tests}`):
+
+- ASP.NET Core 10 Web API, JWT bearer auth (ASP.NET Identity underneath for password
+  hashing/roles/tokens) — see D3 in [BACKEND_ARCHITECTURE.md](BACKEND_ARCHITECTURE.md)
 - EF Core + PostgreSQL (Npgsql)
-- ASP.NET Identity for auth/roles
 - Serilog for structured logging (console sink, per-request logging, config-driven levels)
-- QRCoder for server-side pickup QR generation, jsQR (vendored) for client-side camera scanning
-- Leaflet + OpenStreetMap tiles (CDN, no API key) for the home page's map view
+- QRCoder for server-side pickup QR generation, jsQR (vendored, frontend-side) for camera scanning
 - Stripe Checkout (`Stripe.net`) for payment
-- Web Push (`WebPush`, VAPID-signed) + a service worker/PWA manifest for browser push notifications
-- `Microsoft.Extensions.AI` (`IChatClient`) backed by `OllamaSharp`, against a free, self-hosted [Ollama](https://ollama.com) instance — no paid/hosted AI API anywhere in the app
+- Web Push (`WebPush`, VAPID-signed) for browser push notifications
+- `Microsoft.Extensions.AI` (`IChatClient`) backed by `OllamaSharp`, against a free, self-hosted
+  [Ollama](https://ollama.com) instance — no paid/hosted AI API anywhere in the app
+- SignalR hub (`/hubs/stock`) for live package-stock updates
+
+**Frontend** (`Frontend/eco-meal-frontend`):
+
+- React 19 + TypeScript, Vite, React Router v7
+- Axios (bearer-token interceptor, global 401 → logout) + `@microsoft/signalr`
+- Leaflet + OpenStreetMap tiles (CDN, no API key) for the home page's map view
+- `qrcode` for client-side pickup-pass QR rendering
+- Plain `app.css` design system (tokens, light/dark) — no component library
 
 ## Running locally
 
-You need .NET 10 and a Postgres instance. Configure the connection string and seed admin
-credentials with user secrets rather than committing them to `appsettings.json`:
+You need .NET 10, Node 22+, and a Postgres instance. Run the backend and frontend as two
+separate processes.
+
+**Backend** — configure the connection string and seed admin credentials with user
+secrets rather than committing them to `appsettings.json` (run from
+`Backend/NetromEcoMeal.Api`, which owns the user-secrets id):
 
 ```bash
+cd Backend/NetromEcoMeal.Api
 dotnet user-secrets set "ConnectionStrings:EcoMealContext" "Host=localhost;Port=5432;Database=EcoMeal;Username=postgres;Password=yourpassword"
 dotnet user-secrets set "SeedAdmin:Email" "admin@ecomeal.local"
 dotnet user-secrets set "SeedAdmin:Password" "Admin123!"
-```
-
-Then just run it:
-
-```bash
+dotnet user-secrets set "Jwt:Key" "any-string-32-characters-or-longer"
 dotnet run
 ```
 
 Migrations and seed data (roles, business/package types, the demo Timișoara businesses
 and packages, and the admin account) run automatically on startup — no separate migrate
-step needed.
+step needed. The Api listens on `http://localhost:5080` by default (see
+`Properties/launchSettings.json`).
 
 No SMTP server is required to run the app: emails (order updates, back-in-stock alerts,
 account confirmation/password reset) are just logged instead of sent when `Email:Smtp:Host`
 isn't configured. See [Email](#email) below to wire up a real sender or a local catcher.
+
+**Frontend** — point it at the Api above and start the Vite dev server:
+
+```bash
+cd Frontend/eco-meal-frontend
+cp .env.example .env.local   # VITE_API_URL=http://localhost:5080/api
+npm install
+npm run dev
+```
+
+Opens on `http://localhost:5173`. Log in with the seeded admin account above, or any of
+the [demo accounts](#seed-data) below.
 
 ## Logging
 
@@ -168,10 +197,11 @@ dotnet user-secrets set "Email:Smtp:EnableSsl" "true"
 dotnet user-secrets set "Email:FromAddress" "no-reply@ecomeal.local"
 ```
 
-`App:BaseUrl` (used to build links in confirmation/reset emails) already defaults to
-`http://localhost:5116` via `appsettings.Development.json`, matching the `dotnet run`
-dev port — only override it with `dotnet user-secrets set "App:BaseUrl" "..."` if you're
-running on a different port or URL.
+`App:BaseUrl` (used to build links in confirmation/reset emails, Stripe redirect URLs and
+pickup-pass QR codes) already defaults to `http://localhost:5173` via
+`appsettings.Development.json` — the **frontend's** origin, not the Api's, since that's
+where a clicked link needs to land — only override it with
+`dotnet user-secrets set "App:BaseUrl" "..."` if the frontend runs on a different port or URL.
 
 Leave `Email:Smtp:Host` unset (the default) and every email is logged instead of sent —
 handy for local dev without a real mailbox. `docker-compose.test.yml` instead points it at
@@ -240,7 +270,7 @@ service workers (and so push) only work on `https://` or `localhost`.
 ## AI Features
 
 Five AI features have shipped so far: a "Write it for me" button that drafts a package
-description on `PackageForm.razor`, an AI search bar on the home page — try "vegan dinner
+description on `PackageForm`, an AI search bar on the home page — try "vegan dinner
 under 30 lei, closing soon" — a periodic background sweep that nudges a business's
 favoriters/past customers when one of its packages is closing soon with stock still unclaimed
 (personalizing the copy when it matches something they've ordered before), a `/plan-basket`
@@ -272,17 +302,18 @@ first time; the result persists in the `ecomeal-test-ollama` volume across resta
 
 ## Running with Docker
 
-`docker-compose.test.yml` spins up Postgres and the app together, which is the easiest
-way to try the app without installing a local Postgres. It's meant for local
-testing/demoing, not for production (fixed DB password, HTTP only).
+`docker-compose.test.yml` spins up Postgres, the Api and the React frontend together,
+which is the easiest way to try the whole app without installing anything locally. It's
+meant for local testing/demoing, not for production (fixed DB password, HTTP only).
 
 ```bash
 docker compose -f docker-compose.test.yml up --build
 ```
 
-The app comes up on **http://localhost:8081**, backed by a Postgres container on port
-5433 (so it doesn't clash with a Postgres you might already have running locally on
-5432). Data persists in the `ecomeal-test-db` volume across restarts — tear it down with
+The frontend comes up on **http://localhost:5174**, talking to the Api on
+**http://localhost:8081**, backed by a Postgres container on port 5433 (so it doesn't
+clash with a Postgres you might already have running locally on 5432). Data persists in
+the `ecomeal-test-db` volume across restarts — tear it down with
 `docker compose -f docker-compose.test.yml down -v` if you want a clean slate. Manager-uploaded
 package/business photos persist the same way, in a separate `ecomeal-test-uploads` volume.
 
@@ -297,30 +328,30 @@ running if you don't want the default admin credentials. Five demo accounts (see
 in as a customer or business manager and see the app already in use.
 
 This compose file also runs a [Mailpit](https://github.com/axllent/mailpit) container and
-points the app's SMTP settings at it, so every email the app sends (order updates,
+points the Api's SMTP settings at it, so every email the app sends (order updates,
 back-in-stock alerts, account confirmation, password reset) is visible at
 **http://localhost:8025** instead of going nowhere. It also sets
 `Identity__RequireConfirmedAccount=true`, so a freshly self-registered account needs its
 confirmation link (check Mailpit) clicked before it can sign in — the two seeded demo
 accounts are unaffected, since they're created pre-confirmed.
 
-`Stripe__SecretKey` is empty by default here too, so checkout shows the same "payments
-aren't configured yet" error until you set a real test-mode key — see [Payments](#payments)
-above. The safe way to do that locally is a gitignored `docker-compose.override.yml` next
-to this file (never edit `docker-compose.test.yml` itself — it's tracked, so a real key
-typed directly into it risks getting committed):
-```yaml
-services:
-  app:
-    environment:
-      Stripe__SecretKey: "sk_test_..."
+`Stripe__SecretKey` and `Jwt__Key` are driven from environment variables the committed
+compose file never hardcodes a real value for (`${STRIPE_SECRET_KEY:-}` and a clearly
+dev-only `Jwt__Key` fallback). To use a real Stripe test-mode key, copy `.env.example` to
+a gitignored `.env` next to `docker-compose.test.yml` and fill it in:
+
+```bash
+cp .env.example .env
+# then edit .env: STRIPE_SECRET_KEY=sk_test_...
 ```
-then run `docker compose -f docker-compose.test.yml -f docker-compose.override.yml up --build`
-— Compose merges the two, and the key never touches a tracked file. An environment variable
-works too; either way, no live/production Stripe key is ever needed to try the app.
+
+`docker compose` reads `.env` automatically — no extra `-f` flag needed, and the key never
+touches a tracked file. Leave it unset and checkout shows the same "payments aren't
+configured yet" error as [Payments](#payments) above; no live/production Stripe key is
+ever needed to try the app.
 
 The pickup QR scanner (`/orders/scan`) uses the device camera, which browsers only allow
-over HTTPS or on `localhost`. It works fine when you open the app as `localhost:8081`,
+over HTTPS or on `localhost`. It works fine when you open the app as `localhost:5174`,
 but won't get camera access if you open it via a LAN IP from another device (e.g. testing
 on a phone) — that needs a real HTTPS deployment.
 
@@ -433,12 +464,30 @@ the user guide for the request shape.
 
 ## Running tests
 
-`Tests/Netrom-Eco-Meal.Tests.csproj` is a separate xUnit project (unit tests for
+**Backend** — `Backend/NetromEcoMeal.Tests` is a separate xUnit project (unit tests for
 `OrderService`'s status-transition/stock logic, `CheckoutService`'s Stripe checkout bridge,
-and `RescueCircleService`'s split-payment orchestration, plus integration tests that run the
-real migrations + `DbSeeder` against a Postgres container via Testcontainers). Requires
-Docker to be running locally:
+`RescueCircleService`'s split-payment orchestration, API integration tests via
+`WebApplicationFactory<Program>`, and an architecture test guarding the BusinessLogic/
+DataAccess layering), plus integration tests that run the real migrations + `DbSeeder`
+against a Postgres container via Testcontainers. Requires Docker to be running locally:
 
 ```bash
+cd Backend
 dotnet test
+```
+
+**Frontend** — Vitest covers contexts, hooks and utils:
+
+```bash
+cd Frontend/eco-meal-frontend
+npx vitest run
+```
+
+**End-to-end** — a Playwright suite under `e2e/` covers one golden path per role
+(anonymous, customer, business manager, admin) plus visual regression, written against
+user-visible selectors only (`getByRole`, `getByLabel`, `getByText`):
+
+```bash
+cd e2e
+BASE_URL=http://localhost:5173 npx playwright test   # against a locally-running frontend
 ```

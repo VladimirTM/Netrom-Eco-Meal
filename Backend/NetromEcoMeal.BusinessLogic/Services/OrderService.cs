@@ -342,7 +342,7 @@ public class OrderService(
         circle.Status = RescueCircleStatuses.Cancelled;
 
         // Only exists once RescueCircleService.CompleteShareCheckoutAsync marked the circle fully
-        // paid — keep it in sync with what actually happened so Payments.razor/OrderDetailModal/the
+        // paid — keep it in sync with what actually happened so Payments.tsx/OrderDetailModal/the
         // CSV export don't need their own Rescue Circle awareness.
         var summaryPayment = await dbContext.Payments.FirstOrDefaultAsync(p => p.OrderId == order.Id);
         if (summaryPayment is not null)

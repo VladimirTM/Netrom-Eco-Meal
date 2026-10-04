@@ -11,8 +11,7 @@ using NetromEcoMeal.Services.Interfaces;
 
 namespace NetromEcoMeal.Api.Controllers;
 
-// Real HTTP from this phase on (D2 — Blazor's own AuthController keeps its cookie-writing form
-// posts working side by side; this one issues JWTs for the eventual React frontend instead).
+// Issues JWTs for the React frontend — no cookie, no antiforgery token.
 [Route("api/auth")]
 [ApiController]
 public class AuthController(

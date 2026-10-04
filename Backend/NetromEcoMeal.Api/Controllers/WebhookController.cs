@@ -5,11 +5,9 @@ using NetromEcoMeal.Services.Interfaces;
 
 namespace NetromEcoMeal.Api.Controllers;
 
-// Ported from NetromEcoMeal.Web's WebhookController, which was already a real, external HTTP
-// endpoint (X-Api-Key, not cookie/JWT auth) — moves across unchanged, local try/catch included,
-// since it predates this phase's global ExceptionHandlingMiddleware and ArgumentException isn't
-// one of that middleware's mapped cases. Same path/shape as Web's copy (D5) so a business's
-// already-configured POS/inventory integration doesn't need to change its target.
+// X-Api-Key auth, not JWT — external POS/inventory systems call this directly, so its path and
+// response shape must not change. Keeps its own try/catch since ArgumentException isn't one of
+// ExceptionHandlingMiddleware's cases.
 [ApiController]
 [Route("/api/webhooks")]
 [AllowAnonymous]

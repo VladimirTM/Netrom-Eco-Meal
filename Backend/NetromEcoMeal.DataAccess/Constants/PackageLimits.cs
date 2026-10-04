@@ -1,6 +1,6 @@
 namespace NetromEcoMeal.Constants;
 
-// Shared between PackageForm.razor's validation and WebhookIntakeService (the app's other,
+// Shared between PackageForm.tsx's validation and WebhookIntakeService (the app's other,
 // unauthenticated entry point for creating a Package) so the two can't silently drift — a POS
 // integration used to be able to post a package with no upper bound at all (e.g. a 999,999
 // quantity), something a manager typing into the form could never do.

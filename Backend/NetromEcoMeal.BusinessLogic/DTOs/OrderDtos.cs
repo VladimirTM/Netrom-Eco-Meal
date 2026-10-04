@@ -3,10 +3,10 @@ using NetromEcoMeal.Services.Interfaces;
 
 namespace NetromEcoMeal.DTOs;
 
-// WeightKg lets the frontend compute per-order/hero "kg saved" stats itself (Orders.razor's own
+// WeightKg lets the frontend compute per-order/hero "kg saved" stats itself (Orders.tsx's own
 // formula: Completed orders' Sum(Quantity * Package.WeightKg)) without a dedicated endpoint.
 // PickupStart/PickupEnd let it compute the same "widest span across all lines" pickup-window label
-// Orders.razor/OrderPickupPass.razor show, without a dedicated endpoint either.
+// Orders.tsx/OrderPickupPass.tsx show, without a dedicated endpoint either.
 public record OrderLineDto(Guid PackageId, string PackageName, int Quantity, decimal UnitPrice, decimal WeightKg, DateTime PickupStart, DateTime PickupEnd);
 
 public record PickupPassDto(Guid Id, string Label, DateTime CreatedAt, DateTime? RedeemedAt);

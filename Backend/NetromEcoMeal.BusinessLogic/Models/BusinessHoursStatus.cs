@@ -2,7 +2,7 @@ using NetromEcoMeal.Entities;
 
 namespace NetromEcoMeal.Models;
 
-// Pure open/closed calculation for the Home.razor card badge and BusinessDetail.razor's hours
+// Pure open/closed calculation for the Home.tsx card badge and BusinessDetail.tsx's hours
 // panel — takes plain collections rather than an entity so it's testable without a DbContext.
 public static class BusinessHoursStatus
 {

@@ -118,7 +118,7 @@ public class OrderServicePickupPassIntegrationTests(PostgresFixture fixture)
     }
 
     // Regression test: orders confirmed before pickup passes existed have zero pass rows. Without
-    // the backfill in GetMyOwnedOrderAsync, OrderPickupPass.razor renders blank for these — see
+    // the backfill in GetMyOwnedOrderAsync, OrderPickupPass.tsx renders blank for these — see
     // BackfillPickupPassIfNeededAsync.
     [Fact]
     public async Task GetMyOrderAsync_RealDatabase_BackfillsMissingPickupPassForLegacyConfirmedOrder()

@@ -5,8 +5,8 @@ using NetromEcoMeal.Services.Interfaces;
 
 namespace NetromEcoMeal.Api.Controllers;
 
-// Replaces the Blazor InputFile handlers in BusinessForm.razor/PackageForm.razor, which called
-// IImageUploadService directly in-process. Over HTTP the file comes in as multipart form data instead.
+// BusinessForm.tsx/PackageForm.tsx upload a photo as multipart form data to this endpoint and
+// get back the saved URL, which IImageUploadService resolves against /uploads.
 [Route("api/uploads")]
 [ApiController]
 [Authorize]
