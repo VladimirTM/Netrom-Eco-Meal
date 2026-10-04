@@ -31,4 +31,30 @@ export const ordersApi = {
 
   redeemPickupPass: (orderId: string, passId: string): Promise<OrderDto> =>
     http.post<OrderDto>(`/orders/${orderId}/passes/${passId}/redeem`),
+
+  // Manager/admin order management.
+  getForManagement: (businessId?: string): Promise<OrderDto[]> =>
+    http.get<OrderDto[]>(`/orders/manage${businessId ? `?businessId=${businessId}` : ""}`),
+
+  getForManagementPaged: (pageIndex: number, pageSize: number, search: string | null, businessId: string | null, status: string | null): Promise<PaginatedList<OrderDto>> => {
+    const query = new URLSearchParams({ pageIndex: String(pageIndex), pageSize: String(pageSize) });
+    if (search) query.set("search", search);
+    if (businessId) query.set("businessId", businessId);
+    if (status) query.set("status", status);
+    return http.get<PaginatedList<OrderDto>>(`/orders/manage/paged?${query.toString()}`);
+  },
+
+  getForManagementById: (orderId: string): Promise<OrderDto> => http.get<OrderDto>(`/orders/manage/${orderId}`),
+
+  getInRange: (from: string | null, to: string | null, businessId?: string): Promise<OrderDto[]> => {
+    const query = new URLSearchParams();
+    if (from) query.set("from", from);
+    if (to) query.set("to", to);
+    if (businessId) query.set("businessId", businessId);
+    const qs = query.toString();
+    return http.get<OrderDto[]>(`/orders/range${qs ? `?${qs}` : ""}`);
+  },
+
+  updateStatus: (orderId: string, statusName: string): Promise<OrderDto> =>
+    http.put<OrderDto>(`/orders/${orderId}/status`, { statusName }),
 };

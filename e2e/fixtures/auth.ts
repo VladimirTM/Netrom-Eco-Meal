@@ -61,6 +61,10 @@ export async function logout(page: Page) {
   // surfaced as an accessible name in practice, so getByRole('button', { name: 'Sign out' })
   // doesn't match. A plain CSS attribute selector is the reliable way to hit it.
   await page.locator('button[title="Sign out"]').click();
-  // AuthController.LogoutAsync redirects to /account/login (no returnUrl set from this form).
-  await page.waitForURL('**/account/login');
+  // Blazor's logout button posts to AuthController.LogoutAsync, which redirects server-side to a
+  // bare /account/login (no returnUrl set from that form). React's logout (Phase 4's AuthContext)
+  // is client-side only — it clears the token/user and lets RequireRole's own re-render redirect,
+  // which (correctly, see RequireRole.tsx) appends `?returnUrl=<the page you were on>`. Matching
+  // only the path, not the full URL, is what makes this assertion work against both targets.
+  await page.waitForURL((url) => url.pathname === '/account/login');
 }

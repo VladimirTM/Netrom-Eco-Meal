@@ -5,6 +5,7 @@ import ToastProvider from "./context/ToastContext/ToastProvider";
 import TimeZoneProvider from "./context/TimeZoneContext/TimeZoneProvider";
 import CartProvider from "./context/CartContext/CartProvider";
 import NotificationProvider from "./context/NotificationContext/NotificationProvider";
+import ManagedBusinessProvider from "./context/ManagedBusinessContext/ManagedBusinessProvider";
 import ScrollAndFocusManager from "./routes/ScrollAndFocusManager";
 import RequireRole from "./routes/RequireRole";
 import EmptyLayout from "./layouts/EmptyLayout";
@@ -37,6 +38,20 @@ import RescueCircleReturn from "./components/RescueCircleReturn";
 import StandingOrders from "./components/StandingOrders";
 import Referrals from "./components/Referrals";
 import BusinessApply from "./components/BusinessApply";
+import OrderManagement from "./components/OrderManagement";
+import OrderScan from "./components/OrderScan";
+import OrderValidate from "./components/OrderValidate";
+import OrderValidateLegacy from "./components/OrderValidateLegacy";
+import Payments from "./components/Payments";
+import Businesses from "./components/Businesses";
+import BusinessForm from "./components/BusinessForm";
+import Packages from "./components/Packages";
+import PackageForm from "./components/PackageForm";
+import PackageTemplates from "./components/PackageTemplates";
+import Users from "./components/Users";
+import Reports from "./components/Reports";
+import AuditLog from "./components/AuditLog";
+import Types from "./components/Types";
 
 function AppRoutes() {
   return (
@@ -181,6 +196,53 @@ function AppRoutes() {
         }
       >
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/businesses" element={<Businesses />} />
+        <Route path="/businesses/create" element={<BusinessForm />} />
+        <Route path="/businesses/edit/:id" element={<BusinessForm />} />
+        <Route path="/packages" element={<Packages />} />
+        <Route path="/packages/create" element={<PackageForm />} />
+        <Route path="/packages/edit/:id" element={<PackageForm />} />
+        <Route path="/packages/templates" element={<PackageTemplates />} />
+        <Route path="/orders/manage" element={<OrderManagement />} />
+        <Route path="/orders/scan" element={<OrderScan />} />
+        <Route path="/orders/validate/:id/:passId" element={<OrderValidate />} />
+        <Route path="/orders/validate/:id" element={<OrderValidateLegacy />} />
+        <Route path="/payments" element={<Payments />} />
+
+        {/* Admin-only pages: a nested RequireRole, stricter than the shell's Admin-or-BusinessManager
+            gate, so a BusinessManager hitting one of these URLs sees ForbiddenPanel inline. */}
+        <Route
+          path="/users"
+          element={
+            <RequireRole roles={["Admin"]}>
+              <Users />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <RequireRole roles={["Admin"]}>
+              <Reports />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/audit-log"
+          element={
+            <RequireRole roles={["Admin"]}>
+              <AuditLog />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/types"
+          element={
+            <RequireRole roles={["Admin"]}>
+              <Types />
+            </RequireRole>
+          }
+        />
       </Route>
     </Routes>
   );
@@ -194,8 +256,10 @@ function App() {
           <ToastProvider>
             <CartProvider>
               <NotificationProvider>
-                <ScrollAndFocusManager />
-                <AppRoutes />
+                <ManagedBusinessProvider>
+                  <ScrollAndFocusManager />
+                  <AppRoutes />
+                </ManagedBusinessProvider>
               </NotificationProvider>
             </CartProvider>
           </ToastProvider>

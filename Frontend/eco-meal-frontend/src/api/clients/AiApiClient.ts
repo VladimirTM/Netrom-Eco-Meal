@@ -7,4 +7,7 @@ export const aiApi = {
 
   proposeBasket: (peopleCount: number, budget: number, dietaryTag: string | null): Promise<BasketPlanDto> =>
     http.post<BasketPlanDto>("/ai/basket-plan", { peopleCount, budget, dietaryTag }),
+
+  draftDescription: (name: string, packageTypeName: string, dietaryTags: string[]): Promise<string> =>
+    http.post<string>("/ai/draft-description", { name, packageTypeName, dietaryTags }),
 };

@@ -84,4 +84,19 @@ export const http = {
     const response = await api.delete<T>(path);
     return response.data;
   },
+  // Multipart upload (UploadsController). The instance's static `Content-Type: application/json`
+  // default would otherwise stick and break the multipart boundary — setting it to `undefined`
+  // here lets the browser's XHR/fetch layer compute the correct `multipart/form-data; boundary=...`
+  // header itself from the FormData body.
+  postForm: async <T>(path: string, formData: FormData): Promise<T> => {
+    const response = await api.post<T>(path, formData, { headers: { "Content-Type": undefined } });
+    return response.data;
+  },
+  // CSV export download (ExportsController). A JWT bearer token can't ride along on a plain
+  // `<a href>` navigation the way Blazor's auth cookie did — Axios carries the Authorization header
+  // instead, and the caller turns the returned Blob into an object URL to trigger the save.
+  getBlob: async (path: string): Promise<Blob> => {
+    const response = await api.get<Blob>(path, { responseType: "blob" });
+    return response.data;
+  },
 };
